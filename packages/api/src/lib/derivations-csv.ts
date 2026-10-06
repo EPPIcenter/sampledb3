@@ -1,8 +1,6 @@
 import type { Database } from '../db/client'
 import type { DatabaseOrTransaction } from './db-types'
 import {
-  bag,
-  box,
   containerDerivation,
   cryovialBox,
   cryovialTube,
@@ -28,6 +26,7 @@ import { withWriteTransaction } from '../db/write-transaction'
 import { resolveParentContainerId } from './derivations/parent-container-resolver'
 import { normalizePosition } from './normalize-position'
 import { checkGridPositionOccupancy } from './container-occupancy'
+import { lookupParentCollectionId } from './container-write-placement'
 
 /**
  * Map technical DB/constraint errors to messages that are clear for non-technical users.
@@ -350,13 +349,11 @@ async function resolveCollectionId(
     // Paper goes on a sheet in the named box or bag; the sheet is created if missing,
     // but the box or bag itself must already exist.
     if (!collectionName) return { status: 'will_be_created' }
-    const parentTable = paperParentType === 'bag' ? bag : box
-    const parent = await database
-      .select({ id: parentTable.id })
-      .from(parentTable)
-      .where(eq(parentTable.name, collectionName.trim()))
-      .get()
-    return { id: parent?.id, status: parent ? 'existing' : 'will_be_created' }
+    const parentId = await lookupParentCollectionId(database, {
+      type: paperParentType,
+      name: collectionName.trim(),
+    })
+    return parentId != null ? { id: parentId, status: 'existing' } : { status: 'will_be_created' }
   }
 
   return { status: 'will_be_created' }
