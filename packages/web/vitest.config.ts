@@ -8,21 +8,6 @@ const appBuildId = process.env.VITE_APP_BUILD_ID || process.env.APP_BUILD_ID || 
 // fails, wherever CI runs. Test workers inherit this.
 process.env.TZ = 'America/Los_Angeles'
 
-/**
- * Vitest Configuration
- * 
- * NOTE: Known Issue - Stack Overflow During Cleanup
- * 
- * You may see a "Maximum call stack size exceeded" error after tests complete.
- * This is a known Vitest/tinypool issue with worker cleanup.
- * 
- * - All tests pass successfully before the error
- * - Error only occurs during worker cleanup/teardown
- * - This is NON-BLOCKING and can be safely ignored
- * - Do not attempt to "fix" this - it's a Vitest/tinypool bug
- * 
- * See: packages/web/src/__tests__/README.md for more details
- */
 export default defineConfig({
   define: {
     'import.meta.env.VITE_APP_BUILD_ID': JSON.stringify(appBuildId),
@@ -53,7 +38,7 @@ export default defineConfig({
         'src/lib/api/**',
         'dist/**',
       ],
-      // Baseline; raise in steps (e.g. 50 → 65 → 80 → 90) as coverage improves (see test coverage plan). CSS and api.ts are excluded.
+      // Baseline; raise in steps toward 90% as coverage improves.
       thresholds: {
         statements: 35,
         branches: 26,
