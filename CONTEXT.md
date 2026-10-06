@@ -44,6 +44,10 @@ _Avoid_: Specimen; Derivation (aliquots do not require a transformation record)
 Where a specimen's material originated. The primary source is a **Subject** (via a study). Alternate sources include **Control batch**, **Reagent**, **Cell line**, **Plasmid**, and **Standard**.
 _Avoid_: Origin (too vague); parent (reserved for derivations — use **Parent container**)
 
+**Specimen registration**:
+Recording a **Specimen** from a known **Source**, together with zero or more **Containers** (aliquots) and their **Container placement**. One collection event from one Source is one Specimen: registering the same Source, specimen type, and collection date again adds containers to the existing Specimen instead of creating a second one. A registration either records everything it was given or nothing.
+_Avoid_: Import (the CSV workflow that leads to registration); creating a second Specimen for the same collection event
+
 ### Controls (quality control specimens)
 
 SampleDB supports multiple **Control** types for QC, calibration, and validation. Control specimens use the same **Specimen** and storage hierarchies as study specimens, but provenance runs through definitions and batches instead of studies and subjects.

@@ -13,11 +13,13 @@ import { setContainerDefaults } from '../settings'
 import {
   normalizePosition,
   runBulkCombinedImport,
-  prepareSubjectWithSpecimens,
+  validateBulkCombinedPayload,
+  type BulkCombinedSubjectInput,
 } from '../bulk-combined-import'
 import { specimenTypeContainerType, containerTypeUnit, studySubject, specimen } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
+import { utcNow } from '../datetime'
 
 describe('bulk-combined-import', () => {
   let testDb: Database
@@ -54,41 +56,6 @@ describe('bulk-combined-import', () => {
 
     it('trims and normalizes', () => {
       expect(normalizePosition('  B12  ')).toBe('B12')
-    })
-  })
-
-  describe('prepareSubjectWithSpecimens', () => {
-    it('throws when study short code is invalid', async () => {
-      await expect(
-        prepareSubjectWithSpecimens(testDb, 'NONEXISTENT', 'Subj1', [
-          { specimenTypeName: 'DNA', collectionDate: '2024-01-01' },
-        ])
-      ).rejects.toThrow(/Invalid study|study/i)
-    })
-
-    it('resolves study and specimen type and returns prepared subject without container', async () => {
-      const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
-      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
-      const prepared = await prepareSubjectWithSpecimens(testDb, study.shortCode, 'NewSubject', [
-        { specimenTypeName: specimenType.name, collectionDate: '2024-01-15' },
-      ])
-      expect(prepared.studyId).toBe(study.id)
-      expect(prepared.trimmedName).toBe('NewSubject')
-      expect(prepared.existingSubjectId).toBeNull()
-      expect(prepared.resolvedSpecimens).toHaveLength(1)
-      expect(prepared.resolvedSpecimens[0].specimenTypeId).toBe(specimenType.id)
-      expect(prepared.resolvedSpecimens[0].collectionDate).toBe('2024-01-15')
-    })
-
-    it('finds existing subject by name and study', async () => {
-      const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
-      const existing = await createTestStudySubject(testDb, { studyId: study.id, name: 'ExistingSubj' })
-      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
-      const prepared = await prepareSubjectWithSpecimens(testDb, study.shortCode, '  ExistingSubj  ', [
-        { specimenTypeName: specimenType.name, collectionDate: '2024-01-15' },
-      ])
-      expect(prepared.existingSubjectId).toBe(existing.id)
-      expect(prepared.trimmedName).toBe('ExistingSubj')
     })
   })
 
@@ -304,5 +271,75 @@ describe('bulk-combined-import', () => {
       expect(subjects.find((s) => s.name === 'Default')?.studyId).toBe(studyA.id)
       expect(subjects.find((s) => s.name === 'Override')?.studyId).toBe(studyB.id)
     })
+  })
+
+  describe('validate passes exactly when the import succeeds', () => {
+    let locationId: number
+
+    beforeEach(async () => {
+      const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
+      await createTestStudySubject(testDb, { studyId: study.id, name: 'Existing' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      locationId = (await createTestLocation(testDb, { name: 'Shelf', storageTypeId: String(storageType.id), canContainCollections: true })).id
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const now = utcNow()
+      for (const containerType of ['micronix_tube', 'paper'] as const) {
+        await testDb.insert(specimenTypeContainerType).values({ specimenTypeId: specimenType.id, containerType, created: now, lastUpdated: now })
+        await testDb.insert(containerTypeUnit).values({ containerType, unitId: unit.id })
+      }
+      await setContainerDefaults(testDb, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      const plate = await createTestMicronixPlate(testDb, { name: 'P1', barcode: 'P1-BC', locationId })
+      await runBulkCombinedImport(
+        testDb,
+        { studyShortCode: 'ST1', atomicMode: 'full_file', subjects: [subject('Existing', tube('TAKEN', { id: plate.id, position: 'A01' }))] },
+        undefined
+      )
+    })
+
+    function tube(barcode: string, collection: Record<string, unknown>) {
+      return { containerType: 'micronix_tube' as const, barcode, collection: { type: 'micronix_plate' as const, ...collection } }
+    }
+
+    function paperOn(sheetName: string, sublabel: string) {
+      return {
+        containerType: 'paper' as const,
+        sublabel,
+        collection: { type: 'sheet' as const, name: sheetName, parent: { type: 'box' as const, name: 'PaperBox', locationId } },
+      }
+    }
+
+    function subject(name: string, container?: NonNullable<BulkCombinedSubjectInput['specimens'][number]['container']>, studyShortCode?: string): BulkCombinedSubjectInput {
+      return { subjectName: name, studyShortCode, specimens: [{ specimenTypeName: 'DNA', collectionDate: '2024-01-15', container }] }
+    }
+
+    const fixtures: Array<{ name: string; valid: boolean; subjects: () => BulkCombinedSubjectInput[] }> = [
+      { name: 'tubes on an existing and a new plate', valid: true, subjects: () => [subject('A', tube('T1', { name: 'P1', position: 'A02' })), subject('B', tube('T2', { name: 'NEW', locationId, position: 'A01' }))] },
+      { name: 'existing plate name with an unknown barcode', valid: false, subjects: () => [subject('A', tube('T1', { name: 'P1', barcode: 'UNKNOWN', position: 'A01' }))] },
+      { name: 'two subjects with papers on one sheet', valid: true, subjects: () => [subject('A', paperOn('Sheet-1', 's1')), subject('B', paperOn('Sheet-1', 's2'))] },
+      { name: 'one sublabel twice on a sheet across subjects', valid: false, subjects: () => [subject('A', paperOn('Sheet-1', 's1')), subject('B', paperOn('Sheet-1', 's1'))] },
+      { name: 'a barcode already in the database', valid: false, subjects: () => [subject('A', tube('TAKEN', { name: 'P1', position: 'B01' }))] },
+      { name: 'one well named by plate name and by plate barcode', valid: false, subjects: () => [subject('A', tube('T1', { name: 'P1', position: 'C01' })), subject('B', tube('T2', { barcode: 'P1-BC', position: 'C1' }))] },
+      { name: 'an occupied well', valid: false, subjects: () => [subject('A', tube('T1', { barcode: 'P1-BC', position: 'A1' }))] },
+      { name: 'a missing study on one subject', valid: false, subjects: () => [subject('A'), subject('B', undefined, 'NOPE')] },
+    ]
+
+    for (const fixture of fixtures) {
+      it(fixture.name, async () => {
+        const payload = { studyShortCode: 'ST1', subjects: fixture.subjects() }
+
+        const validation = await validateBulkCombinedPayload(testDb, payload)
+        const imported = await runBulkCombinedImport(testDb, { ...payload, atomicMode: 'full_file' }, undefined).then(
+          () => true,
+          () => false
+        )
+
+        expect(validation.valid).toBe(fixture.valid)
+        expect(imported).toBe(validation.valid)
+      })
+    }
   })
 })

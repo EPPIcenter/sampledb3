@@ -1,0 +1,296 @@
+/**
+ * Plan a registration: resolve every Specimen, Collection, unit, and placement, and collect
+ * every problem. Reads only; the write step trusts the plan.
+ */
+import { and, eq, isNull } from 'drizzle-orm'
+import type { Database } from '../../db/client'
+import {
+  controlBatch,
+  cryovialTube,
+  micronixTube,
+  paper,
+  specimen,
+  specimenType,
+  studySubject,
+  type Specimen,
+} from '../../db/schema'
+import { getDefaultRemainingQuantity, getDefaultTotalQuantity, getDefaultUnit } from '../defaults'
+import { normalizePosition } from '../normalize-position'
+import { checkGridPositionOccupancy, occupiedGridPositionMessage } from '../container-occupancy'
+import {
+  validateCollectionDate,
+  validateContainerTypeForSpecimenType,
+  validateUnitForContainerType,
+} from '../validation'
+import { CollectionPlanner, targetKey, type CollectionTarget, type PlannedCollection } from './collections'
+import { validateContainerWriteFields } from './container-fields'
+import type { RegistrationContainer, RegistrationEntry, RegistrationError } from './types'
+
+export type PlannedSpecimen =
+  | { existing: Specimen }
+  | {
+      existing: null
+      studySubjectId: number | null
+      controlBatchId: number | null
+      specimenTypeId: number
+      collectionDate: string | null
+    }
+
+export type PlannedContainer = {
+  entryIndex: number
+  containerIndex: number
+  input: RegistrationContainer
+  unitId: number
+  totalQuantity: number
+  remainingQuantity: number
+  /** Plate or box for tubes and wells, Sheet for paper. */
+  collection: CollectionTarget
+  position: string | null
+}
+
+export type RegistrationPlan = {
+  specimens: PlannedSpecimen[]
+  /** entries[i] registers specimens[entrySpecimen[i]]. */
+  entrySpecimen: number[]
+  containers: PlannedContainer[]
+  collections: PlannedCollection[]
+}
+
+function findSpecimen(
+  database: Database,
+  source: { studySubjectId: number | null; controlBatchId: number | null },
+  specimenTypeId: number,
+  collectionDate: string | null,
+): Specimen | null {
+  const sourceCondition =
+    source.studySubjectId !== null
+      ? eq(specimen.studySubjectId, source.studySubjectId)
+      : eq(specimen.controlBatchId, source.controlBatchId ?? -1)
+  const dateCondition = collectionDate == null ? isNull(specimen.collectionDate) : eq(specimen.collectionDate, collectionDate)
+  return (
+    database
+      .select()
+      .from(specimen)
+      .where(and(sourceCondition, eq(specimen.specimenTypeId, specimenTypeId), dateCondition))
+      .get() ?? null
+  )
+}
+
+/** Per-request uniqueness: barcodes, Grid positions per Collection, sublabels per Sheet. */
+class RequestClaims {
+  private readonly claims = new Set<string>()
+
+  /** Returns false when the claim was already taken earlier in the request. */
+  take(claim: string): boolean {
+    if (this.claims.has(claim)) return false
+    this.claims.add(claim)
+    return true
+  }
+}
+
+export async function planRegistration(
+  database: Database,
+  entries: RegistrationEntry[],
+): Promise<{ plan: RegistrationPlan; errors: RegistrationError[] }> {
+  const errors: RegistrationError[] = []
+  const planner = new CollectionPlanner(database)
+  const claims = new RequestClaims()
+  const specimens: PlannedSpecimen[] = []
+  const specimenIndexByKey = new Map<string, number>()
+  const entrySpecimen: number[] = []
+  const containers: PlannedContainer[] = []
+
+  const useSpecimen = (key: string, make: () => PlannedSpecimen): number => {
+    const known = specimenIndexByKey.get(key)
+    if (known !== undefined) return known
+    specimens.push(make())
+    specimenIndexByKey.set(key, specimens.length - 1)
+    return specimens.length - 1
+  }
+
+  for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+    const entry = entries[entryIndex]
+    const entryError = (field: string, message: string) => errors.push({ entryIndex, field, message })
+    let specimenTypeId: number | null = null
+
+    if ('specimenId' in entry) {
+      const existing = database.select().from(specimen).where(eq(specimen.id, entry.specimenId)).get()
+      if (!existing) {
+        entryError('specimenId', 'Specimen not found')
+        entrySpecimen.push(-1)
+        continue
+      }
+      specimenTypeId = existing.specimenTypeId
+      entrySpecimen.push(useSpecimen(`id:${existing.id}`, () => ({ existing })))
+    } else {
+      let sourceOk = true
+      if ('subjectId' in entry.source) {
+        const subjectId = entry.source.subjectId
+        if (!database.select({ id: studySubject.id }).from(studySubject).where(eq(studySubject.id, subjectId)).get()) {
+          entryError('source', 'Subject not found')
+          sourceOk = false
+        }
+      } else {
+        const batchId = entry.source.controlBatchId
+        if (!database.select({ id: controlBatch.id }).from(controlBatch).where(eq(controlBatch.id, batchId)).get()) {
+          entryError('source', 'Control batch not found')
+          sourceOk = false
+        }
+      }
+      const typeExists = database
+        .select({ id: specimenType.id })
+        .from(specimenType)
+        .where(eq(specimenType.id, entry.specimenTypeId))
+        .get()
+      if (typeExists) specimenTypeId = entry.specimenTypeId
+      else entryError('specimenTypeId', 'Specimen type not found')
+
+      const date = validateCollectionDate(entry.collectionDate)
+      if (!date.valid) entryError('collectionDate', date.error)
+
+      if (sourceOk && specimenTypeId !== null && date.valid) {
+        const typeId = specimenTypeId
+        const collectionDate = date.normalized ?? null
+        const studySubjectId = 'subjectId' in entry.source ? entry.source.subjectId : null
+        const controlBatchId = 'controlBatchId' in entry.source ? entry.source.controlBatchId : null
+        const source = { studySubjectId, controlBatchId }
+        const key = `${studySubjectId !== null ? `s${studySubjectId}` : `c${controlBatchId}`}:${typeId}:${collectionDate ?? ''}`
+        entrySpecimen.push(
+          useSpecimen(key, () => {
+            const existing = findSpecimen(database, source, typeId, collectionDate)
+            if (existing) return { existing }
+            return {
+              existing: null,
+              studySubjectId,
+              controlBatchId,
+              specimenTypeId: typeId,
+              collectionDate,
+            }
+          }),
+        )
+      } else {
+        entrySpecimen.push(-1)
+      }
+    }
+
+    for (let containerIndex = 0; containerIndex < entry.containers.length; containerIndex++) {
+      const planned = await planContainer(database, planner, claims, entry.containers[containerIndex], specimenTypeId)
+      if ('errors' in planned) {
+        for (const e of planned.errors) errors.push({ entryIndex, containerIndex, ...e })
+      } else {
+        containers.push({ entryIndex, containerIndex, ...planned })
+      }
+    }
+  }
+
+  return { plan: { specimens, entrySpecimen, containers, collections: planner.planned }, errors }
+}
+
+type ContainerProblem = { field: string; message: string }
+
+async function planContainer(
+  database: Database,
+  planner: CollectionPlanner,
+  claims: RequestClaims,
+  input: RegistrationContainer,
+  specimenTypeId: number | null,
+): Promise<Omit<PlannedContainer, 'entryIndex' | 'containerIndex'> | { errors: ContainerProblem[] }> {
+  const problems: ContainerProblem[] = []
+  const containerType = input.containerType
+
+  const fields = validateContainerWriteFields(input)
+  if (!fields.valid) {
+    return { errors: [{ field: 'container', message: fields.error ?? 'Invalid container data' }] }
+  }
+
+  if (specimenTypeId !== null) {
+    const allowed = await validateContainerTypeForSpecimenType(database, specimenTypeId, containerType)
+    if (!allowed.valid) problems.push({ field: 'containerType', message: allowed.error ?? 'Container type not allowed' })
+  }
+
+  let unitId = input.unitId ?? null
+  let totalQuantity = 0
+  let remainingQuantity = 0
+  try {
+    unitId ??= await getDefaultUnit(database, containerType)
+    const unitAllowed = await validateUnitForContainerType(database, containerType, unitId)
+    if (!unitAllowed.valid) problems.push({ field: 'unitId', message: unitAllowed.error ?? 'Unit not allowed' })
+    totalQuantity = input.totalQuantity ?? (await getDefaultTotalQuantity(database, containerType))
+    remainingQuantity =
+      input.remainingQuantity ?? input.totalQuantity ?? (await getDefaultRemainingQuantity(database, containerType))
+  } catch (error) {
+    problems.push({ field: 'unitId', message: error instanceof Error ? error.message : 'Container defaults are not configured' })
+  }
+
+  let collection: CollectionTarget | null = null
+  let position: string | null = null
+
+  if (input.containerType === 'paper') {
+    // validateContainerWriteFields guarantees a collection.
+    const resolved = input.collection ? await planner.resolveSheet(input.collection) : { error: 'Collection is required for paper containers' }
+    if ('error' in resolved) {
+      problems.push({ field: 'collection', message: resolved.error })
+    } else {
+      collection = resolved.target
+      const sublabel = input.sublabel?.trim()
+      if (sublabel) {
+        if ('existingId' in collection) {
+          const taken = database
+            .select({ id: paper.id })
+            .from(paper)
+            .where(and(eq(paper.sheetId, collection.existingId), eq(paper.sublabel, sublabel)))
+            .get()
+          if (taken) problems.push({ field: 'sublabel', message: `Sublabel '${sublabel}' is already used on this sheet.` })
+        }
+        if (!claims.take(`sublabel:${targetKey(collection)}:${sublabel}`)) {
+          problems.push({ field: 'sublabel', message: `Sublabel '${sublabel}' is used more than once on this sheet in your file.` })
+        }
+      }
+    }
+  } else {
+    const gridType = input.containerType === 'cryovial_tube' ? 'cryovial_box' : 'micronix_plate'
+    const resolved = input.collection
+      ? await planner.resolveGrid(gridType, input.collection)
+      : { error: 'Collection name or barcode is required' }
+    if ('error' in resolved) {
+      problems.push({ field: 'collection', message: resolved.error })
+    } else {
+      collection = resolved.target
+      position = normalizePosition(input.collection?.position)
+      if (position) {
+        if ('existingId' in collection) {
+          const occupancy = await checkGridPositionOccupancy(database, {
+            collectionKind: gridType,
+            collectionId: collection.existingId,
+            position,
+          })
+          if (occupancy.occupied) problems.push({ field: 'position', message: occupiedGridPositionMessage(position, gridType) })
+        }
+        if (!claims.take(`position:${gridType}:${targetKey(collection)}:${position}`)) {
+          problems.push({
+            field: 'position',
+            message: `Position ${position} in this plate/box is used more than once in your file. Each position can only be used once.`,
+          })
+        }
+      }
+    }
+
+    const barcode = 'barcode' in input ? input.barcode?.trim() : undefined
+    if (barcode && (input.containerType === 'micronix_tube' || input.containerType === 'cryovial_tube')) {
+      const table = input.containerType === 'micronix_tube' ? micronixTube : cryovialTube
+      const taken = await database.select({ id: table.id }).from(table).where(eq(table.barcode, barcode)).get()
+      if (taken) problems.push({ field: 'barcode', message: `Barcode '${barcode}' already exists. Use a different barcode.` })
+      if (!claims.take(`barcode:${input.containerType}:${barcode}`)) {
+        problems.push({
+          field: 'barcode',
+          message: `Barcode '${barcode}' is used more than once in your file. Each barcode must be unique.`,
+        })
+      }
+    }
+  }
+
+  if (problems.length > 0 || collection === null || unitId === null) {
+    return { errors: problems }
+  }
+  return { input, unitId, totalQuantity, remainingQuantity, collection, position }
+}

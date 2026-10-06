@@ -1,5 +1,6 @@
 /**
- * Write-path parity: specimens bulk and combined import produce equivalent Containers.
+ * Write-path parity: every path that creates Containers goes through Specimen registration
+ * (ADR 0010), so the same container input produces the same rows from each path.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { eq } from 'drizzle-orm'

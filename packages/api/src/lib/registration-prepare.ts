@@ -1,11 +1,11 @@
 /**
  * Registration batch prepare — provenance resolution and container placement checks
- * shared by bulk specimen validate/create and combined import validate/import.
+ * for bulk specimen validate/create.
  */
 import type { Database } from '../db/client'
 import { specimen } from '../db/schema'
 import { validateSpecimenData, validateContainerTypeForSpecimenType } from './validation'
-import { validateContainerWriteFields } from './container-creation'
+import { validateContainerWriteFields } from './specimen-registration'
 import {
   buildContainerPlacementCheckRow,
   collectContainerPlacementErrors,
@@ -63,17 +63,6 @@ export type PreparedBulkSpecimenRow = {
   resolved: ResolvedSpecimen
 }
 
-type CollectionResolutionMessages = {
-  collectionNotFound: (identifier: string) => string
-  boxNotFound: (name: string) => string
-}
-
-export const bulkCombinedCollectionMessages: CollectionResolutionMessages = {
-  collectionNotFound: (identifier) =>
-    `Collection '${identifier}' not found. Provide collection.locationId to create it.`,
-  boxNotFound: (name) => `Box '${name}' not found. Provide collection.parent.locationId to create it.`,
-}
-
 export type SpecimenContainerRegistrationResult =
   | {
       valid: true
@@ -86,8 +75,7 @@ export type SpecimenContainerRegistrationResult =
 export async function validateSpecimenContainerRegistration(
   database: Database,
   specimenTypeId: number,
-  container: BulkCombinedContainerInput,
-  _options?: { messages?: CollectionResolutionMessages }
+  container: BulkCombinedContainerInput
 ): Promise<SpecimenContainerRegistrationResult> {
   const writeInput = toContainerWriteInput(container)
   const containerType = writeInput.containerType
@@ -151,59 +139,6 @@ export function bulkSpecimenPayloadKey(row: BulkSpecimenValidateRow, resolved: R
   return row.sourceType === 'subject'
     ? `s:${String(row.studyShortCode ?? '')}:${String(row.subjectName ?? '')}:${String(row.specimenTypeName)}:${String(row.collectionDate ?? '')}`
     : `c:${String(resolved.controlBatchId ?? '')}:${String(resolved.specimenTypeId)}:${String(row.collectionDate ?? '')}`
-}
-
-export type CombinedSubjectSpecimenRow = {
-  specimenTypeId: number
-  collectionDate?: string
-  container?: BulkCombinedContainerInput
-}
-
-export type CombinedContainerPrepareResult = {
-  placementRows: ContainerPlacementCheckRow[]
-  collectionMap: Map<string, number>
-}
-
-/**
- * Validate containers for combined-import subject specimens with resolved specimen types.
- * Builds placement rows and a collection key map for downstream placement checks.
- */
-export async function prepareCombinedSubjectContainerBatch(
-  database: Database,
-  specimens: CombinedSubjectSpecimenRow[],
-  options?: { messages?: CollectionResolutionMessages }
-): Promise<
-  | { valid: true; result: CombinedContainerPrepareResult }
-  | { valid: false; specimenIndex: number; message: string }
-> {
-  const messages = options?.messages ?? bulkCombinedCollectionMessages
-  const placementRows: ContainerPlacementCheckRow[] = []
-  const collectionMap = new Map<string, number>()
-
-  for (let specimenIndex = 0; specimenIndex < specimens.length; specimenIndex++) {
-    const spec = specimens[specimenIndex]
-    if (!spec.container?.containerType) {
-      continue
-    }
-
-    const containerRegistration = await validateSpecimenContainerRegistration(
-      database,
-      spec.specimenTypeId,
-      spec.container,
-      { messages }
-    )
-    if (!containerRegistration.valid) {
-      return { valid: false, specimenIndex, message: containerRegistration.error }
-    }
-
-    if (containerRegistration.collectionId !== null) {
-      collectionMap.set(containerRegistration.collectionKey, containerRegistration.collectionId)
-    }
-
-    placementRows.push(containerRegistration.placementRow)
-  }
-
-  return { valid: true, result: { placementRows, collectionMap } }
 }
 
 /**
