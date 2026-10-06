@@ -21,6 +21,7 @@ import {
   createTestLocation,
   createTestMicronixPlate,
   createTestMicronixTube,
+  createTestBag,
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
 import { utcNow } from '../datetime'
@@ -344,7 +345,7 @@ describe('derivations-csv', () => {
       }
       const parent = await addTube('MT-PARENT', 'A01', 10)
       await addTube('MT-TAKEN', 'A02', 1)
-      return { parent }
+      return { parent, loc }
     }
 
     it('checks non-padded positions against stored ones and against each other', async () => {
@@ -389,6 +390,25 @@ describe('derivations-csv', () => {
 
       expect(result.rows[0].valid).toBe(false)
       expect(result.rows[0].error).toMatch(/Box 'No Such Box' not found/)
+    })
+
+    it('finds the bag named by bag_name for paper rows', async () => {
+      const { parent, loc } = await seedParent()
+      await createTestBag(testDb, { name: 'Shared Name', locationId: loc.id })
+      const csv = ['parent_container_id,container_type,bag_name,sheet_name,sublabel', `${parent.id},paper,Shared Name,Sheet-1,S1`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, { ...settings, containerType: '' })
+
+      expect(result.rows[0]).toMatchObject({ valid: true, collectionStatus: 'existing' })
+    })
+
+    it('reports a paper row with neither box_name nor bag_name as a missing field', async () => {
+      const { parent } = await seedParent()
+      const csv = ['parent_container_id,container_type,box_name,sheet_name,sublabel', `${parent.id},paper,,Sheet-1,S1`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, { ...settings, containerType: '' })
+
+      expect(result.rows[0].error).toBe('box_name or bag_name is required for paper')
     })
   })
 })

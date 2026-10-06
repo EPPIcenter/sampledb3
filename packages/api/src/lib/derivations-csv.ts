@@ -205,7 +205,7 @@ function buildParentSummary(row: DerivationCsvRow): string {
 /** Build a short user-facing label for the child placement (no internal IDs). */
 function buildChildSummary(row: DerivationCsvRow): string {
   const containerType = row.container_type || 'micronix_tube'
-  const name = (getCollectionNameForType(row, containerType) ?? '').trim()
+  const name = (childCollectionRef(row, containerType).name ?? '').trim()
   const barcode = (row.collection_barcode ?? '').trim()
   const pos = (row.position ?? '').trim()
   const parts: string[] = []
@@ -223,19 +223,30 @@ function buildChildSummary(row: DerivationCsvRow): string {
   return 'Child'
 }
 
-/** Paper rows name their parent with box_name or bag_name. */
-function paperParentTypeFor(row: DerivationCsvRow): 'box' | 'bag' {
-  return row.box_name ? 'box' : row.bag_name ? 'bag' : 'box'
+/**
+ * The collection a row's child container goes into, as the CSV names it: the plate or
+ * cryovial box for tubes, or the box or bag holding the sheet for paper.
+ */
+type ChildCollectionRef = {
+  name?: string
+  barcode?: string
+  /** Paper only: whether `name` is a box or a bag. */
+  paperParentType?: 'box' | 'bag'
 }
 
-function getCollectionNameForType(
+function childCollectionRef(
   row: DerivationCsvRow,
   containerType: DerivationCsvRow['container_type'] | 'micronix_tube',
-): string | undefined {
+): ChildCollectionRef {
   // Column names align with csvRowToContainerWriteInput (contract write CSV mapper).
-  if (containerType === 'cryovial_tube') return row.box_name
-  if (containerType === 'paper') return row.box_name || row.bag_name
-  return row.plate_name
+  const barcode = row.collection_barcode
+  if (containerType === 'cryovial_tube') return { name: row.box_name, barcode }
+  if (containerType === 'paper') {
+    return row.box_name || !row.bag_name
+      ? { name: row.box_name, barcode, paperParentType: 'box' }
+      : { name: row.bag_name, barcode, paperParentType: 'bag' }
+  }
+  return { name: row.plate_name, barcode }
 }
 
 function getCollectionNameLabelForType(
@@ -297,9 +308,7 @@ export function parseCsv(text: string): DerivationCsvRow[] {
 async function resolveCollectionId(
   database: DatabaseOrTransaction,
   containerType: DerivationCsvRow['container_type'],
-  collectionName?: string,
-  collectionBarcode?: string,
-  paperParentType: 'box' | 'bag' = 'box',
+  { name: collectionName, barcode: collectionBarcode, paperParentType = 'box' }: ChildCollectionRef,
 ): Promise<{ id?: number; status: 'existing' | 'will_be_created' }> {
   if (!collectionName && !collectionBarcode) {
     return { status: 'will_be_created' }
@@ -427,7 +436,8 @@ export async function validateDerivationsCsv(
       }
 
       const containerType = row.container_type || settings?.containerType || 'micronix_tube'
-      const collectionName = getCollectionNameForType(row, containerType)
+      const childCollection = childCollectionRef(row, containerType)
+      const collectionName = childCollection.name
       if ((containerType === 'micronix_tube' || containerType === 'cryovial_tube') && !collectionName && !row.collection_barcode) {
         validationRow.error = `${getCollectionNameLabelForType(containerType)} or collection_barcode is required for ${containerType} derivations`
         validationRows.push(validationRow)
@@ -504,18 +514,12 @@ export async function validateDerivationsCsv(
       }
 
       // Resolve collection and track status
-      const collectionInfo = await resolveCollectionId(
-        database,
-        containerType,
-        collectionName,
-        row.collection_barcode,
-        paperParentTypeFor(row),
-      )
+      const collectionInfo = await resolveCollectionId(database, containerType, childCollection)
       validationRow.collectionStatus = collectionInfo.status
 
       if (containerType === 'paper' && collectionInfo.status !== 'existing') {
-        const kind = paperParentTypeFor(row)
-        validationRow.error = `${kind === 'bag' ? 'Bag' : 'Box'} '${collectionName ?? ''}' not found. Create it before importing paper derivations.`
+        const kind = childCollection.paperParentType === 'bag' ? 'Bag' : 'Box'
+        validationRow.error = `${kind} '${collectionName ?? ''}' not found. Create it before importing paper derivations.`
         validationRows.push(validationRow)
         invalidCount++
         continue
@@ -704,9 +708,7 @@ export async function importDerivationsFromCsv(
             const collectionInfo = await resolveCollectionId(
               tx,
               childContainerType,
-              getCollectionNameForType(row, childContainerType),
-              row.collection_barcode,
-              paperParentTypeFor(row),
+              childCollectionRef(row, childContainerType),
             )
 
             const input: CreateDerivationInput = {
@@ -793,13 +795,7 @@ export async function importDerivationsFromCsv(
           })
           continue
         }
-        const collectionInfo = await resolveCollectionId(
-          database,
-          containerType,
-          getCollectionNameForType(row, containerType),
-          row.collection_barcode,
-          paperParentTypeFor(row),
-        )
+        const collectionInfo = await resolveCollectionId(database, containerType, childCollectionRef(row, containerType))
 
         results.push({
           index: i,
