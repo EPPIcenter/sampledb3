@@ -13,7 +13,7 @@
 
 ## Where to look
 
-- Writing code, tests, issues, or proposals, or reviewing a change: `CODING_STANDARDS.md`.
+- Rules for naming domain concepts, contradicting an ADR, failing tests, database access, calling the API from the web, and writing API and web tests: `CODING_STANDARDS.md`. The `code-review` skill checks changes against it.
 - Writing an API test: `packages/api/src/__tests__/README.md`.
 - Writing a web test: `packages/web/src/__tests__/README.md`.
 - Changing the schema or adding a migration: `packages/api/src/db/README.md`.
