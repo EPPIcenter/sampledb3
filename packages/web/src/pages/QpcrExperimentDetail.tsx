@@ -436,14 +436,18 @@ export default function QpcrExperimentDetail() {
     return w != null && w.contentType === 'negative'
   })
 
+  /** Show the server's wells and refresh the cached experiment, or revisiting the page shows the old wells. */
+  const applyUpdatedWells = (wells: QpcrExperimentWell[]) => {
+    setData((prev) => (prev ? { ...prev, wells } : null))
+    invalidateQpcrExperimentQueries(queryClient)
+  }
+
   const handleSetWellContentType = async (contentType: 'empty' | 'negative') => {
     if (!id || !selectedWellPosition) return
     setWellsUpdating(true)
     try {
       const res = await qpcrExperimentsApi.updateWells(parseInt(id), { wellPosition: selectedWellPosition, contentType })
-      setData((prev) => (prev ? { ...prev, wells: res.wells } : null))
-      // Keep the cached experiment in step, or revisiting the page shows the old wells.
-      invalidateQpcrExperimentQueries(queryClient)
+      applyUpdatedWells(res.wells)
       showSuccess(contentType === 'negative' ? 'Well set as NTC' : 'Well set as empty')
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err && typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === 'string'
@@ -460,9 +464,7 @@ export default function QpcrExperimentDetail() {
     setWellsUpdating(true)
     try {
       const res = await qpcrExperimentsApi.updateWells(parseInt(id), { positions: emptyWellPositions, contentType: 'negative' })
-      setData((prev) => (prev ? { ...prev, wells: res.wells } : null))
-      // Keep the cached experiment in step, or revisiting the page shows the old wells.
-      invalidateQpcrExperimentQueries(queryClient)
+      applyUpdatedWells(res.wells)
       showSuccess(`Set ${emptyWellPositions.length} well(s) to NTC`)
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err && typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === 'string'
@@ -479,9 +481,7 @@ export default function QpcrExperimentDetail() {
     setWellsUpdating(true)
     try {
       const res = await qpcrExperimentsApi.updateWells(parseInt(id), { positions: ntcWellPositions, contentType: 'empty' })
-      setData((prev) => (prev ? { ...prev, wells: res.wells } : null))
-      // Keep the cached experiment in step, or revisiting the page shows the old wells.
-      invalidateQpcrExperimentQueries(queryClient)
+      applyUpdatedWells(res.wells)
       showSuccess(`Set ${ntcWellPositions.length} well(s) to empty`)
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err && typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === 'string'
