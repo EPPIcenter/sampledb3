@@ -26,7 +26,8 @@ async function loadTabData(
   }
 
   const res = await config.list()
-  const data = res.data
+  // Typed loosely on purpose: callers pass unvalidated response bodies.
+  const data: unknown = res.data
   if (Array.isArray(data)) return data
   if (typeof data === 'object' && data !== null) {
     return ((data as Record<string, unknown>)[config.getDataKey()] as unknown[] | undefined) ?? []

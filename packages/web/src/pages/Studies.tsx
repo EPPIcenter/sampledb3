@@ -156,7 +156,7 @@ export default function Studies() {
     )
 
     cardRefs.current.forEach((element) => {
-      if (element && summaryObserverRef.current) {
+      if (summaryObserverRef.current) {
         summaryObserverRef.current.observe(element)
       }
     })

@@ -54,7 +54,7 @@ export default function SheetDetail() {
 
   const tableRows = useMemo(() => {
     const context = sheet
-      ? { collectionName: sheet.name ?? undefined, locationPath: sheet.locationPath ?? undefined }
+      ? { collectionName: sheet.name, locationPath: sheet.locationPath ?? undefined }
       : undefined
     return papers.map((p: CollectionTableEntry) =>
       buildCollectionTableRow({

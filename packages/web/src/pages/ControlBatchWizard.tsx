@@ -175,7 +175,6 @@ export default function ControlBatchWizard() {
     const seed = definitionSeedQuery.data
     if (!seed) return
     const { control, composition } = seed.summaryResponse
-    if (!control) return
     setBatchInfo({
       controlDefinitionId: control.id,
       controlDefinition: { ...control, strains: composition?.strains },
@@ -201,11 +200,6 @@ export default function ControlBatchWizard() {
     }
     if (isCreateFromDefinition && definitionSeedQuery.isError) {
       return getQueryErrorMessage(definitionSeedQuery.error, 'Failed to load control definition')
-    }
-    if (isCreateFromDefinition && definitionSeedQuery.isSuccess) {
-      if (!definitionSeedQuery.data.summaryResponse.control) {
-        return 'Control definition not found'
-      }
     }
     if (isCompositionCsvFlow && compositionQuery.isError) {
       return getQueryErrorMessage(compositionQuery.error, 'Failed to load composition')

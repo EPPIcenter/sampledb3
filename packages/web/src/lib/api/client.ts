@@ -49,7 +49,7 @@ function isAuthEndpoint(url: string | undefined): boolean {
 
 function attachRequestIdInterceptor(instance: AxiosInstance): void {
   instance.interceptors.request.use((config) => {
-    const headers = config.headers ?? {}
+    const headers = config.headers
     const existing = readRequestIdHeader(headers)
     if (!existing) {
       ;(headers as Record<string, string>)[REQUEST_ID_HEADER] = generateClientRequestId()

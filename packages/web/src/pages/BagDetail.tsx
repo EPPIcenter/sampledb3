@@ -40,7 +40,7 @@ export default function BagDetail() {
 
   // Initialize expanded sheets (default to collapsed if more than 3 sheets)
   // This hook must be called before any conditional returns to maintain hook order
-  const sheets = (data?.contents?.sheets || []) as Array<{
+  const sheets = (data?.contents.sheets || []) as Array<{
     id: number
     name?: string
     papers?: CollectionTableEntry[]
@@ -58,7 +58,7 @@ export default function BagDetail() {
   const tableRows = useMemo(() => {
     const bag = data?.bag
     const context = bag
-      ? { collectionName: bag.name ?? undefined, locationPath: bag.locationPath ?? undefined }
+      ? { collectionName: bag.name, locationPath: bag.locationPath ?? undefined }
       : undefined
     const list: ReturnType<typeof buildSheetPaperTableRow>[] = []
     sheets.forEach((sheet: { id: number; name?: string; papers?: CollectionTableEntry[] }) => {

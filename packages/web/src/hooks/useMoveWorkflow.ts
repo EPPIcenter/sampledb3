@@ -175,7 +175,7 @@ export function usePaperMoveSheets(
           : await collectionsApi.getBag(sourceCollectionId!)
 
       const contents = response.contents as { sheets?: Array<{ id: number; name: string; papers?: unknown[] }> }
-      if (!contents?.sheets) return []
+      if (!contents.sheets) return []
 
       return contents.sheets.map((s) => ({
         id: s.id,

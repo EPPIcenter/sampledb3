@@ -51,7 +51,7 @@ export default function SpecimenTypesStep({
       setAllowedContainerTypes([])
       return
     }
-    if (containerTypesQuery.isSuccess && containerTypesQuery.data) {
+    if (containerTypesQuery.isSuccess) {
       const containerTypes = containerTypesQuery.data.containerTypes
       setAllowedContainerTypes(containerTypes)
       if (newSpecimenType.containerType && containerTypes.length > 0) {
@@ -72,7 +72,7 @@ export default function SpecimenTypesStep({
       setAllowedSpecimenTypes([])
       return
     }
-    if (specimenTypesByContainerQuery.isSuccess && specimenTypesByContainerQuery.data) {
+    if (specimenTypesByContainerQuery.isSuccess) {
       const types = specimenTypesByContainerQuery.data
       setAllowedSpecimenTypes(types)
       if (newSpecimenType.specimenTypeId && types.length > 0) {

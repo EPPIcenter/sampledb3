@@ -42,7 +42,7 @@ export default function ContainerMoveMicronix() {
     if (scannerConfigurations.length === 0 || selectedConfigId !== null) return
     const defaultConfig =
       scannerConfigurations.find((c) => c.isDefault === true) ?? scannerConfigurations[0]
-    if (defaultConfig) setSelectedConfigId(defaultConfig.id)
+    setSelectedConfigId(defaultConfig.id)
   }, [scannerConfigurations, selectedConfigId])
 
   if (!canWrite) {
