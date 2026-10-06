@@ -83,7 +83,7 @@ function normalizeHeader(header: string): string {
 
 export function parseBulkImportCSV(text: string): CSVRow[] {
   // Shared RFC 4180 parser: quoted commas ("low vol, hemolyzed"), quotes, CRLF, and BOM.
-  const lines = parseCsv(text).filter((cells) => cells.some((cell) => cell.trim() !== ''))
+  const lines = parseCsv(text, { skipBlankRows: true })
   if (lines.length < 2) return []
 
   const headers = lines[0].map((h) => normalizeHeader(h.trim()))

@@ -718,7 +718,6 @@ controls.post('/:id/batches', memberMiddleware, async (c) => {
   }
 })
 
-// Create batch with specimens
 // Create several batches (one per density) all-or-nothing
 controls.post('/batches/create-many-with-specimens', memberMiddleware, async (c) => {
   try {
@@ -731,6 +730,7 @@ controls.post('/batches/create-many-with-specimens', memberMiddleware, async (c)
   }
 })
 
+// Create batch with specimens
 controls.post('/batches/create-with-specimens', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()

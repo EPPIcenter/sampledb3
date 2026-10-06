@@ -22,6 +22,7 @@ import type {
 } from './types'
 import { buildExportSummary, validateStudyCodes } from './validate'
 import { chunkArray, dateToUpperBound } from '../statistics/helpers'
+import { shiftCalendarDate } from '../datetime'
 
 export async function buildContainerQuery(database: Database, filters: ExportFilters) {
   // First, get the study and its subjects
@@ -280,13 +281,12 @@ export async function buildContainerQueryByMicronixBarcodes(
 /** Collection date condition for one per-subject filter (exact date +/- tolerance days, or a range). */
 function subjectDateCondition(dateFilter: SubjectDateFilter, toleranceDays: number) {
   if ('exact' in dateFilter) {
-    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateFilter.exact)
-    if (!match) return eq(specimen.collectionDate, dateFilter.exact)
-    const shift = (days: number) =>
-      new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + days)).toISOString().slice(0, 10)
+    const from = shiftCalendarDate(dateFilter.exact, -toleranceDays)
+    const to = shiftCalendarDate(dateFilter.exact, toleranceDays)
+    if (!from || !to) return eq(specimen.collectionDate, dateFilter.exact)
     return and(
-      gte(specimen.collectionDate, shift(-toleranceDays)),
-      lte(specimen.collectionDate, shift(toleranceDays)),
+      gte(specimen.collectionDate, from),
+      lte(specimen.collectionDate, to),
     )
   }
   const bounds = [

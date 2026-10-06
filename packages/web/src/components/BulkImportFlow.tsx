@@ -137,7 +137,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       const reader = new FileReader()
       reader.onload = (event) => {
         const text = event.target?.result as string
-        const lines = parseCsv(text).filter((cells) => cells.some((cell) => cell.trim() !== ''))
+        const lines = parseCsv(text, { skipBlankRows: true })
         if (lines.length === 0) return
 
         const headers = lines[0].map(h => h.trim())

@@ -64,7 +64,14 @@ export function serializeCsv(
   return bom ? `\uFEFF${content}` : content
 }
 
-export function parseCsv(input: string, options: { delimiter?: string } = {}): string[][] {
+/** Parse CSV text into rows of cells. skipBlankRows drops rows whose cells are all empty or whitespace. */
+export function parseCsv(
+  input: string,
+  options: { delimiter?: string; skipBlankRows?: boolean } = {},
+): string[][] {
+  if (options.skipBlankRows) {
+    return parseCsv(input, { delimiter: options.delimiter }).filter((cells) => cells.some((cell) => cell.trim() !== ''))
+  }
   const delimiter = options.delimiter ?? DEFAULT_DELIMITER
   let text = input
   if (text.charCodeAt(0) === 0xfeff) {

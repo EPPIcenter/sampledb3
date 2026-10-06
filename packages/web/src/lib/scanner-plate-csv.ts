@@ -18,7 +18,7 @@ function buildPosition(config: ScannerConfiguration, row: ScannerPlateCsvRow): s
  * Parse a scanner plate CSV using column mapping from scanner configuration.
  */
 export function parseScannerPlateCsv(text: string, config: ScannerConfiguration): ScannerPlateCsvRow[] {
-  const lines = parseCsv(text).filter((cells) => cells.some((cell) => cell.trim() !== ''))
+  const lines = parseCsv(text, { skipBlankRows: true })
   if (lines.length < 2 + config.skipRows) return []
 
   const headers = lines[config.skipRows].map((h) => h.trim())

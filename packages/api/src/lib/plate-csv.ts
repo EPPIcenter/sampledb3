@@ -32,7 +32,7 @@ export function parsePlateCSV(
   config: ScannerConfiguration
 ): { wellPosition: string; barcode: string }[] {
   // Shared parser: handles quoted fields ("A01","FR123"), BOM, and CRLF.
-  const lines = parseCsv(csvText).filter((cells) => cells.some((cell) => cell.trim() !== ''))
+  const lines = parseCsv(csvText, { skipBlankRows: true })
   if (lines.length <= config.skipRows) return []
   const headers = lines[config.skipRows].map((h) => h.trim())
   const rows: { wellPosition: string; barcode: string }[] = []
