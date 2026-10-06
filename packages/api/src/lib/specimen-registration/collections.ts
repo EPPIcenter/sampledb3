@@ -1,0 +1,267 @@
+/**
+ * Collection identity for registration: which Collection a container goes into, and which
+ * Collections the registration has to create. Every identifier a row gives must name the
+ * same Collection; nothing is created unless nothing matches and a location is given.
+ */
+import { and, eq } from 'drizzle-orm'
+import type { ContainerWriteInput } from '@sampledb/contract'
+import type { Database } from '../../db/client'
+import { bag, box, cryovialBox, micronixPlate, sheet } from '../../db/schema'
+import {
+  assertLocationCanContainCollections,
+  CollectionLocationNotAllowedError,
+  CollectionLocationNotFoundError,
+} from '../collections/collection-lifecycle'
+
+export type GridCollectionType = 'micronix_plate' | 'cryovial_box'
+export type ParentCollectionType = 'box' | 'bag'
+
+type GridCollectionInput = NonNullable<
+  Extract<ContainerWriteInput, { containerType: 'micronix_tube' | 'cryovial_tube' | 'static_well' }>['collection']
+>
+type SheetCollectionInput = NonNullable<Extract<ContainerWriteInput, { containerType: 'paper' }>['collection']>
+type ParentCollectionInput = NonNullable<SheetCollectionInput['parent']>
+
+/** A Collection that exists, or one this registration will create (index into `planned`). */
+export type CollectionTarget = { existingId: number } | { plannedIndex: number }
+
+export type PlannedCollection =
+  | { type: GridCollectionType; name: string; barcode?: string; locationId: number }
+  | { type: ParentCollectionType; name: string; locationId: number }
+  | { type: 'sheet'; name: string; parentType: ParentCollectionType; parent: CollectionTarget }
+
+export type Resolution = { target: CollectionTarget } | { error: string }
+
+type Candidate = { target: CollectionTarget; name: string; barcode: string | null }
+
+const LABELS: Record<GridCollectionType | ParentCollectionType, string> = {
+  micronix_plate: 'Micronix plate',
+  cryovial_box: 'Cryovial box',
+  box: 'Box',
+  bag: 'Bag',
+}
+
+export function targetKey(target: CollectionTarget): string {
+  return 'existingId' in target ? `e${target.existingId}` : `p${target.plannedIndex}`
+}
+
+function distinctCandidates(candidates: Candidate[]): Candidate[] {
+  const seen = new Map<string, Candidate>()
+  for (const candidate of candidates) seen.set(targetKey(candidate.target), candidate)
+  return [...seen.values()]
+}
+
+function locationError(locationId: number, database: Database): string | null {
+  try {
+    assertLocationCanContainCollections(database, locationId)
+    return null
+  } catch (error) {
+    if (error instanceof CollectionLocationNotFoundError || error instanceof CollectionLocationNotAllowedError) {
+      return error.message
+    }
+    throw error
+  }
+}
+
+/** Resolves Collections for one registration, remembering the ones it plans to create. */
+export class CollectionPlanner {
+  readonly planned: PlannedCollection[] = []
+
+  constructor(private readonly database: Database) {}
+
+  private plannedCandidates(
+    type: GridCollectionType | ParentCollectionType,
+    match: (planned: PlannedCollection) => boolean,
+  ): Candidate[] {
+    const out: Candidate[] = []
+    this.planned.forEach((planned, plannedIndex) => {
+      if (planned.type === type && match(planned)) {
+        out.push({
+          target: { plannedIndex },
+          name: planned.name,
+          barcode: 'barcode' in planned ? (planned.barcode ?? null) : null,
+        })
+      }
+    })
+    return out
+  }
+
+  private plannedLocationConflict(target: CollectionTarget, locationId: number | undefined): string | null {
+    if (!('plannedIndex' in target) || locationId == null) return null
+    const planned = this.planned[target.plannedIndex]
+    if ('locationId' in planned && planned.locationId !== locationId) {
+      return `${LABELS[planned.type]} '${planned.name}' is given two different locations in this request.`
+    }
+    return null
+  }
+
+  async resolveGrid(type: GridCollectionType, collection: GridCollectionInput): Promise<Resolution> {
+    const label = LABELS[type]
+    const table = type === 'cryovial_box' ? cryovialBox : micronixPlate
+    const candidates: Candidate[] = []
+
+    if (collection.id != null) {
+      const row = await this.database
+        .select({ id: table.id, name: table.name, barcode: table.barcode })
+        .from(table)
+        .where(eq(table.id, collection.id))
+        .get()
+      if (!row) return { error: `${label} not found: id ${collection.id}` }
+      candidates.push({ target: { existingId: row.id }, name: row.name, barcode: row.barcode })
+    }
+    if (collection.barcode) {
+      const barcode = collection.barcode
+      const row = await this.database
+        .select({ id: table.id, name: table.name, barcode: table.barcode })
+        .from(table)
+        .where(eq(table.barcode, barcode))
+        .get()
+      if (row) candidates.push({ target: { existingId: row.id }, name: row.name, barcode: row.barcode })
+      else candidates.push(...this.plannedCandidates(type, (p) => 'barcode' in p && p.barcode === barcode))
+    }
+    if (collection.name) {
+      const name = collection.name
+      const row = await this.database
+        .select({ id: table.id, name: table.name, barcode: table.barcode })
+        .from(table)
+        .where(eq(table.name, name))
+        .get()
+      if (row) candidates.push({ target: { existingId: row.id }, name: row.name, barcode: row.barcode })
+      else candidates.push(...this.plannedCandidates(type, (p) => p.name === name))
+    }
+
+    const matches = distinctCandidates(candidates)
+    if (matches.length > 1) {
+      return {
+        error: `Collection name and barcode point to different ${label.toLowerCase()}s: ${matches
+          .map((m) => `'${m.name}'`)
+          .join(' and ')}.`,
+      }
+    }
+    const match = matches.at(0)
+    if (match) {
+      if (collection.barcode && match.barcode !== collection.barcode) {
+        const actual = match.barcode ? `has barcode '${match.barcode}'` : 'has no barcode'
+        return { error: `${label} '${match.name}' ${actual}, not '${collection.barcode}'.` }
+      }
+      if (collection.name && match.name !== collection.name) {
+        return { error: `${label} with this barcode is named '${match.name}', not '${collection.name}'.` }
+      }
+      const conflict = this.plannedLocationConflict(match.target, collection.locationId)
+      if (conflict) return { error: conflict }
+      return { target: match.target }
+    }
+
+    if (collection.locationId == null) {
+      return { error: 'Collection not found and no location provided' }
+    }
+    const name = collection.name ?? collection.barcode
+    if (!name) {
+      return {
+        error:
+          type === 'cryovial_box'
+            ? 'box_name or collection_barcode is required for cryovial_tube'
+            : 'plate_name or collection_barcode is required for micronix_tube',
+      }
+    }
+    const badLocation = locationError(collection.locationId, this.database)
+    if (badLocation) return { error: badLocation }
+    this.planned.push({ type, name, barcode: collection.barcode, locationId: collection.locationId })
+    return { target: { plannedIndex: this.planned.length - 1 } }
+  }
+
+  async resolveParent(parent: ParentCollectionInput): Promise<Resolution> {
+    const type = parent.type
+    const label = LABELS[type]
+    const table = type === 'box' ? box : bag
+    const candidates: Candidate[] = []
+
+    if (parent.id != null) {
+      const row = await this.database
+        .select({ id: table.id, name: table.name })
+        .from(table)
+        .where(eq(table.id, parent.id))
+        .get()
+      if (!row) return { error: `${label} not found: id ${parent.id}` }
+      candidates.push({ target: { existingId: row.id }, name: row.name, barcode: null })
+    }
+    if (parent.name) {
+      const name = parent.name
+      const row = await this.database
+        .select({ id: table.id, name: table.name })
+        .from(table)
+        .where(eq(table.name, name))
+        .get()
+      if (row) candidates.push({ target: { existingId: row.id }, name: row.name, barcode: null })
+      else candidates.push(...this.plannedCandidates(type, (p) => p.name === name))
+    }
+
+    const matches = distinctCandidates(candidates)
+    const match = matches.at(0)
+    if (match) {
+      if (matches.length > 1 || (parent.name && match.name !== parent.name)) {
+        return { error: `${label} id ${parent.id ?? ''} is named '${match.name}', not '${parent.name ?? ''}'.` }
+      }
+      const conflict = this.plannedLocationConflict(match.target, parent.locationId)
+      if (conflict) return { error: conflict }
+      return { target: match.target }
+    }
+
+    if (!parent.name) {
+      return { error: 'box_name or bag_name is required for paper' }
+    }
+    if (parent.locationId == null) {
+      return { error: `Collection (${type}) not found: ${parent.name}` }
+    }
+    const badLocation = locationError(parent.locationId, this.database)
+    if (badLocation) return { error: badLocation }
+    this.planned.push({ type, name: parent.name, locationId: parent.locationId })
+    return { target: { plannedIndex: this.planned.length - 1 } }
+  }
+
+  async resolveSheet(collection: SheetCollectionInput): Promise<Resolution> {
+    if (collection.id != null) {
+      const row = await this.database.select().from(sheet).where(eq(sheet.id, collection.id)).get()
+      if (!row) return { error: `Sheet not found: id ${collection.id}` }
+      if (collection.name && collection.name !== row.name) {
+        return { error: `Sheet id ${collection.id} is named '${row.name}', not '${collection.name}'.` }
+      }
+      if (collection.parent) {
+        const parent = await this.resolveParent(collection.parent)
+        if ('error' in parent) return parent
+        const parentId = collection.parent.type === 'box' ? row.boxId : row.bagId
+        if (!('existingId' in parent.target) || parent.target.existingId !== parentId) {
+          return { error: `Sheet id ${collection.id} is not in that ${collection.parent.type}.` }
+        }
+      }
+      return { target: { existingId: row.id } }
+    }
+
+    if (!collection.name) return { error: 'sheet_name is required for paper' }
+    if (!collection.parent) return { error: 'box_name or bag_name is required for paper' }
+
+    const name = collection.name
+    const parentType = collection.parent.type
+    const parent = await this.resolveParent(collection.parent)
+    if ('error' in parent) return parent
+
+    if ('existingId' in parent.target) {
+      const parentColumn = parentType === 'box' ? sheet.boxId : sheet.bagId
+      const row = await this.database
+        .select({ id: sheet.id })
+        .from(sheet)
+        .where(and(eq(sheet.name, name), eq(parentColumn, parent.target.existingId)))
+        .get()
+      if (row) return { target: { existingId: row.id } }
+    }
+
+    const parentKey = targetKey(parent.target)
+    const plannedIndex = this.planned.findIndex(
+      (p) => p.type === 'sheet' && p.name === name && p.parentType === parentType && targetKey(p.parent) === parentKey,
+    )
+    if (plannedIndex >= 0) return { target: { plannedIndex } }
+
+    this.planned.push({ type: 'sheet', name, parentType, parent: parent.target })
+    return { target: { plannedIndex: this.planned.length - 1 } }
+  }
+}

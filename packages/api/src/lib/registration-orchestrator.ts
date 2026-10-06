@@ -32,10 +32,8 @@ export type {
 } from './registration-prepare'
 
 export {
-  bulkCombinedCollectionMessages,
   bulkSpecimenPayloadKey,
   prepareRegistrationBatchForSpecimens,
-  prepareCombinedSubjectContainerBatch,
   validateSpecimenContainerRegistration,
 } from './registration-prepare'
 

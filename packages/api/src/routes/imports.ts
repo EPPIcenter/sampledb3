@@ -2,8 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { Database } from '../db/client'
 import { importDerivationsFromCsv, validateDerivationsCsv, type BulkDerivationSettings } from '../lib/derivations-csv'
-import { runBulkCombinedImport, type BulkCombinedContainerInput } from '../lib/bulk-combined-import'
-import { validateBulkCombinedPayload } from '../lib/bulk-combined-validate'
+import { runBulkCombinedImport, validateBulkCombinedPayload } from '../lib/bulk-combined-import'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
 import {
@@ -86,19 +85,7 @@ imports.post('/bulk-combined', memberMiddleware, async (c) => {
       return c.json({ error: 'No subjects provided' }, 400)
     }
     const user = c.get('user')
-    const result = await runBulkCombinedImport(database, {
-      studyShortCode: data.studyShortCode,
-      atomicMode: data.atomicMode,
-      subjects: data.subjects.map((s) => ({
-        studyShortCode: s.studyShortCode,
-        subjectName: s.subjectName,
-        specimens: s.specimens.map((sp) => ({
-          specimenTypeName: sp.specimenTypeName,
-          collectionDate: sp.collectionDate,
-          container: sp.container as BulkCombinedContainerInput | undefined,
-        })),
-      })),
-    }, user?.id)
+    const result = await runBulkCombinedImport(database, data, user?.id)
     return c.json({
       summary: result.summary,
       results: result.results.map((r) => ({
@@ -125,20 +112,7 @@ imports.post('/bulk-combined/validate', memberMiddleware, async (c) => {
     if (data.subjects.length === 0) {
       return c.json({ error: 'No subjects provided' }, 400)
     }
-    const result = await validateBulkCombinedPayload(database, {
-      studyShortCode: data.studyShortCode,
-      atomicMode: data.atomicMode,
-      subjects: data.subjects.map((s) => ({
-        studyShortCode: s.studyShortCode,
-        subjectName: s.subjectName,
-        specimens: s.specimens.map((sp) => ({
-          specimenTypeName: sp.specimenTypeName,
-          collectionDate: sp.collectionDate,
-          container: sp.container as BulkCombinedContainerInput | undefined,
-          rowIndex: sp.rowIndex,
-        })),
-      })),
-    })
+    const result = await validateBulkCombinedPayload(database, data)
     return c.json(result)
   } catch (error) {
     return handleRouteError(error, c)

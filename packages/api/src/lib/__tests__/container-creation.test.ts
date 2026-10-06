@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import type { Database } from '../../db/client'
-import { validateContainerWriteFields, createContainerForSpecimen } from '../container-creation'
+import { createContainerForSpecimen } from '../container-creation'
+import { validateContainerWriteFields } from '../specimen-registration'
 import {
   createTestSpecimenType,
   createTestStorageType,
