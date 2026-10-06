@@ -1,7 +1,7 @@
 ## Agent skills
 
 - **Issue tracker**: GitHub Issues on `eppicenter/sampledb3`. "Publish to the issue tracker" is `gh issue create`; "fetch the relevant ticket" is `gh issue view <number> --comments`.
-- **Triage labels**: each triage role is a GitHub label with the role's name.
+- **Triage labels**: each of the five triage roles is a GitHub label with the role's name: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`.
 - **Domain docs**: `CONTEXT.md` is the glossary, `docs/adr/` holds the decisions, and `packages/docs/` is the user guide.
 
 ## Checks
