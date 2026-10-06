@@ -14,6 +14,10 @@ build/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+# Renamed copies, e.g. sampledb.sqlite.old, sampledb.sqlite-shm.old, sampledb.sqlite.old-wal
+*.sqlite*.old
+*.sqlite.old-*
+backup_dbs/
 litestream-replicas/
 
 # Python
@@ -77,3 +81,7 @@ scripts/
 !packages/docs/scripts/
 
 test-csvs/
+
+# Local scratch: audit notes and agent worktrees
+.audit/
+.worktrees/
