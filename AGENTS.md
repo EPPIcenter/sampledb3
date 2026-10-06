@@ -1,3 +1,5 @@
+# Agent guide
+
 ## Agent skills
 
 - **Issue tracker**: GitHub Issues on `eppicenter/sampledb3`. "Publish to the issue tracker" is `gh issue create`; "fetch the relevant ticket" is `gh issue view <number> --comments`.
