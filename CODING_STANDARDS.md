@@ -20,19 +20,6 @@ Paths are relative to `packages/api/`.
 - Change the schema with a numbered migration, following the recipe in `src/db/README.md`. DDL lives only in the migrations and `initial_schema.sql`.
 - Code opens a database through `openOperationalDatabase`.
 
-### Domain modules
-
-- Create a Specimen or Container through `registerSpecimens` in `src/lib/specimen-registration/`. Validate a request with `checkSpecimenRegistration`, which is the same write rolled back (ADR 0010).
-- A request that carries a container validates it with `containerWriteInputSchema` from `@sampledb/contract` (ADR 0006).
-- Resolve a Specimen's Source with `resolveSpecimenSource` or `resolveSpecimenSources` from `src/lib/specimens/provenance.ts`, and hand every caller the full `SpecimenSource` shape (ADR 0007).
-- Build a container payload (placement, Tags, Specimen, Source) from `loadContainerReadViews` in `src/lib/container-read-view.ts`, then project it (ADR 0009).
-
-### Routes
-
-- A route maps Drizzle rows to a wire DTO before `c.json` wherever the shape matters. `omitOnWireMiddleware` drops null keys from every response, so null omission stays with it (ADR 0005).
-- A route reports an error by throwing a typed error from `src/lib/error-handler.ts` or returning `handleRouteError(error, c)` (ADR 0004).
-- Structured stdout goes through `src/lib/observability.ts`. A failure meant for Admin Error Logs goes through `src/lib/error-logger.ts` (ADR 0004).
-
 ### API tests
 
 - Each test gets its own database from `setupTestDatabase()` and closes it with `cleanupTestDatabase()` in `afterEach`.
@@ -45,11 +32,6 @@ Paths are relative to `packages/api/`.
 Paths are relative to `packages/web/`.
 
 - Call the API through its domain module, `src/lib/api/<domain>`. Its methods resolve to the response body, so read `res.study`. Reference-data `list()` helpers are the exception: their body is `{ data, meta? }` (ADR 0002).
-- Read and write settings with `settingsApi.getValue` and `settingsApi.putValue` (ADR 0002).
-- A Zod schema for a response marks an unset field `.optional()`, because the wire omits it (ADR 0005).
-- Show a query's read error inline with `PageError` or `SectionMessage` from `src/ui/`. Toasts are for mutation errors (ADR 0001).
-- A mutation goes through a domain hook that invalidates every query it affects, `dashboardKeys` included (ADR 0001).
-- Scan move behaviour lands in the `src/lib/scan-move/` core with plain-data unit tests. The move pages only wire it up (ADR 0008).
 
 ### Web tests
 
