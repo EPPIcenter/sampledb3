@@ -94,7 +94,7 @@ export async function createOrResolveCollection(
         updatedBy: input.userId,
       })
       .returning()
-    const row = inserted[0]
+    const row = inserted.at(0)
     if (!row) throw new Error('Insert did not return box row')
     collectionMap?.set(key, row.id)
     return row.id
@@ -112,7 +112,7 @@ export async function createOrResolveCollection(
         updatedBy: input.userId,
       })
       .returning()
-    const row = inserted[0]
+    const row = inserted.at(0)
     if (!row) throw new Error('Insert did not return bag row')
     collectionMap?.set(key, row.id)
     return row.id
@@ -131,7 +131,7 @@ export async function createOrResolveCollection(
         updatedBy: input.userId,
       })
       .returning()
-    const row = inserted[0]
+    const row = inserted.at(0)
     if (!row) throw new Error('Insert did not return micronix plate row')
     collectionMap?.set(key, row.id)
     return row.id
@@ -149,7 +149,7 @@ export async function createOrResolveCollection(
       updatedBy: input.userId,
     })
     .returning()
-  const row = inserted[0]
+  const row = inserted.at(0)
   if (!row) throw new Error('Insert did not return cryovial box row')
   collectionMap?.set(key, row.id)
   return row.id

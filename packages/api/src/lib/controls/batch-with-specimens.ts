@@ -238,7 +238,7 @@ export async function createBatchWithSpecimens(
       })
       .returning()
 
-    const batchRecord = batchResult[0]
+    const batchRecord = batchResult.at(0)
     if (!batchRecord) {
       throw new Error('Failed to create batch - no record returned')
     }
@@ -256,7 +256,7 @@ export async function createBatchWithSpecimens(
         })
         .returning()
 
-      const specimenRecord = specimenResult[0]
+      const specimenRecord = specimenResult.at(0)
       if (!specimenRecord) {
         throw new Error('Failed to create specimen - no record returned')
       }
@@ -346,7 +346,7 @@ export async function addSpecimensToBatch(
           })
           .returning()
 
-        const specimenRecord = specimenResult[0]
+        const specimenRecord = specimenResult.at(0)
         if (!specimenRecord) {
           throw new Error('Failed to create specimen - no record returned')
         }

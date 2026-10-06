@@ -126,10 +126,8 @@ export function useSpecimenSourceInfo(specimen: Specimen | null | undefined) {
       if (specimen.studySubjectId) {
         const subjectRes = await subjectsApi.get(specimen.studySubjectId)
         const subject = subjectRes.subject
-        if (!subject) return null
         const studyRes = await studiesApi.get(subject.studyId)
         const study = studyRes.study
-        if (!study) return null
         return {
           type: 'subject',
           id: specimen.studySubjectId,
@@ -140,14 +138,13 @@ export function useSpecimenSourceInfo(specimen: Specimen | null | undefined) {
       if (specimen.controlBatchId) {
         const batchRes = await controlsApi.getBatch(specimen.controlBatchId)
         const batch = batchRes.batch
-        if (!batch) return null
         const defRes = await controlsApi.get(batch.controlDefinitionId)
         const control = defRes.control
         return {
           type: 'control',
           id: specimen.controlBatchId,
           name: batch.name,
-          definition: control ? { id: control.id, name: control.name } : undefined,
+          definition: { id: control.id, name: control.name },
         }
       }
       return null
@@ -161,7 +158,7 @@ export function useContainersForSpecimen(specimenId: string | number | undefined
     queryKey: specimenKeys.containers(specimenId!),
     queryFn: async () => {
       const res = await containersApi.list({ specimen_id: specimenId })
-      return res.containers ?? []
+      return res.containers
     },
     enabled: !!specimenId,
   })

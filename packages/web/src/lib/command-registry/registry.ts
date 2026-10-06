@@ -21,25 +21,53 @@ export function buildAllCommands(deps: CommandDependencies): Command[] {
   ]
 }
 
-export function useCommands(deps: CommandDependencies) {
+export function useCommands({
+  navigate,
+  location,
+  canWrite,
+  isAdmin,
+  canManageReferenceData,
+  theme,
+  setTheme,
+  toggleHelpModal,
+  openSearchModal,
+  refreshUser,
+  handleExportSpecimens,
+  handleExportInventory,
+  handleClearFilters,
+}: CommandDependencies) {
+  // The caller builds a new deps object each render, so memoize on its fields.
   return useMemo(
-    () => buildAllCommands(deps),
+    () =>
+      buildAllCommands({
+        navigate,
+        location,
+        canWrite,
+        isAdmin,
+        canManageReferenceData,
+        theme,
+        setTheme,
+        toggleHelpModal,
+        openSearchModal,
+        refreshUser,
+        handleExportSpecimens,
+        handleExportInventory,
+        handleClearFilters,
+      }),
     [
-      deps.navigate,
-      deps.location.pathname,
-      deps.location.search,
-      deps.location.key,
-      deps.canWrite,
-      deps.isAdmin,
-      deps.canManageReferenceData,
-      deps.theme,
-      deps.setTheme,
-      deps.toggleHelpModal,
-      deps.openSearchModal,
-      deps.refreshUser,
-      deps.handleExportSpecimens,
-      deps.handleExportInventory,
-      deps.handleClearFilters,
+      navigate,
+      location,
+      canWrite,
+      isAdmin,
+      canManageReferenceData,
+      theme,
+      setTheme,
+      toggleHelpModal,
+      openSearchModal,
+      refreshUser,
+      handleExportSpecimens,
+      handleExportInventory,
+      handleClearFilters,
     ]
   )
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useEffectEvent } from 'react'
 import { subjectsApi } from '../lib/api/subjects';
 import { studiesApi } from '../lib/api/studies';
 import type { StudySubject } from '../lib/api/types';
@@ -88,7 +88,7 @@ function SubjectMergeModalContent({
     }
   }
 
-  const loadSubjects = async () => {
+  const loadSubjects = useEffectEvent(async () => {
     if (!studyId) {
       setError('Study ID is required')
       setLoading(false)
@@ -114,7 +114,7 @@ function SubjectMergeModalContent({
     } finally {
       setLoading(false)
     }
-  }
+  })
 
   const handleMerge = async () => {
     if (!sourceSubjectId || !targetSubjectId) {

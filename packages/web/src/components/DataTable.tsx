@@ -156,14 +156,15 @@ export default function DataTable<T extends { id: number }>({
     }
 
     // Make table focusable
-    if (tableRef.current) {
-      tableRef.current.setAttribute('tabindex', '0')
-      tableRef.current.addEventListener('keydown', handleKeyDown)
+    const table = tableRef.current
+    if (table) {
+      table.setAttribute('tabindex', '0')
+      table.addEventListener('keydown', handleKeyDown)
     }
 
     return () => {
-      if (tableRef.current) {
-        tableRef.current.removeEventListener('keydown', handleKeyDown)
+      if (table) {
+        table.removeEventListener('keydown', handleKeyDown)
       }
     }
   }, [paginatedData, onRowClick, selectedRowIndex])

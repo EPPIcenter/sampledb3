@@ -54,7 +54,7 @@ export default function SetupGuard({ children }: { children: React.ReactNode }) 
     )
   }
 
-  if (statusQuery.data?.initialized === false && location.pathname !== '/setup') {
+  if (statusQuery.data.initialized === false && location.pathname !== '/setup') {
     return null
   }
 

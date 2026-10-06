@@ -321,7 +321,7 @@ async function ensureSheetId(
       updatedBy: options?.userId,
     })
     .returning()
-  const row = inserted[0]
+  const row = inserted.at(0)
   if (!row) throw new Error('Insert did not return sheet row')
   return row.id
 }

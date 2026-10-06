@@ -24,7 +24,8 @@ export type ContainerSourceInfo =
       id: number
       name: string
       productionDate?: string | null
-      definition: { id: number; name: string }
+      /** Absent when the batch has no definition (the API omits null fields). */
+      definition?: { id: number; name: string }
     }
 
 /** Stable container detail shape for GET /containers/:id (normalized on the client). */

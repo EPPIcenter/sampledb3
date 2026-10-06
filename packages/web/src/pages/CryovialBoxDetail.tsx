@@ -110,10 +110,8 @@ export default function CryovialBoxDetail() {
   const tableRows = useMemo(() => {
     if (!layout || !data?.positions) return []
     const positions = data.positions as Record<string, (CollectionTableEntry & { kind?: string })[]>
-    const box = data?.box
-    const context = box
-      ? { collectionName: box.name ?? undefined, locationPath: box.locationPath ?? undefined }
-      : undefined
+    const box = data.box
+    const context = { collectionName: box.name, locationPath: box.locationPath ?? undefined }
     const rows: ReturnType<typeof buildCollectionTableRow>[] = []
     layout.rows.forEach((row) => {
       layout.cols.forEach((col) => {
@@ -302,7 +300,7 @@ export default function CryovialBoxDetail() {
             getKey={(row, col) => `${row}${col.padStart(2, '0')}`}
             getCell={(row, col) => {
               const key = `${row}${col.padStart(2, '0')}`
-              return positions[key] || []
+              return (positions[key] as (typeof positions)[string] | undefined) ?? []
             }}
             renderCell={(value, coords) => {
               const entries: any[] = Array.isArray(value) ? value : value ? [value as any] : []

@@ -40,11 +40,15 @@ export default function BagDetail() {
 
   // Initialize expanded sheets (default to collapsed if more than 3 sheets)
   // This hook must be called before any conditional returns to maintain hook order
-  const sheets = (data?.contents?.sheets || []) as Array<{
-    id: number
-    name?: string
-    papers?: CollectionTableEntry[]
-  }>
+  const sheets = useMemo(
+    () =>
+      (data?.contents.sheets || []) as Array<{
+        id: number
+        name?: string
+        papers?: CollectionTableEntry[]
+      }>,
+    [data],
+  )
   useEffect(() => {
     if (sheets.length > 0 && !initializedSheets.current) {
       initializedSheets.current = true
@@ -53,12 +57,12 @@ export default function BagDetail() {
         setExpandedSheets(new Set(sheets.map((s: any) => s.id)))
       }
     }
-  }, [sheets.length])
+  }, [sheets])
 
   const tableRows = useMemo(() => {
     const bag = data?.bag
     const context = bag
-      ? { collectionName: bag.name ?? undefined, locationPath: bag.locationPath ?? undefined }
+      ? { collectionName: bag.name, locationPath: bag.locationPath ?? undefined }
       : undefined
     const list: ReturnType<typeof buildSheetPaperTableRow>[] = []
     sheets.forEach((sheet: { id: number; name?: string; papers?: CollectionTableEntry[] }) => {

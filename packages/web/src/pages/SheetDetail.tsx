@@ -50,11 +50,11 @@ export default function SheetDetail() {
 
   // Derive once so hooks below can run unconditionally (Rules of Hooks)
   const sheet = data?.sheet ?? null
-  const papers = (data?.papers ?? []) as CollectionTableEntry[]
+  const papers = useMemo(() => (data?.papers ?? []) as CollectionTableEntry[], [data])
 
   const tableRows = useMemo(() => {
     const context = sheet
-      ? { collectionName: sheet.name ?? undefined, locationPath: sheet.locationPath ?? undefined }
+      ? { collectionName: sheet.name, locationPath: sheet.locationPath ?? undefined }
       : undefined
     return papers.map((p: CollectionTableEntry) =>
       buildCollectionTableRow({

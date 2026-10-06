@@ -21,6 +21,8 @@ export default [
     },
     rules: {
       "@typescript-eslint/no-unnecessary-condition": "error",
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "error",
     },
   },
 ];

@@ -207,7 +207,7 @@ export default function PlateScanValidation() {
   useEffect(() => {
     if (selectedConfigId != null || scannerConfigurations.length === 0) return
     const defaultConfig = scannerConfigurations.find((c) => c.isDefault === true)
-    setSelectedConfigId(defaultConfig?.id ?? scannerConfigurations[0]?.id ?? null)
+    setSelectedConfigId((defaultConfig ?? scannerConfigurations[0]).id)
   }, [scannerConfigurations, selectedConfigId])
 
   useEffect(() => {

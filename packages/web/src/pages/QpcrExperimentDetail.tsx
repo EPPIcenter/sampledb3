@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api/client'
@@ -137,7 +137,7 @@ export default function QpcrExperimentDetail() {
   const experimentQuery = useQpcrExperiment(experimentId)
   const experimentStatus = fromQuery(experimentQuery)
   const scannerConfigsQuery = useQpcrScannerConfigurations()
-  const scannerConfigs = scannerConfigsQuery.data ?? []
+  const scannerConfigs = useMemo(() => scannerConfigsQuery.data ?? [], [scannerConfigsQuery.data])
   const [data, setData] = useState<QpcrExperimentDetailResponse | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)
@@ -169,7 +169,7 @@ export default function QpcrExperimentDetail() {
   useEffect(() => {
     if (scannerConfigs.length === 0) return
     const defaultConfig = scannerConfigs.find((c) => c.isDefault === true) ?? scannerConfigs[0]
-    if (defaultConfig && selectedConfigId === null) {
+    if (selectedConfigId === null) {
       setSelectedConfigId(defaultConfig.id)
     }
   }, [scannerConfigs, selectedConfigId])
@@ -708,16 +708,12 @@ export default function QpcrExperimentDetail() {
                       <div className="qpcr-reveal flex flex-col gap-4">
                         <div className="flex gap-3 rounded-lg border border-app-border bg-app-surface/80 p-3">
                           <span className="text-app-text-muted mt-0.5 shrink-0" aria-hidden>
-                            {wellDetails.container.containerType != null
-                              ? getContainerTypeIcon(wellDetails.container.containerType)
-                              : null}
+                            {getContainerTypeIcon(wellDetails.container.containerType)}
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="text-xs font-medium text-app-text-muted">Container</p>
                             <p className="text-sm font-medium text-app-text truncate">
-                              {wellDetails.container.containerType != null
-                                ? getContainerTypeName(wellDetails.container.containerType)
-                                : '—'}
+                              {getContainerTypeName(wellDetails.container.containerType)}
                               {wellDetails.container.collection?.name != null && (
                                 <> · {wellDetails.container.collection.name}</>
                               )}

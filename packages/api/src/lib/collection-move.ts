@@ -507,7 +507,7 @@ export async function executeCollectionMoves(
     }
 
     // Execute moves in transaction
-    await database.transaction(async (tx) => {
+    database.transaction((tx) => {
       const now = utcNow()
 
       for (const { collectionInfo, targetLocationId } of validMoves) {

@@ -353,6 +353,7 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
       .style('font-size', '14px')
       .style('text-anchor', 'middle')
       .text('Subject')
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads CSS variables; theme changes them
   }, [theme, allPoints, dateRange, filteredSubjects, yAxisLabels, seriesData])
 
   // Handle mouse move for tooltip
@@ -500,7 +501,7 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
       const point = nearestPoint as ScatterDataPoint
       navigate(`/specimens/${point.specimenId}`)
     }
-  }, [dateRange, filteredSubjects, spatialIndex, navigate])
+  }, [allPoints.length, dateRange, filteredSubjects, spatialIndex, navigate])
 
   // Set up canvas and event listeners
   useEffect(() => {

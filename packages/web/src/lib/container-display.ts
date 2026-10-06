@@ -69,5 +69,5 @@ export function containerDisplayLabel(
     return name
   }
 
-  return getContainerTypeName(container.containerType) ?? fallback ?? 'Container'
+  return getContainerTypeName(container.containerType)
 }

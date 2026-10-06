@@ -19,6 +19,15 @@ export default [
     },
     rules: {
       "@typescript-eslint/no-unnecessary-condition": "error",
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.property.name='transaction'] > :matches(ArrowFunctionExpression, FunctionExpression)[async=true]",
+          message:
+            "Drizzle's bun-sqlite transaction commits at the callback's first await. Use withWriteTransaction from src/db/write-transaction.ts, or a synchronous callback.",
+        },
+      ],
     },
   },
 ];

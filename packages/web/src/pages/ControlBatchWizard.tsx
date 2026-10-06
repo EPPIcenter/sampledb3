@@ -105,19 +105,23 @@ export function canProceedToReview(
 }
 
 export default function ControlBatchWizard() {
+  const { canWrite } = useUser()
+  if (!canWrite) {
+    return <Navigate to="/blood-controls" replace />
+  }
+  return <ControlBatchWizardContent />
+}
+
+/** Split out so its hooks run on every render, whatever canWrite is. */
+function ControlBatchWizardContent() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { canWrite } = useUser()
   const { id: batchId, definitionId, compositionKey: compositionKeyParam } = useParams<{
     id?: string
     definitionId?: string
     compositionKey?: string
   }>()
   const [searchParams, setSearchParams] = useSearchParams()
-
-  if (!canWrite) {
-    return <Navigate to="/blood-controls" replace />
-  }
 
   const compositionKey = compositionKeyParam ? decodeURIComponent(compositionKeyParam) : null
   // Composition route is only used for "add batches from CSV"; path alone defines the short flow.
@@ -175,7 +179,6 @@ export default function ControlBatchWizard() {
     const seed = definitionSeedQuery.data
     if (!seed) return
     const { control, composition } = seed.summaryResponse
-    if (!control) return
     setBatchInfo({
       controlDefinitionId: control.id,
       controlDefinition: { ...control, strains: composition?.strains },
@@ -202,11 +205,6 @@ export default function ControlBatchWizard() {
     if (isCreateFromDefinition && definitionSeedQuery.isError) {
       return getQueryErrorMessage(definitionSeedQuery.error, 'Failed to load control definition')
     }
-    if (isCreateFromDefinition && definitionSeedQuery.isSuccess) {
-      if (!definitionSeedQuery.data.summaryResponse.control) {
-        return 'Control definition not found'
-      }
-    }
     if (isCompositionCsvFlow && compositionQuery.isError) {
       return getQueryErrorMessage(compositionQuery.error, 'Failed to load composition')
     }
@@ -225,8 +223,6 @@ export default function ControlBatchWizard() {
     batchBootstrapQuery.error,
     definitionSeedQuery.isError,
     definitionSeedQuery.error,
-    definitionSeedQuery.isSuccess,
-    definitionSeedQuery.data,
     compositionQuery.isError,
     compositionQuery.error,
     compositionQuery.isSuccess,

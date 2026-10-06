@@ -87,16 +87,13 @@ export async function collectContainerIdsInCollection(
       .all()
     return rows.map((x) => x.id)
   }
-  if (type === 'bag') {
-    const rows = await database
-      .select({ id: paper.id })
-      .from(paper)
-      .innerJoin(sheet, eq(paper.sheetId, sheet.id))
-      .where(eq(sheet.bagId, id))
-      .all()
-    return rows.map((x) => x.id)
-  }
-  return []
+  const rows = await database
+    .select({ id: paper.id })
+    .from(paper)
+    .innerJoin(sheet, eq(paper.sheetId, sheet.id))
+    .where(eq(sheet.bagId, id))
+    .all()
+  return rows.map((x) => x.id)
 }
 
 async function ensureCollectionRowExists(
