@@ -21,7 +21,7 @@ import type {
   StudyRecord,
 } from './types'
 import { buildExportSummary, validateStudyCodes } from './validate'
-import { chunkArray, dateToUpperBound } from '../statistics/helpers'
+import { chunkArray, dateToUpperBound } from '../sql-helpers'
 import { shiftCalendarDate } from '../datetime'
 
 export async function buildContainerQuery(database: Database, filters: ExportFilters) {

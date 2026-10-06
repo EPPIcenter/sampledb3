@@ -2,7 +2,7 @@ import type { Database } from '../../db/client'
 import { specimen, specimenType, study, studySubject } from '../../db/schema'
 import { inArray } from 'drizzle-orm'
 import { cache, cacheKeys } from '../cache'
-import { chunkArray } from './helpers'
+import { chunkArray } from '../sql-helpers'
 
 export type SpecimenAggregates = {
   total: number

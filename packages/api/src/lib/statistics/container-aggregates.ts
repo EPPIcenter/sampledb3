@@ -2,7 +2,7 @@ import type { Database } from '../../db/client'
 import { storageContainer, storageContainerTag, tag } from '../../db/schema'
 import { eq, inArray } from 'drizzle-orm'
 import type { ContainerSubtype } from '../container-placement'
-import { chunkArray } from './helpers'
+import { chunkArray } from '../sql-helpers'
 
 export type ContainerAggregates = {
   byType: Record<string, number>

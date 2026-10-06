@@ -17,6 +17,7 @@ import { parseId, requireParam } from '../lib/common-validators'
 import { handleRouteError, NotFoundError } from '../lib/error-handler'
 import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
+import { chunkArray } from '../lib/sql-helpers'
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -51,17 +52,6 @@ async function checkSpecimenTypeInUse(id: number, database: any): Promise<string
     return 'Cannot delete specimen type: it is in use by specimens'
   }
   return null
-}
-
-/**
- * Helper function to chunk an array into smaller arrays
- */
-function chunkArray<T>(array: T[], chunkSize: number): T[][] {
-  const chunks: T[][] = []
-  for (let i = 0; i < array.length; i += chunkSize) {
-    chunks.push(array.slice(i, i + chunkSize))
-  }
-  return chunks
 }
 
 /**

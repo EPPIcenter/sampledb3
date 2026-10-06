@@ -2,7 +2,7 @@ import type { Database } from '../../db/client'
 import { location } from '../../db/schema'
 import { inArray } from 'drizzle-orm'
 import { resolveContainerPlacements } from '../container-placement'
-import { chunkArray } from './helpers'
+import { chunkArray } from '../sql-helpers'
 
 export type StorageStatistics = {
   byLocation: Array<{ location: string; count: number }>

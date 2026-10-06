@@ -11,7 +11,8 @@ import {
 } from '../../db/schema'
 import { eq, and, sql, inArray } from 'drizzle-orm'
 import { resolveContainerTypes } from '../container-placement'
-import { buildDateFilter, chunkArray } from './helpers'
+import { buildDateFilter } from './helpers'
+import { chunkArray } from '../sql-helpers'
 import { computeContainerAggregates } from './container-aggregates'
 import {
   resolveContainerIdsAtLocations,
