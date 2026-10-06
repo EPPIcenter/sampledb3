@@ -65,13 +65,16 @@ export interface MoveResult {
   errors?: ValidationError[]
 }
 
+/** Collections whose containers sit at grid positions. */
+type GridCollectionType = 'cryovial_box' | 'micronix_plate'
+
 /**
  * Resolve container by position and collection
  */
 export async function resolveContainerByPosition(
   database: Database,
   collectionName: string,
-  collectionType: CollectionType,
+  collectionType: GridCollectionType,
   rawPosition: string
 ): Promise<ContainerInfo | null> {
   // Stored grid positions are normalized ("B1" -> "B01"); match that form.
@@ -282,7 +285,7 @@ export async function resolveContainerByIdentifier(database: Database, identifie
   if (identifier.type === 'barcode' && identifier.barcode) {
     return resolveContainerByBarcode(database, identifier.barcode)
   } else if (identifier.type === 'position' && identifier.sourceCollectionName && identifier.sourcePosition) {
-    const types: CollectionType[] = ['cryovial_box', 'micronix_plate', 'box', 'sheet']
+    const types: GridCollectionType[] = ['cryovial_box', 'micronix_plate']
     for (const type of types) {
       const result = await resolveContainerByPosition(database, identifier.sourceCollectionName, type, identifier.sourcePosition)
       if (result) return result

@@ -6,10 +6,16 @@ import type { CollectionType } from './types'
 
 export type { CollectionType } from './types'
 
+/**
+ * Collection types whose names identify one record. Sheet names repeat across boxes and bags,
+ * so sheets resolve by name and parent through resolveSheetsByName instead.
+ */
+export type NamedCollectionType = Exclude<CollectionType, 'sheet'>
+
 /** Resolve collection by name. */
 export async function resolveCollectionByName(
   name: string,
-  type: CollectionType,
+  type: NamedCollectionType,
   database: Database,
 ): Promise<number | null> {
   switch (type) {
@@ -44,14 +50,6 @@ export async function resolveCollectionByName(
         .where(eq(bag.name, name))
         .get()
       return bagRecord?.id ?? null
-    }
-    case 'sheet': {
-      const sheetRecord = await database
-        .select({ id: sheet.id })
-        .from(sheet)
-        .where(eq(sheet.name, name))
-        .get()
-      return sheetRecord?.id ?? null
     }
     default:
       return null
@@ -110,7 +108,7 @@ export async function resolveCollectionByBarcode(
 /** Resolve collection by name, then barcode when applicable. */
 export async function resolveCollection(
   identifier: string,
-  type: CollectionType,
+  type: NamedCollectionType,
   database: Database,
 ): Promise<number | null> {
   const byName = await resolveCollectionByName(identifier, type, database)
@@ -187,7 +185,7 @@ export const checkCollectionsBodySchema = z.object({
   collections: z.array(
     z.object({
       identifier: z.string(),
-      type: z.enum(['micronix_plate', 'cryovial_box', 'box', 'bag', 'sheet']),
+      type: z.enum(['micronix_plate', 'cryovial_box', 'box', 'bag']),
     }),
   ),
 })
@@ -306,7 +304,7 @@ export const deleteWithContentsBodySchema = z.object({
 
 export async function checkCollectionsExist(
   database: Database,
-  collections: Array<{ identifier: string; type: CollectionType | 'sheet' }>,
+  collections: Array<{ identifier: string; type: NamedCollectionType }>,
 ) {
   return Promise.all(
     collections.map(async (col) => {
