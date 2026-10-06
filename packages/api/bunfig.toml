@@ -5,6 +5,6 @@ exclude = ["dist/**", "node_modules/**"]
 coverage = true
 coverageReporter = ["text", "lcov"]
 coverageDir = "coverage"
-# Optional: set to fail the run below this line coverage.
+# Optional: set to fail the run below this line coverage. Targets: Coverage in the root README.md.
 # coverageThreshold = 50
 coveragePathIgnorePatterns = ["node_modules", "src/__tests__", "src/**/*.d.ts", "src/**/*.config.*", "dist"]
