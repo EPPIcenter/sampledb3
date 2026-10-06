@@ -211,14 +211,14 @@ export default function ReviewStep({
         })
       }
       if (batchPayloads.length === 0) {
-        setError('No batches were created')
+        setError('No control batches were created')
         return
       }
       // One request: the server creates every batch or none, so a retry cannot duplicate.
       const res = await controlsApi.createBatchesWithSpecimens({ batches: batchPayloads })
       const created = res.batches
       if (created.length > 0) onSuccess(created[created.length - 1].batch.id)
-      else setError('No batches were created')
+      else setError('No control batches were created')
     } catch (err: unknown) {
       console.error('Multi-batch submit failed:', err)
       setError(getQueryErrorMessage(err, 'Failed to create batches'))

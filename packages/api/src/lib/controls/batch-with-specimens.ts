@@ -26,7 +26,7 @@ import {
 import type { BatchContainerInput } from './batch-schemas'
 import { withWriteTransaction } from '../../db/write-transaction'
 import { validateCollectionDate } from '../validation'
-import { ValidationError } from '../error-handler'
+import { ConflictError, ValidationError, sqliteConstraintConflict } from '../error-handler'
 
 export interface CreateBatchWithSpecimensRequest {
   batch: {
@@ -394,8 +394,13 @@ export async function createBatchesWithSpecimens(
       try {
         results.push(await createBatchWithSpecimens(tx, data))
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error)
-        throw new ValidationError(`Batch ${index + 1} ('${data.batch.name}'): ${message}. No batches were created.`)
+        // Keep a conflict a 409 (ConflictError or a UNIQUE/FK violation); the rest are bad input.
+        const conflict = error instanceof Error ? sqliteConstraintConflict(error) : null
+        const reason = conflict ?? (error instanceof Error ? error.message : String(error))
+        const sentence = /[.!?]$/.test(reason) ? reason : `${reason}.`
+        const message = `Control batch ${index + 1} ('${data.batch.name}'): ${sentence} No control batches were created.`
+        if (conflict || error instanceof ConflictError) throw new ConflictError(message)
+        throw new ValidationError(message)
       }
     }
     return results

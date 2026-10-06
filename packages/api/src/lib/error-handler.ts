@@ -30,7 +30,7 @@ function isZodError(error: unknown): error is z.ZodError {
 }
 
 /** Readable message for a SQLite UNIQUE / FOREIGN KEY violation, or null for other errors. */
-function sqliteConstraintConflict(error: Error): string | null {
+export function sqliteConstraintConflict(error: Error): string | null {
   const code = (error as { code?: unknown }).code
   if (code === 'SQLITE_CONSTRAINT_UNIQUE' || code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
     // "UNIQUE constraint failed: study.title, study.x" -> "title, x"

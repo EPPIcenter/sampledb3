@@ -235,7 +235,7 @@ describe('ReviewStep multi-batch CSV errors', () => {
     mockSuggestBatchName.mockResolvedValue({ name: 'Suggested Batch' })
     mockCreateBatchesWithSpecimens.mockRejectedValue(
       Object.assign(new Error('Request failed with status code 400'), {
-        response: { data: { error: "Batch 2 ('B'): Specimen type not found. No batches were created." } },
+        response: { data: { error: "Control batch 2 ('B'): Specimen type not found. No control batches were created." } },
       }),
     )
     const def5000: ControlDefinition = {
@@ -257,7 +257,7 @@ describe('ReviewStep multi-batch CSV errors', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Create Batch/i }))
 
-    expect(await screen.findByText(/No batches were created/)).toBeInTheDocument()
+    expect(await screen.findByText(/No control batches were created/)).toBeInTheDocument()
   })
 })
 
