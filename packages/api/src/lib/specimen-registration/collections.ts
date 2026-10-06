@@ -145,7 +145,9 @@ export class CollectionPlanner {
         return { error: `${label} '${match.name}' ${actual}, not '${collection.barcode}'.` }
       }
       if (collection.name && match.name !== collection.name) {
-        return { error: `${label} with this barcode is named '${match.name}', not '${collection.name}'.` }
+        // The name matched nothing, so the id or, failing that, the barcode found this one.
+        const found = collection.id != null ? `${label} id ${collection.id}` : `${label} with barcode '${collection.barcode ?? ''}'`
+        return { error: `${found} is named '${match.name}', not '${collection.name}'.` }
       }
       const conflict = this.plannedLocationConflict(match.target, collection.locationId)
       if (conflict) return { error: conflict }

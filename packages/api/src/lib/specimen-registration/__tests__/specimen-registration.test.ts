@@ -184,6 +184,18 @@ describe('Specimen registration', () => {
       expect(error.errors[0].message).toContain("point to different micronix plates: 'P1' and 'P2'")
     })
 
+    it('names the id when the plate it finds has another name', async () => {
+      const error = await rejection([entry([tube('T1', { id: plate.id, name: 'OTHER', position: 'A01' })])])
+
+      expect(error.errors[0].message).toBe(`Micronix plate id ${plate.id} is named 'P1', not 'OTHER'.`)
+    })
+
+    it('names the barcode when the plate it finds has another name', async () => {
+      const error = await rejection([entry([tube('T1', { barcode: 'P1-BC', name: 'OTHER', position: 'A01' })])])
+
+      expect(error.errors[0].message).toBe("Micronix plate with barcode 'P1-BC' is named 'P1', not 'OTHER'.")
+    })
+
     it('treats a plate named by name and by barcode as one plate for position clashes', async () => {
       const error = await rejection([
         entry([tube('T1', { name: 'P1', position: 'A01' })]),
