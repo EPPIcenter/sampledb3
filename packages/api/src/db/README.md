@@ -8,7 +8,7 @@ See [ADR-0003: SQLite schema evolution](../../../docs/adr/0003-sqlite-schema-evo
 
 Use `openOperationalDatabase(optionalPath?)` from the client module. It resolves the file path, enables WAL, turns on foreign keys, runs schema evolution, and returns Drizzle + raw `bun:sqlite` handles. Importing the client module does **not** open a connection.
 
-Multi-statement writes that `await` must use `withWriteTransaction` from `write-transaction.ts`. Drizzle's bun-sqlite `db.transaction(async () => …)` commits when the callback first yields; it does not await the returned Promise. ESLint rejects an `async` callback passed to `.transaction(...)`.
+Multi-statement writes that `await` must use `withWriteTransaction` from `write-transaction.ts`. Drizzle's bun-sqlite `db.transaction(async () => …)` commits when the callback first yields; it does not await the returned Promise. ESLint (`eslint-rules/no-promise-transaction-callback.mjs`, tests included) rejects any callback passed to `.transaction(...)` whose return type is Promise-like: an `async` function, a named async function, or a sync function that returns a Promise.
 
 Tests should use the same entry point (e.g. `openOperationalDatabase(':memory:')` via `setupTestDatabase()`), except a test that checks the snapshot itself: `__tests__/initial-schema-snapshot.test.ts` applies `initial_schema.sql` alone, because the entry point would run pending migrations on top and hide a stale snapshot.
 
