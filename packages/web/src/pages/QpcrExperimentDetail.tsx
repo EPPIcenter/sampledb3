@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api/client'
@@ -18,6 +18,7 @@ import { useUser } from '../contexts/UserContext'
 import { useToast } from '../contexts/ToastContext'
 import '../styles/qpcr.css'
 import { bytesToBase64 } from '../lib/base64'
+import { EMPTY_LIST } from '../lib/empty-list'
 
 const PLATE_ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const
 const PLATE_COLS = 12
@@ -137,7 +138,7 @@ export default function QpcrExperimentDetail() {
   const experimentQuery = useQpcrExperiment(experimentId)
   const experimentStatus = fromQuery(experimentQuery)
   const scannerConfigsQuery = useQpcrScannerConfigurations()
-  const scannerConfigs = useMemo(() => scannerConfigsQuery.data ?? [], [scannerConfigsQuery.data])
+  const scannerConfigs = scannerConfigsQuery.data ?? EMPTY_LIST
   const [data, setData] = useState<QpcrExperimentDetailResponse | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)

@@ -12,7 +12,7 @@ import {
 import { setContainerDefaults, clearSettingsCache } from '../../settings'
 import { clearDefaultsCache } from '../../defaults'
 import { createBatchWithSpecimens, createBatchesWithSpecimens } from '../batch-with-specimens'
-import { specimenTypeContainerType, containerTypeUnit, storageContainer, box, controlBatch } from '../../../db/schema'
+import { specimenTypeContainerType, containerTypeUnit, storageContainer, box, controlBatch, micronixPlate } from '../../../db/schema'
 import { eq } from 'drizzle-orm'
 import type { Database } from '../../../db/client'
 import { utcNow } from '../../datetime'
@@ -125,6 +125,33 @@ describe('batch-with-specimens', () => {
       expect(result.specimens[0].specimenTypeName).toBe('DNA')
       expect(result.specimens[0].containerCount).toBe(1)
       expect(result.specimens[0].containerIds).toHaveLength(1)
+    })
+
+    it('rejects one new plate given two locations, though each container is registered on its own', async () => {
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(testDb, { micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' } })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+      const definition = await createTestControlDefinition(testDb, { name: 'Def1' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      await testDb.insert(specimenTypeContainerType).values({ specimenTypeId: specimenType.id, containerType: 'micronix_tube', created: utcNow() })
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const shelf = await createTestLocation(testDb, { name: 'Shelf', storageTypeId: String(storageType.id), canContainCollections: true })
+      const rack = await createTestLocation(testDb, { name: 'Rack', storageTypeId: String(storageType.id), canContainCollections: true })
+      const onNewPlate = (barcode: string, locationId: number, position: string) => ({
+        containerType: 'micronix_tube' as const,
+        barcode,
+        collection: { type: 'micronix_plate' as const, name: 'NEW-PLATE', locationId, position },
+      })
+
+      await expect(
+        createBatchWithSpecimens(testDb, {
+          batch: { controlDefinitionId: definition.id, name: 'Batch1' },
+          specimens: [{ specimenTypeName: 'DNA', containers: [onNewPlate('MT001', shelf.id, 'A01'), onNewPlate('MT002', rack.id, 'A02')] }],
+        })
+      ).rejects.toThrow("Micronix plate 'NEW-PLATE' is stored at a different location from the one given.")
+
+      expect(await testDb.select().from(controlBatch)).toEqual([])
+      expect(await testDb.select().from(micronixPlate)).toEqual([])
     })
 
     it('throws when paper container is missing sheet name', async () => {

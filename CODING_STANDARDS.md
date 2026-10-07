@@ -16,9 +16,9 @@ Paths are relative to `packages/api/`.
 
 ### Database
 
-- Run a write of several statements that `await`s inside `withWriteTransaction` from `src/db/write-transaction.ts`. Drizzle's bun-sqlite `db.transaction(async () => …)` commits at the callback's first `await` instead of awaiting the returned Promise, so the rest of the write runs outside the transaction. ESLint rejects an `async` callback passed to `.transaction(...)`.
+- Run a write of several statements that `await`s inside `withWriteTransaction` from `src/db/write-transaction.ts`. Drizzle's bun-sqlite `db.transaction(async () => …)` commits at the callback's first `await` instead of awaiting the returned Promise, so the rest of the write runs outside the transaction. ESLint rejects any callback passed to `.transaction(...)` that returns a Promise.
 - Change the schema with a numbered migration, following the recipe in `src/db/README.md`. Keep DDL in the migrations and `initial_schema.sql` only.
-- Open a database through `openOperationalDatabase`, which runs schema evolution. Open the file directly only when the code must not migrate it, and say why in a comment. For example, `src/scripts/check-integrity.ts` opens a backup with `new Database(path, { readonly: true })` so that checking it leaves it unchanged.
+- Open a database through `openOperationalDatabase`, which runs schema evolution. Open the file directly only when the code must not migrate it, and say why in a comment. For example, `src/scripts/check-integrity.ts` opens a backup with `new Database(path, { readonly: true })` so that checking it leaves it unchanged, and `src/db/__tests__/initial-schema-snapshot.test.ts` applies `initial_schema.sql` alone so that pending migrations can't hide a stale snapshot.
 
 ### Domain modules
 

@@ -27,6 +27,9 @@ export interface ExportFilters {
 
 export type SubjectDateFilter = { exact: string } | { from?: string; to?: string }
 
+/** Which collection dates to export for one subject: all of them, or those matching any filter. */
+export type SubjectDateSelection = { kind: 'all' } | { kind: 'dates'; filters: SubjectDateFilter[] }
+
 export interface ContainerExportData {
   container_id: number
   container_type: string

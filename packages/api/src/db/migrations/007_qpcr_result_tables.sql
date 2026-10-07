@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS qpcr_well_result (
   quantity REAL,
   standard_quantity REAL,
   amp_status TEXT,
-  UNIQUE (qpcr_run_id, well_position, target_name)
+  CONSTRAINT qpcr_well_result_run_well_target_unique UNIQUE (qpcr_run_id, well_position, target_name)
 );--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS qpcr_well_result_run_idx ON qpcr_well_result(qpcr_run_id);--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS qpcr_amplification_data (

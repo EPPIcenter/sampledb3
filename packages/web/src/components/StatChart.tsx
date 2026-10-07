@@ -49,8 +49,7 @@ export default function StatChart({
   cardClassName = 'bg-app-card rounded-lg shadow p-6',
 }: StatChartProps) {
   const { theme } = useTheme()
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- reads CSS variables; theme changes them
-  const tooltipStyles = useMemo(() => getAppTooltipStyles(), [theme])
+  const tooltipStyles = useMemo(() => getAppTooltipStyles(theme), [theme])
 
   // Calculate total for percentage calculations
   const total = data.reduce((sum, entry) => sum + (entry[dataKey] as number), 0)

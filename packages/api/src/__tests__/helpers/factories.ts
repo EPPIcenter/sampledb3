@@ -1,5 +1,27 @@
 import type { Database } from '../../db/client'
-import { tag, storageType, specimenType, strain, storageContainer, location, controlDefinition, specimen, unit, study, studySubject, controlBatch, micronixPlate } from '../../db/schema'
+import {
+  tag,
+  storageType,
+  specimenType,
+  strain,
+  storageContainer,
+  location,
+  controlDefinition,
+  specimen,
+  unit,
+  study,
+  studySubject,
+  controlBatch,
+  micronixPlate,
+  cryovialBox,
+  box,
+  bag,
+  sheet,
+  micronixTube,
+  cryovialTube,
+  staticWell,
+  paper,
+} from '../../db/schema'
 import { utcNow } from '../../lib/datetime'
 
 /**
@@ -126,6 +148,122 @@ export async function createTestMicronixPlate(db: Database, data: {
     barcode: data.barcode ?? null,
     created: now,
     lastUpdated: now,
+  }).returning()
+  return result
+}
+
+/**
+ * Create a test cryovial box
+ */
+export async function createTestCryovialBox(db: Database, data: {
+  name: string
+  locationId: number
+  barcode?: string | null
+}) {
+  const now = utcNow()
+  const [result] = await db.insert(cryovialBox).values({
+    name: data.name,
+    locationId: data.locationId,
+    barcode: data.barcode ?? null,
+    created: now,
+    lastUpdated: now,
+  }).returning()
+  return result
+}
+
+/**
+ * Create a test box (a paper Sheet parent)
+ */
+export async function createTestBox(db: Database, data: { name: string; locationId: number }) {
+  const now = utcNow()
+  const [result] = await db.insert(box).values({ ...data, created: now, lastUpdated: now }).returning()
+  return result
+}
+
+/**
+ * Create a test bag (a paper Sheet parent)
+ */
+export async function createTestBag(db: Database, data: { name: string; locationId: number }) {
+  const now = utcNow()
+  const [result] = await db.insert(bag).values({ ...data, created: now, lastUpdated: now }).returning()
+  return result
+}
+
+/**
+ * Create a test sheet in a box or a bag
+ */
+export async function createTestSheet(
+  db: Database,
+  data: { name: string } & ({ boxId: number; bagId?: never } | { bagId: number; boxId?: never }),
+) {
+  const [result] = await db.insert(sheet).values(data).returning()
+  return result
+}
+
+/**
+ * Make an existing storage container a micronix tube on a plate
+ */
+export async function createTestMicronixTube(db: Database, data: {
+  containerId: number
+  collectionId: number
+  barcode: string
+  position?: string | null
+}) {
+  const [result] = await db.insert(micronixTube).values({
+    id: data.containerId,
+    collectionId: data.collectionId,
+    barcode: data.barcode,
+    position: data.position ?? null,
+  }).returning()
+  return result
+}
+
+/**
+ * Make an existing storage container a cryovial tube in a cryovial box
+ */
+export async function createTestCryovialTube(db: Database, data: {
+  containerId: number
+  collectionId: number
+  barcode?: string | null
+  position?: string | null
+}) {
+  const [result] = await db.insert(cryovialTube).values({
+    id: data.containerId,
+    collectionId: data.collectionId,
+    barcode: data.barcode ?? null,
+    position: data.position ?? null,
+  }).returning()
+  return result
+}
+
+/**
+ * Make an existing storage container a static well on a plate
+ */
+export async function createTestStaticWell(db: Database, data: {
+  containerId: number
+  collectionId: number
+  position?: string | null
+}) {
+  const [result] = await db.insert(staticWell).values({
+    id: data.containerId,
+    collectionId: data.collectionId,
+    position: data.position ?? null,
+  }).returning()
+  return result
+}
+
+/**
+ * Make an existing storage container a paper on a sheet
+ */
+export async function createTestPaper(db: Database, data: {
+  containerId: number
+  sheetId: number
+  sublabel?: string | null
+}) {
+  const [result] = await db.insert(paper).values({
+    id: data.containerId,
+    sheetId: data.sheetId,
+    sublabel: data.sublabel ?? null,
   }).returning()
   return result
 }

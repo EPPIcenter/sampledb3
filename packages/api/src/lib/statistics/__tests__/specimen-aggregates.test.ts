@@ -26,9 +26,7 @@ describe('specimen-aggregates', () => {
   })
 
   it('returns empty aggregates for no specimens', async () => {
-    const result = await computeSpecimenAggregates(testDb, [], {
-      subjectIds: [],
-    })
+    const result = await computeSpecimenAggregates(testDb, [], {})
 
     expect(result).toEqual({
       total: 0,
@@ -54,9 +52,7 @@ describe('specimen-aggregates', () => {
       studySubjectId: subject.id,
     })
 
-    const result = await computeSpecimenAggregates(testDb, [specimen], {
-      subjectIds: [],
-    })
+    const result = await computeSpecimenAggregates(testDb, [specimen], {})
 
     expect(result.total).toBe(1)
     expect(result.bySourceType.subject).toBe(1)

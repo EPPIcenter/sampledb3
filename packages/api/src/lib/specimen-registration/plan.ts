@@ -6,8 +6,6 @@ import { and, eq, isNull } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import {
   controlBatch,
-  cryovialTube,
-  micronixTube,
   paper,
   specimen,
   specimenType,
@@ -22,9 +20,10 @@ import {
   validateContainerTypeForSpecimenType,
   validateUnitForContainerType,
 } from '../validation'
-import { CollectionPlanner, targetKey, type CollectionTarget, type PlannedCollection } from './collections'
+import { GRID_COLLECTION_OF, TUBE_TABLES } from './tables'
+import { CollectionPlanner, targetKey, type CollectionTarget, type GridCollectionType, type PlannedCollection } from './collections'
 import { validateContainerWriteFields } from './container-fields'
-import type { RegistrationContainer, RegistrationEntry, RegistrationError } from './types'
+import type { RegistrationContainer, RegistrationEntry, RegistrationError, RegistrationSource } from './types'
 
 export type PlannedSpecimen =
   | { existing: Specimen }
@@ -50,22 +49,22 @@ export type PlannedContainer = {
 
 export type RegistrationPlan = {
   specimens: PlannedSpecimen[]
-  /** entries[i] registers specimens[entrySpecimen[i]]. */
-  entrySpecimen: number[]
+  /** entries[i] registers specimens[entrySpecimen[i]]; undefined when the entry has errors. */
+  entrySpecimen: Array<number | undefined>
   containers: PlannedContainer[]
   collections: PlannedCollection[]
 }
 
 function findSpecimen(
   database: Database,
-  source: { studySubjectId: number | null; controlBatchId: number | null },
+  source: RegistrationSource,
   specimenTypeId: number,
   collectionDate: string | null,
 ): Specimen | null {
   const sourceCondition =
-    source.studySubjectId !== null
-      ? eq(specimen.studySubjectId, source.studySubjectId)
-      : eq(specimen.controlBatchId, source.controlBatchId ?? -1)
+    'subjectId' in source
+      ? eq(specimen.studySubjectId, source.subjectId)
+      : eq(specimen.controlBatchId, source.controlBatchId)
   const dateCondition = collectionDate == null ? isNull(specimen.collectionDate) : eq(specimen.collectionDate, collectionDate)
   return (
     database
@@ -76,14 +75,35 @@ function findSpecimen(
   )
 }
 
+/** Something a request may use only once. */
+type Claim =
+  | { kind: 'barcode'; containerType: 'micronix_tube' | 'cryovial_tube'; barcode: string }
+  | { kind: 'position'; gridType: GridCollectionType; collection: CollectionTarget; position: string }
+  | { kind: 'sublabel'; sheet: CollectionTarget; sublabel: string }
+
+function claimKey(claim: Claim): string {
+  switch (claim.kind) {
+    case 'barcode':
+      return `barcode:${claim.containerType}:${claim.barcode}`
+    case 'position':
+      return `position:${claim.gridType}:${targetKey(claim.collection)}:${claim.position}`
+    case 'sublabel':
+      return `sublabel:${targetKey(claim.sheet)}:${claim.sublabel}`
+  }
+}
+
 /** Per-request uniqueness: barcodes, Grid positions per Collection, sublabels per Sheet. */
 class RequestClaims {
-  private readonly claims = new Set<string>()
+  private readonly taken = new Set<string>()
+
+  /** How messages name the input a claim repeats in (RegistrationOptions.inputName). */
+  constructor(readonly inputName: string) {}
 
   /** Returns false when the claim was already taken earlier in the request. */
-  take(claim: string): boolean {
-    if (this.claims.has(claim)) return false
-    this.claims.add(claim)
+  take(claim: Claim): boolean {
+    const key = claimKey(claim)
+    if (this.taken.has(key)) return false
+    this.taken.add(key)
     return true
   }
 }
@@ -91,13 +111,14 @@ class RequestClaims {
 export async function planRegistration(
   database: Database,
   entries: RegistrationEntry[],
+  inputName = 'this request',
 ): Promise<{ plan: RegistrationPlan; errors: RegistrationError[] }> {
   const errors: RegistrationError[] = []
   const planner = new CollectionPlanner(database)
-  const claims = new RequestClaims()
+  const claims = new RequestClaims(inputName)
   const specimens: PlannedSpecimen[] = []
   const specimenIndexByKey = new Map<string, number>()
-  const entrySpecimen: number[] = []
+  const entrySpecimen: Array<number | undefined> = []
   const containers: PlannedContainer[] = []
 
   const useSpecimen = (key: string, make: () => PlannedSpecimen): number => {
@@ -117,7 +138,7 @@ export async function planRegistration(
       const existing = database.select().from(specimen).where(eq(specimen.id, entry.specimenId)).get()
       if (!existing) {
         entryError('specimenId', 'Specimen not found')
-        entrySpecimen.push(-1)
+        entrySpecimen.push(undefined)
         continue
       }
       specimenTypeId = existing.specimenTypeId
@@ -151,9 +172,9 @@ export async function planRegistration(
       if (sourceOk && specimenTypeId !== null && date.valid) {
         const typeId = specimenTypeId
         const collectionDate = date.normalized ?? null
-        const studySubjectId = 'subjectId' in entry.source ? entry.source.subjectId : null
-        const controlBatchId = 'controlBatchId' in entry.source ? entry.source.controlBatchId : null
-        const source = { studySubjectId, controlBatchId }
+        const source = entry.source
+        const studySubjectId = 'subjectId' in source ? source.subjectId : null
+        const controlBatchId = 'controlBatchId' in source ? source.controlBatchId : null
         const key = `${studySubjectId !== null ? `s${studySubjectId}` : `c${controlBatchId}`}:${typeId}:${collectionDate ?? ''}`
         entrySpecimen.push(
           useSpecimen(key, () => {
@@ -169,7 +190,7 @@ export async function planRegistration(
           }),
         )
       } else {
-        entrySpecimen.push(-1)
+        entrySpecimen.push(undefined)
       }
     }
 
@@ -200,7 +221,7 @@ async function planContainer(
 
   const fields = validateContainerWriteFields(input)
   if (!fields.valid) {
-    return { errors: [{ field: 'container', message: fields.error ?? 'Invalid container data' }] }
+    return { errors: [{ field: fields.field, message: fields.error }] }
   }
 
   if (specimenTypeId !== null) {
@@ -242,13 +263,13 @@ async function planContainer(
             .get()
           if (taken) problems.push({ field: 'sublabel', message: `Sublabel '${sublabel}' is already used on this sheet.` })
         }
-        if (!claims.take(`sublabel:${targetKey(collection)}:${sublabel}`)) {
-          problems.push({ field: 'sublabel', message: `Sublabel '${sublabel}' is used more than once on this sheet in your file.` })
+        if (!claims.take({ kind: 'sublabel', sheet: collection, sublabel })) {
+          problems.push({ field: 'sublabel', message: `Sublabel '${sublabel}' is used more than once on this sheet in ${claims.inputName}.` })
         }
       }
     }
   } else {
-    const gridType = input.containerType === 'cryovial_tube' ? 'cryovial_box' : 'micronix_plate'
+    const gridType = GRID_COLLECTION_OF[input.containerType]
     const resolved = input.collection
       ? await planner.resolveGrid(gridType, input.collection)
       : { error: 'Collection name or barcode is required' }
@@ -266,10 +287,10 @@ async function planContainer(
           })
           if (occupancy.occupied) problems.push({ field: 'position', message: occupiedGridPositionMessage(position, gridType) })
         }
-        if (!claims.take(`position:${gridType}:${targetKey(collection)}:${position}`)) {
+        if (!claims.take({ kind: 'position', gridType, collection, position })) {
           problems.push({
             field: 'position',
-            message: `Position ${position} in this plate/box is used more than once in your file. Each position can only be used once.`,
+            message: `Position ${position} in this plate/box is used more than once in ${claims.inputName}. Each position can only be used once.`,
           })
         }
       }
@@ -277,13 +298,13 @@ async function planContainer(
 
     const barcode = 'barcode' in input ? input.barcode?.trim() : undefined
     if (barcode && (input.containerType === 'micronix_tube' || input.containerType === 'cryovial_tube')) {
-      const table = input.containerType === 'micronix_tube' ? micronixTube : cryovialTube
+      const table = TUBE_TABLES[input.containerType]
       const taken = await database.select({ id: table.id }).from(table).where(eq(table.barcode, barcode)).get()
       if (taken) problems.push({ field: 'barcode', message: `Barcode '${barcode}' already exists. Use a different barcode.` })
-      if (!claims.take(`barcode:${input.containerType}:${barcode}`)) {
+      if (!claims.take({ kind: 'barcode', containerType: input.containerType, barcode })) {
         problems.push({
           field: 'barcode',
-          message: `Barcode '${barcode}' is used more than once in your file. Each barcode must be unique.`,
+          message: `Barcode '${barcode}' is used more than once in ${claims.inputName}. Each barcode must be unique.`,
         })
       }
     }

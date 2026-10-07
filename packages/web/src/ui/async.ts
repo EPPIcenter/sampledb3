@@ -18,6 +18,14 @@ export function fromQuery(
   return 'loading'
 }
 
+/** HTTP status of a failed API call, or undefined for other errors. */
+export function getHttpStatus(error: unknown): number | undefined {
+  if (error && typeof error === 'object' && 'response' in error) {
+    return (error as { response?: { status?: number } }).response?.status
+  }
+  return undefined
+}
+
 export function getQueryErrorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === 'object' && 'response' in error) {
     const response = (error as { response?: { data?: { error?: string } } }).response
