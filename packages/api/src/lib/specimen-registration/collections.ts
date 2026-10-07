@@ -105,39 +105,45 @@ export class CollectionPlanner {
       : `${LABELS[match.type]} '${match.name}' is stored at a different location from the one given.`
   }
 
+  /** The stored grid Collection whose id, barcode, or name equals `value`. */
+  private storedGrid(type: GridCollectionType, by: 'id' | 'barcode' | 'name', value: number | string): Candidate | null {
+    const table = type === 'cryovial_box' ? cryovialBox : micronixPlate
+    const row = this.database
+      .select({ id: table.id, name: table.name, barcode: table.barcode, locationId: table.locationId })
+      .from(table)
+      .where(eq(table[by], value))
+      .get()
+    return row ? { target: { existingId: row.id }, type, name: row.name, barcode: row.barcode, locationId: row.locationId } : null
+  }
+
+  /** The stored box or bag whose id or name equals `value`. */
+  private storedParent(type: ParentCollectionType, by: 'id' | 'name', value: number | string): Candidate | null {
+    const table = type === 'box' ? box : bag
+    const row = this.database
+      .select({ id: table.id, name: table.name, locationId: table.locationId })
+      .from(table)
+      .where(eq(table[by], value))
+      .get()
+    return row ? { target: { existingId: row.id }, type, name: row.name, barcode: null, locationId: row.locationId } : null
+  }
+
   async resolveGrid(type: GridCollectionType, collection: GridCollectionInput): Promise<Resolution> {
     const label = LABELS[type]
-    const table = type === 'cryovial_box' ? cryovialBox : micronixPlate
     const candidates: Candidate[] = []
 
     if (collection.id != null) {
-      const row = await this.database
-        .select({ id: table.id, name: table.name, barcode: table.barcode, locationId: table.locationId })
-        .from(table)
-        .where(eq(table.id, collection.id))
-        .get()
-      if (!row) return { error: `${label} not found: id ${collection.id}` }
-      candidates.push({ target: { existingId: row.id }, type, ...row })
+      const byId = this.storedGrid(type, 'id', collection.id)
+      if (!byId) return { error: `${label} not found: id ${collection.id}` }
+      candidates.push(byId)
     }
-    if (collection.barcode) {
-      const barcode = collection.barcode
-      const row = await this.database
-        .select({ id: table.id, name: table.name, barcode: table.barcode, locationId: table.locationId })
-        .from(table)
-        .where(eq(table.barcode, barcode))
-        .get()
-      if (row) candidates.push({ target: { existingId: row.id }, type, ...row })
-      else candidates.push(...this.plannedCandidates(type, (p) => 'barcode' in p && p.barcode === barcode))
+    const { barcode, name } = collection
+    if (barcode) {
+      const stored = this.storedGrid(type, 'barcode', barcode)
+      candidates.push(...(stored ? [stored] : this.plannedCandidates(type, (p) => 'barcode' in p && p.barcode === barcode)))
     }
-    if (collection.name) {
-      const name = collection.name
-      const row = await this.database
-        .select({ id: table.id, name: table.name, barcode: table.barcode, locationId: table.locationId })
-        .from(table)
-        .where(eq(table.name, name))
-        .get()
-      if (row) candidates.push({ target: { existingId: row.id }, type, ...row })
-      else candidates.push(...this.plannedCandidates(type, (p) => p.name === name))
+    if (name) {
+      const stored = this.storedGrid(type, 'name', name)
+      candidates.push(...(stored ? [stored] : this.plannedCandidates(type, (p) => p.name === name)))
     }
 
     const matches = distinctCandidates(candidates)
@@ -167,8 +173,8 @@ export class CollectionPlanner {
     if (collection.locationId == null) {
       return { error: 'Collection not found and no location provided' }
     }
-    const name = collection.name ?? collection.barcode
-    if (!name) {
+    const newName = name ?? barcode
+    if (!newName) {
       return {
         error:
           type === 'cryovial_box'
@@ -178,34 +184,24 @@ export class CollectionPlanner {
     }
     const badLocation = locationError(collection.locationId, this.database)
     if (badLocation) return { error: badLocation }
-    this.planned.push({ type, name, barcode: collection.barcode, locationId: collection.locationId })
+    this.planned.push({ type, name: newName, barcode, locationId: collection.locationId })
     return { target: { plannedIndex: this.planned.length - 1 } }
   }
 
   async resolveParent(parent: ParentCollectionInput): Promise<Resolution> {
     const type = parent.type
     const label = LABELS[type]
-    const table = type === 'box' ? box : bag
     const candidates: Candidate[] = []
 
     if (parent.id != null) {
-      const row = await this.database
-        .select({ id: table.id, name: table.name, locationId: table.locationId })
-        .from(table)
-        .where(eq(table.id, parent.id))
-        .get()
-      if (!row) return { error: `${label} not found: id ${parent.id}` }
-      candidates.push({ target: { existingId: row.id }, type, barcode: null, ...row })
+      const byId = this.storedParent(type, 'id', parent.id)
+      if (!byId) return { error: `${label} not found: id ${parent.id}` }
+      candidates.push(byId)
     }
-    if (parent.name) {
-      const name = parent.name
-      const row = await this.database
-        .select({ id: table.id, name: table.name, locationId: table.locationId })
-        .from(table)
-        .where(eq(table.name, name))
-        .get()
-      if (row) candidates.push({ target: { existingId: row.id }, type, barcode: null, ...row })
-      else candidates.push(...this.plannedCandidates(type, (p) => p.name === name))
+    const name = parent.name
+    if (name) {
+      const stored = this.storedParent(type, 'name', name)
+      candidates.push(...(stored ? [stored] : this.plannedCandidates(type, (p) => p.name === name)))
     }
 
     const matches = distinctCandidates(candidates)

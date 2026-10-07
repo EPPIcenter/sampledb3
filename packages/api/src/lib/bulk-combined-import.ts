@@ -13,6 +13,7 @@ import { resolveSpecimenTypeByName } from './identifier-resolution'
 import { ConflictError, ValidationError } from './error-handler'
 import { withRolledBackTransaction, withWriteTransaction } from '../db/write-transaction'
 import {
+  RefusedWithErrors,
   registerSpecimens,
   SpecimenRegistrationError,
   type RegistrationContainer,
@@ -20,14 +21,12 @@ import {
   type RegistrationResult,
 } from './specimen-registration'
 
-export type BulkCombinedContainerInput = RegistrationContainer
-
 export { normalizePosition } from './normalize-position'
 
 export interface BulkCombinedSpecimenInput {
   specimenTypeName: string
   collectionDate?: string
-  container?: BulkCombinedContainerInput
+  container?: RegistrationContainer
   /** CSV row, echoed back on errors. */
   rowIndex?: number
 }
@@ -72,14 +71,7 @@ export interface BulkCombinedError {
 }
 
 /** The subjects could not all be registered; nothing was written. */
-class BulkCombinedRejected extends Error {
-  constructor(
-    readonly status: 400 | 409,
-    readonly errors: BulkCombinedError[],
-  ) {
-    super(errors[0]?.message ?? 'Bulk import failed')
-  }
-}
+class BulkCombinedRejected extends RefusedWithErrors<BulkCombinedError> {}
 
 /** Combined-import wording for module messages. */
 function combinedMessage(message: string): string {
