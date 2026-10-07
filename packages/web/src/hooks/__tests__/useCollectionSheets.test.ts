@@ -39,4 +39,13 @@ describe('useCollectionSheets', () => {
     rerender({ id: 2, c: contents(1) })
     expect([...result.current.expandedSheets]).toEqual([1])
   })
+
+  it('initializes a collection whose sheets are already cached, even with the same sheet count', () => {
+    const cached = { sheets: [{ id: 10 }, { id: 11 }] }
+    const { result, rerender } = renderHook(({ id, c }) => useCollectionSheets(id, c), {
+      initialProps: { id: 1, c: contents(2) as { sheets: { id: number }[] } },
+    })
+    rerender({ id: 2, c: cached })
+    expect([...result.current.expandedSheets]).toEqual([10, 11])
+  })
 })

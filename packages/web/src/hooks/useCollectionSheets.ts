@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import type { CollectionTableEntry } from '../lib/collection-table-columns'
 import { EMPTY_LIST } from '../lib/empty-list'
 
@@ -26,14 +26,19 @@ export function useCollectionSheets(
 
   const sheets = useMemo(() => (contents?.sheets ?? EMPTY_LIST) as CollectionSheet[], [contents])
 
-  useEffect(() => {
+  const initializeExpanded = useEffectEvent(() => {
     if (sheets.length > 0 && !initializedSheets.current) {
       initializedSheets.current = true
       if (sheets.length <= 3) {
         setExpandedSheets(new Set(sheets.map((s) => s.id)))
       }
     }
-  }, [sheets])
+  })
+  // Runs when the sheets first load or the collection changes (its sheets may already be cached),
+  // not on every refetch.
+  useEffect(() => {
+    initializeExpanded()
+  }, [collectionId, sheets.length])
 
   const toggleSheet = (sheetId: number) => {
     setExpandedSheets((prev) => {
