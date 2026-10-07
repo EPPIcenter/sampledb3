@@ -60,11 +60,6 @@ export type RegistrationResult = {
   collectionsCreated: CreatedCollection[]
 }
 
-export type RegistrationCheck = {
-  errors: RegistrationError[]
-  collectionsToCreate: Array<Omit<CreatedCollection, 'id'>>
-}
-
 /**
  * Registration refused. Status 400: the input has problems, all listed. Status 409: a write hit
  * a database constraint the plan did not foresee (for example a concurrent registration).

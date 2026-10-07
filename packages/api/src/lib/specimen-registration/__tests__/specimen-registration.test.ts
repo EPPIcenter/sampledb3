@@ -303,28 +303,18 @@ describe('Specimen registration', () => {
   })
 
   describe('checkSpecimenRegistration', () => {
-    it('writes nothing and lists the collections the registration would create', async () => {
+    it('writes nothing and reports no errors for a registration that would succeed', async () => {
       const entries = [entry([tube('T1', { name: 'NEW', locationId, position: 'A01' }), paperOn('Sheet-1')])]
 
-      const check = await checkSpecimenRegistration(db, entries)
-
-      expect(check).toEqual({
-        errors: [],
-        collectionsToCreate: [
-          { type: 'micronix_plate', name: 'NEW' },
-          { type: 'box', name: 'PaperBox' },
-          { type: 'sheet', name: 'Sheet-1' },
-        ],
-      })
+      expect(await checkSpecimenRegistration(db, entries)).toEqual([])
       expect([await count(specimen), await count(micronixPlate), await count(sheet)]).toEqual([0, 1, 0])
       await expect(registerSpecimens(db, entries)).resolves.toBeDefined()
     })
 
     it('returns the errors registerSpecimens would throw', async () => {
-      const check = await checkSpecimenRegistration(db, [entry([tube('T1', { name: 'P1', barcode: 'UNKNOWN', position: 'A01' })])])
+      const errors = await checkSpecimenRegistration(db, [entry([tube('T1', { name: 'P1', barcode: 'UNKNOWN', position: 'A01' })])])
 
-      expect(check.errors).toHaveLength(1)
-      expect(check.collectionsToCreate).toEqual([])
+      expect(errors).toHaveLength(1)
     })
 
     it('rolls back to a savepoint inside an open transaction', async () => {

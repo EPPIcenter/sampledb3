@@ -115,8 +115,7 @@ export async function validateBulkSpecimenRows(
   rows: BulkSpecimenValidateRow[],
 ): Promise<BulkSpecimenValidateResult> {
   const { entries, rowOfEntry, errors } = await toRegistrationEntries(database, rows)
-  const check = await checkSpecimenRegistration(database, entries)
-  errors.push(...rowErrors(check.errors, rowOfEntry))
+  errors.push(...rowErrors(await checkSpecimenRegistration(database, entries), rowOfEntry))
   errors.sort((a, b) => a.index - b.index)
   return { valid: errors.length === 0, errors }
 }

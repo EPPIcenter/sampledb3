@@ -9,8 +9,8 @@ import { planRegistration } from './plan'
 import { writeRegistration } from './write'
 import {
   SpecimenRegistrationError,
-  type RegistrationCheck,
   type RegistrationEntry,
+  type RegistrationError,
   type RegistrationOptions,
   type RegistrationResult,
 } from './types'
@@ -34,21 +34,18 @@ export async function registerSpecimens(
   })
 }
 
-/** Run registerSpecimens and roll it back: its errors, or the Collections it would create. */
+/** Run registerSpecimens and roll it back, returning the errors it found (none if it would succeed). */
 export async function checkSpecimenRegistration(
   database: Database,
   entries: RegistrationEntry[],
   options: RegistrationOptions = {},
-): Promise<RegistrationCheck> {
+): Promise<RegistrationError[]> {
   return withRolledBackTransaction(database, async (db) => {
     try {
-      const result = await registerSpecimens(db, entries, options)
-      return {
-        errors: [],
-        collectionsToCreate: result.collectionsCreated.map(({ type, name }) => ({ type, name })),
-      }
+      await registerSpecimens(db, entries, options)
+      return []
     } catch (error) {
-      if (error instanceof SpecimenRegistrationError) return { errors: error.errors, collectionsToCreate: [] }
+      if (error instanceof SpecimenRegistrationError) return error.errors
       throw error
     }
   })
