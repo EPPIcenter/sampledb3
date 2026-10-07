@@ -39,7 +39,7 @@ export default function TableViewConfigurationsManager({
       setLoading(true)
       try {
         const configsValue = await settingsApi.getValue('table_view_configurations')
-        const configs = configsValue?.configurations ?? []  
+        const configs = configsValue?.configurations ?? []
         setConfigurations(configs)
       } catch (err: unknown) {
         const msg =
