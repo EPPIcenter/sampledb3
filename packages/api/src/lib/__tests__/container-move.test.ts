@@ -594,5 +594,49 @@ describe('container-move', () => {
       const [moved] = await testDb.select().from(paper).all()
       expect(moved.sheetId).toBe(sheetA.id)
     })
+
+    /** Boxes BA, BB, BC; Sheet-1 in BA and BB, Only-Sheet in BA, Dest in BC; one paper on BA's Sheet-1. */
+    async function seedSheets() {
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const [boxA, boxB, boxC] = await Promise.all(
+        ['BA', 'BB', 'BC'].map((name) => createTestBox(testDb, { name, locationId: location.id })),
+      )
+      const sheetA = await createTestSheet(testDb, { name: 'Sheet-1', boxId: boxA.id })
+      await createTestSheet(testDb, { name: 'Sheet-1', boxId: boxB.id })
+      const onlySheet = await createTestSheet(testDb, { name: 'Only-Sheet', boxId: boxA.id })
+      const dest = await createTestSheet(testDb, { name: 'Dest', boxId: boxC.id })
+      const container = await createTestStorageContainer(testDb)
+      await createTestPaper(testDb, { containerId: container.id, sheetId: sheetA.id })
+      return { container, sheetA, onlySheet, dest }
+    }
+
+    it('reports a source sheet name shared by several sheets instead of moving from all of them', async () => {
+      const { container, sheetA } = await seedSheets()
+
+      const result = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: 'Sheet-1', toCollectionName: 'Dest' }],
+        moves: [{ identifier: { type: 'container_id', containerId: container.id }, targetPosition: '' }],
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.errors?.[0].error).toMatch(/Source sheet "Sheet-1" matches 2 sheets; set fromParentName/)
+      const [unmoved] = await testDb.select().from(paper).all()
+      expect(unmoved.sheetId).toBe(sheetA.id)
+    })
+
+    it('resolves sheet names without parent names when each matches one sheet', async () => {
+      const { container, onlySheet, dest } = await seedSheets()
+      await testDb.update(paper).set({ sheetId: onlySheet.id }).run()
+
+      const result = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: 'Only-Sheet', toCollectionName: 'Dest' }],
+        moves: [{ identifier: { type: 'container_id', containerId: container.id }, targetPosition: '' }],
+      })
+
+      expect(result.success).toBe(true)
+      const [moved] = await testDb.select().from(paper).all()
+      expect(moved.sheetId).toBe(dest.id)
+    })
   })
 })
