@@ -352,6 +352,15 @@ describe('bulk-combined-import', () => {
       { name: 'a missing study on one subject', valid: false, subjects: () => [subject('A'), subject('B', undefined, 'NOPE')] },
     ]
 
+    it('says a sublabel repeats in the file', async () => {
+      const validation = await validateBulkCombinedPayload(testDb, {
+        studyShortCode: 'ST1',
+        subjects: [subject('A', paperOn('Sheet-1', 's1')), subject('B', paperOn('Sheet-1', 's1'))],
+      })
+
+      expect(validation.errors.map((e) => e.message)).toEqual(["Sublabel 's1' is used more than once on this sheet in your file."])
+    })
+
     for (const fixture of fixtures) {
       it(fixture.name, async () => {
         const payload = { studyShortCode: 'ST1', subjects: fixture.subjects() }

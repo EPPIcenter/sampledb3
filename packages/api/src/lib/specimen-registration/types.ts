@@ -30,6 +30,11 @@ export type RegistrationEntry =
 
 export type RegistrationOptions = {
   userId?: number
+  /**
+   * How errors name the caller's input when a value repeats in it, for example 'your file'
+   * for a CSV import. Defaults to 'this request'.
+   */
+  inputName?: string
 }
 
 /** Keyed to the input: entries[entryIndex].containers[containerIndex]. */

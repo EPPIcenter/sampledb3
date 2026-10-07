@@ -175,12 +175,7 @@ export class CollectionPlanner {
     }
     const newName = name ?? barcode
     if (!newName) {
-      return {
-        error:
-          type === 'cryovial_box'
-            ? 'box_name or collection_barcode is required for cryovial_tube'
-            : 'plate_name or collection_barcode is required for micronix_tube',
-      }
+      return { error: `A new ${label.toLowerCase()} needs a name or a barcode.` }
     }
     const badLocation = locationError(collection.locationId, this.database)
     if (badLocation) return { error: badLocation }
@@ -216,7 +211,7 @@ export class CollectionPlanner {
     }
 
     if (!parent.name) {
-      return { error: 'box_name or bag_name is required for paper' }
+      return { error: `A new ${label.toLowerCase()} needs a name.` }
     }
     if (parent.locationId == null) {
       return { error: `Collection (${type}) not found: ${parent.name}` }
@@ -245,8 +240,8 @@ export class CollectionPlanner {
       return { target: { existingId: row.id } }
     }
 
-    if (!collection.name) return { error: 'sheet_name is required for paper' }
-    if (!collection.parent) return { error: 'box_name or bag_name is required for paper' }
+    if (!collection.name) return { error: 'A sheet needs an id or a name.' }
+    if (!collection.parent) return { error: 'A sheet named without an id needs its box or bag.' }
 
     const name = collection.name
     const parentType = collection.parent.type

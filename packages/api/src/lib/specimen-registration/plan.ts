@@ -96,6 +96,9 @@ function claimKey(claim: Claim): string {
 class RequestClaims {
   private readonly taken = new Set<string>()
 
+  /** How messages name the input a claim repeats in (RegistrationOptions.inputName). */
+  constructor(readonly inputName: string) {}
+
   /** Returns false when the claim was already taken earlier in the request. */
   take(claim: Claim): boolean {
     const key = claimKey(claim)
@@ -108,10 +111,11 @@ class RequestClaims {
 export async function planRegistration(
   database: Database,
   entries: RegistrationEntry[],
+  inputName = 'this request',
 ): Promise<{ plan: RegistrationPlan; errors: RegistrationError[] }> {
   const errors: RegistrationError[] = []
   const planner = new CollectionPlanner(database)
-  const claims = new RequestClaims()
+  const claims = new RequestClaims(inputName)
   const specimens: PlannedSpecimen[] = []
   const specimenIndexByKey = new Map<string, number>()
   const entrySpecimen: Array<number | undefined> = []
@@ -260,7 +264,7 @@ async function planContainer(
           if (taken) problems.push({ field: 'sublabel', message: `Sublabel '${sublabel}' is already used on this sheet.` })
         }
         if (!claims.take({ kind: 'sublabel', sheet: collection, sublabel })) {
-          problems.push({ field: 'sublabel', message: `Sublabel '${sublabel}' is used more than once on this sheet in your file.` })
+          problems.push({ field: 'sublabel', message: `Sublabel '${sublabel}' is used more than once on this sheet in ${claims.inputName}.` })
         }
       }
     }
@@ -286,7 +290,7 @@ async function planContainer(
         if (!claims.take({ kind: 'position', gridType, collection, position })) {
           problems.push({
             field: 'position',
-            message: `Position ${position} in this plate/box is used more than once in your file. Each position can only be used once.`,
+            message: `Position ${position} in this plate/box is used more than once in ${claims.inputName}. Each position can only be used once.`,
           })
         }
       }
@@ -300,7 +304,7 @@ async function planContainer(
       if (!claims.take({ kind: 'barcode', containerType: input.containerType, barcode })) {
         problems.push({
           field: 'barcode',
-          message: `Barcode '${barcode}' is used more than once in your file. Each barcode must be unique.`,
+          message: `Barcode '${barcode}' is used more than once in ${claims.inputName}. Each barcode must be unique.`,
         })
       }
     }

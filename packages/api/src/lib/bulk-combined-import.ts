@@ -90,6 +90,7 @@ async function registerSubjects(
   payloadStudyShortCode: string | undefined,
   subjects: BulkCombinedSubjectInput[],
   userId: number | undefined,
+  inputName?: string,
 ): Promise<OneSubjectResult[]> {
   const now = utcNow()
   const errors: BulkCombinedError[] = []
@@ -174,7 +175,7 @@ async function registerSubjects(
 
   let registration: RegistrationResult | null = null
   try {
-    registration = await registerSpecimens(database, entries, { userId })
+    registration = await registerSpecimens(database, entries, { userId, inputName })
   } catch (error) {
     if (!(error instanceof SpecimenRegistrationError)) throw error
     const mapped = error.errors.map((e) => ({ ...entryRefs[e.entryIndex], message: e.message }))
@@ -240,6 +241,9 @@ export async function runOneSubjectWithSpecimens(
   }
 }
 
+/** The bulk combined routes take a CSV import, so a value repeated in it is "used more than once in your file". */
+const CSV_INPUT_NAME = 'your file'
+
 export interface BulkCombinedPayload {
   /** Default study for subjects that do not set their own studyShortCode. */
   studyShortCode?: string
@@ -265,7 +269,7 @@ export async function runBulkCombinedImport(
     const errors: Array<{ index: number; error: string }> = []
     for (let i = 0; i < subjects.length; i++) {
       try {
-        const [one] = await withWriteTransaction(database, (tx) => registerSubjects(tx, studyShortCode, [subjects[i]], userId))
+        const [one] = await withWriteTransaction(database, (tx) => registerSubjects(tx, studyShortCode, [subjects[i]], userId, CSV_INPUT_NAME))
         results.push(one)
       } catch (error) {
         if (!(error instanceof BulkCombinedRejected)) throw error
@@ -276,7 +280,7 @@ export async function runBulkCombinedImport(
   }
 
   try {
-    const results = await withWriteTransaction(database, (tx) => registerSubjects(tx, studyShortCode, subjects, userId))
+    const results = await withWriteTransaction(database, (tx) => registerSubjects(tx, studyShortCode, subjects, userId, CSV_INPUT_NAME))
     return { summary: sumSummaries(results), results }
   } catch (error) {
     if (!(error instanceof BulkCombinedRejected)) throw error
@@ -297,7 +301,7 @@ export async function validateBulkCombinedPayload(
 ): Promise<{ valid: boolean; errors: BulkCombinedError[] }> {
   return withRolledBackTransaction(database, async (tx) => {
     try {
-      await registerSubjects(tx, payload.studyShortCode, payload.subjects, undefined)
+      await registerSubjects(tx, payload.studyShortCode, payload.subjects, undefined, CSV_INPUT_NAME)
       return { valid: true, errors: [] }
     } catch (error) {
       if (error instanceof BulkCombinedRejected) return { valid: false, errors: error.errors }

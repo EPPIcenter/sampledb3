@@ -203,7 +203,7 @@ describe('Specimen registration', () => {
       ])
 
       expect(error.errors).toEqual([
-        expect.objectContaining({ entryIndex: 1, field: 'position', message: expect.stringContaining('more than once in your file') }),
+        expect.objectContaining({ entryIndex: 1, field: 'position', message: expect.stringContaining('more than once in this request') }),
       ])
     })
 
@@ -289,9 +289,19 @@ describe('Specimen registration', () => {
 
       expect(error.errors.map((e) => [e.containerIndex, e.message])).toEqual([
         [0, "Sublabel 's1' is already used on this sheet."],
-        [2, "Sublabel 's2' is used more than once on this sheet in your file."],
+        [2, "Sublabel 's2' is used more than once on this sheet in this request."],
       ])
     })
+  })
+
+  it('names the input a value repeats in as the caller asks', async () => {
+    const entries = [entry([tube('T1', { name: 'P1', position: 'A02' }), tube('T1', { name: 'P1', position: 'A03' })])]
+
+    const error = await registerSpecimens(db, entries, { inputName: 'your file' }).catch((e: unknown) => e)
+
+    expect((error as SpecimenRegistrationError).errors[0].message).toBe(
+      "Barcode 'T1' is used more than once in your file. Each barcode must be unique.",
+    )
   })
 
   it('keys a missing position to the position field', async () => {

@@ -28,7 +28,7 @@ export async function registerSpecimens(
   options: RegistrationOptions = {},
 ): Promise<RegistrationResult> {
   return withWriteTransaction(database, async (db) => {
-    const { plan, errors } = await planRegistration(db, entries)
+    const { plan, errors } = await planRegistration(db, entries, options.inputName)
     if (errors.length > 0) throw new SpecimenRegistrationError(400, errors)
     return writeRegistration(db, plan, options.userId)
   })

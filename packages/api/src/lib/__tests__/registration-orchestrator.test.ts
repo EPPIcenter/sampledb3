@@ -139,7 +139,7 @@ describe('registration-orchestrator', () => {
       ])
 
       expect(result.valid).toBe(false)
-      expect(result.errors.some((e) => e.message.includes('used more than once in your file'))).toBe(true)
+      expect(result.errors.some((e) => e.message.includes('used more than once in this request'))).toBe(true)
     })
 
     it('returns invalid when barcode already exists in database', async () => {
