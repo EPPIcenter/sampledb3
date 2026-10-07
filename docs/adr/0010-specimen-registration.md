@@ -34,4 +34,4 @@ We put **Specimen registration** (see [CONTEXT.md](../../CONTEXT.md)) behind one
 ## Consequences
 
 - Validate endpoints keep their wire shapes; each route maps module errors to its existing response.
-- Migration is in slices, each deleting the code it replaces: bulk combined import; `/specimens/bulk`, `/subjects/with-specimens`, `POST /specimens` and add-container; derivations and the derivation CSV; control batches.
+- Migration is in slices, each deleting the code it replaces: bulk combined import, `/subjects/with-specimens`, and `/specimens/bulk`; `POST /specimens` and add-container; derivations and the derivation CSV; control batches. `/subjects/with-specimens` and `/specimens/bulk` moved into the first slice: the first shares bulk combined's code, and the second's validator was the last user of the old placement resolver (ADR 0006).

@@ -6,10 +6,7 @@ import { z } from 'zod'
 import { listSpecimens } from '../lib/specimens/specimen-read'
 import { validateSpecimenData } from '../lib/validation'
 import { createContainerForSpecimen, pickContainerQuantity } from '../lib/container-creation'
-import {
-  toContainerWriteInput,
-  type BulkCombinedContainerInput,
-} from '../lib/container-write-placement'
+import type { RegistrationContainer } from '../lib/specimen-registration'
 import { ConflictError, handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import { containerSchema, containerSchemaWithLocation } from '../lib/schemas'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
@@ -112,10 +109,10 @@ specimens.post('/:id/containers', memberMiddleware, async (c) => {
     if (parsed == null) {
       throw new ValidationError('Container is required')
     }
-    const container = parsed as BulkCombinedContainerInput
+    const container = parsed as RegistrationContainer
 
     const user = c.get('user')
-    const result = await createContainerForSpecimen(id, toContainerWriteInput(container), dbInstance, {
+    const result = await createContainerForSpecimen(id, container, dbInstance, {
       userId: user?.id,
       quantity: pickContainerQuantity(container),
     })
@@ -191,9 +188,8 @@ specimens.post('/', memberMiddleware, async (c) => {
 
     if (data.container) {
       try {
-        const container = data.container as BulkCombinedContainerInput
-        const writeInput = toContainerWriteInput(container)
-        const result = await createContainerForSpecimen(newSpecimen.id, writeInput, dbInstance, {
+        const container = data.container as RegistrationContainer
+        const result = await createContainerForSpecimen(newSpecimen.id, container, dbInstance, {
           userId: user?.id,
           quantity: pickContainerQuantity(container),
         })
