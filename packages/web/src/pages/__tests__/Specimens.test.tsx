@@ -26,6 +26,12 @@ async function renderAt(...initialEntries: string[]) {
     url: () => screen.getByLabelText('url').textContent,
     sourceType: () => screen.getByLabelText('Source Type'),
     search: () => screen.getByPlaceholderText(/Search subject/),
+    /** Apply is disabled while the list loads, so wait for it before clicking. */
+    apply: async () => {
+      const button = screen.getByRole('button', { name: /apply filters/i })
+      await waitFor(() => expect(button).toBeEnabled())
+      fireEvent.click(button)
+    },
   }
 }
 
@@ -103,7 +109,7 @@ describe('Specimens page URL filters', () => {
     fireEvent.change(page.sourceType(), { target: { value: 'subject' } })
     expect(page.url()).toBe('/specimens')
 
-    fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
+    await page.apply()
     await waitFor(() => expect(page.url()).toBe('/specimens?source_type=subject'))
 
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
@@ -130,7 +136,7 @@ describe('Specimens page URL filters', () => {
     await waitFor(() => expect(page.url()).toBe('/specimens?search=QC'))
     expect(page.sourceType()).toHaveValue('control')
 
-    fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
+    await page.apply()
     await waitFor(() => expect(page.url()).toBe('/specimens?source_type=control&search=QC'))
   })
 
