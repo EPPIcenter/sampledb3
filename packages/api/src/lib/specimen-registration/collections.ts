@@ -6,15 +6,15 @@
 import { and, eq } from 'drizzle-orm'
 import type { ContainerWriteInput } from '@sampledb/contract'
 import type { Database } from '../../db/client'
-import { bag, box, cryovialBox, micronixPlate, sheet } from '../../db/schema'
+import { sheet } from '../../db/schema'
+import { GRID_COLLECTION_TABLES, PARENT_COLLECTION_TABLES, type GridCollectionType, type ParentCollectionType } from './tables'
 import {
   assertLocationCanContainCollections,
   CollectionLocationNotAllowedError,
   CollectionLocationNotFoundError,
 } from '../collections/collection-lifecycle'
 
-export type GridCollectionType = 'micronix_plate' | 'cryovial_box'
-export type ParentCollectionType = 'box' | 'bag'
+export type { GridCollectionType, ParentCollectionType } from './tables'
 
 type GridCollectionInput = NonNullable<
   Extract<ContainerWriteInput, { containerType: 'micronix_tube' | 'cryovial_tube' | 'static_well' }>['collection']
@@ -107,7 +107,7 @@ export class CollectionPlanner {
 
   /** The stored grid Collection whose id, barcode, or name equals `value`. */
   private storedGrid(type: GridCollectionType, by: 'id' | 'barcode' | 'name', value: number | string): Candidate | null {
-    const table = type === 'cryovial_box' ? cryovialBox : micronixPlate
+    const table = GRID_COLLECTION_TABLES[type]
     const row = this.database
       .select({ id: table.id, name: table.name, barcode: table.barcode, locationId: table.locationId })
       .from(table)
@@ -118,7 +118,7 @@ export class CollectionPlanner {
 
   /** The stored box or bag whose id or name equals `value`. */
   private storedParent(type: ParentCollectionType, by: 'id' | 'name', value: number | string): Candidate | null {
-    const table = type === 'box' ? box : bag
+    const table = PARENT_COLLECTION_TABLES[type]
     const row = this.database
       .select({ id: table.id, name: table.name, locationId: table.locationId })
       .from(table)

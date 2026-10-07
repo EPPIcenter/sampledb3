@@ -6,8 +6,6 @@ import { and, eq, isNull } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import {
   controlBatch,
-  cryovialTube,
-  micronixTube,
   paper,
   specimen,
   specimenType,
@@ -22,6 +20,7 @@ import {
   validateContainerTypeForSpecimenType,
   validateUnitForContainerType,
 } from '../validation'
+import { GRID_COLLECTION_OF, TUBE_TABLES } from './tables'
 import { CollectionPlanner, targetKey, type CollectionTarget, type PlannedCollection } from './collections'
 import { validateContainerWriteFields } from './container-fields'
 import type { RegistrationContainer, RegistrationEntry, RegistrationError } from './types'
@@ -248,7 +247,7 @@ async function planContainer(
       }
     }
   } else {
-    const gridType = input.containerType === 'cryovial_tube' ? 'cryovial_box' : 'micronix_plate'
+    const gridType = GRID_COLLECTION_OF[input.containerType]
     const resolved = input.collection
       ? await planner.resolveGrid(gridType, input.collection)
       : { error: 'Collection name or barcode is required' }
@@ -277,7 +276,7 @@ async function planContainer(
 
     const barcode = 'barcode' in input ? input.barcode?.trim() : undefined
     if (barcode && (input.containerType === 'micronix_tube' || input.containerType === 'cryovial_tube')) {
-      const table = input.containerType === 'micronix_tube' ? micronixTube : cryovialTube
+      const table = TUBE_TABLES[input.containerType]
       const taken = await database.select({ id: table.id }).from(table).where(eq(table.barcode, barcode)).get()
       if (taken) problems.push({ field: 'barcode', message: `Barcode '${barcode}' already exists. Use a different barcode.` })
       if (!claims.take(`barcode:${input.containerType}:${barcode}`)) {

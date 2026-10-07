@@ -1,23 +1,11 @@
 /** Carry out a registration plan that has no errors. Call inside a write transaction. */
 import type { Database } from '../../db/client'
-import {
-  bag,
-  box,
-  cryovialBox,
-  cryovialTube,
-  micronixPlate,
-  micronixTube,
-  paper,
-  sheet,
-  specimen,
-  staticWell,
-  storageContainer,
-  type Specimen,
-} from '../../db/schema'
+import { paper, sheet, specimen, storageContainer, type Specimen } from '../../db/schema'
 import { utcNow } from '../datetime'
 import { sqliteConstraintConflict } from '../error-handler'
 import type { CollectionTarget, PlannedCollection } from './collections'
 import type { RegistrationPlan } from './plan'
+import { GRID_COLLECTION_TABLES, GRID_CONTAINER_TABLES, PARENT_COLLECTION_TABLES } from './tables'
 import {
   SpecimenRegistrationError,
   type CreatedCollection,
@@ -72,14 +60,14 @@ export async function writeRegistration(
       switch (planned.type) {
         case 'micronix_plate':
         case 'cryovial_box': {
-          const table = planned.type === 'micronix_plate' ? micronixPlate : cryovialBox
+          const table = GRID_COLLECTION_TABLES[planned.type]
           const values = { name: planned.name, barcode: planned.barcode ?? null, locationId: planned.locationId, ...audit }
           id = only(await database.insert(table).values(values).returning({ id: table.id }), planned.type).id
           break
         }
         case 'box':
         case 'bag': {
-          const table = planned.type === 'box' ? box : bag
+          const table = PARENT_COLLECTION_TABLES[planned.type]
           const values = { name: planned.name, locationId: planned.locationId, ...audit }
           id = only(await database.insert(table).values(values).returning({ id: table.id }), planned.type).id
           break
@@ -140,21 +128,14 @@ export async function writeRegistration(
         'container',
       )
       const collectionId = idOf(container.collection)
-      switch (input.containerType) {
-        case 'micronix_tube':
-          await database.insert(micronixTube).values({ id, collectionId, barcode: input.barcode.trim(), position: container.position })
-          break
-        case 'cryovial_tube':
-          await database
-            .insert(cryovialTube)
-            .values({ id, collectionId, barcode: input.barcode?.trim() || null, position: container.position })
-          break
-        case 'static_well':
-          await database.insert(staticWell).values({ id, collectionId, position: container.position })
-          break
-        case 'paper':
-          await database.insert(paper).values({ id, sheetId: collectionId, sublabel: input.sublabel?.trim() || null })
-          break
+      if (input.containerType === 'paper') {
+        await database.insert(paper).values({ id, sheetId: collectionId, sublabel: input.sublabel?.trim() || null })
+      } else {
+        // The plan checked that a micronix tube has a barcode.
+        const barcode = 'barcode' in input ? input.barcode?.trim() || null : null
+        await database
+          .insert(GRID_CONTAINER_TABLES[input.containerType])
+          .values({ id, collectionId, position: container.position, ...(barcode !== null && { barcode }) })
       }
       entry.containerIds.push(id)
     }
