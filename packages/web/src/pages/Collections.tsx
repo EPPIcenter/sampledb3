@@ -6,6 +6,7 @@ import { useAllCollections } from '../hooks/useCollections'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import { AsyncPresentation, EmptyState, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/subject-specimen.css'
+import { EMPTY_LIST } from '../lib/empty-list'
 
 const PAGE_SIZE = 50
 const TYPE_TABS: { value: CollectionTypeFilter; label: string }[] = [
@@ -66,7 +67,7 @@ export default function Collections() {
   )
 
   const collectionsQuery = useAllCollections()
-  const collections = useMemo(() => collectionsQuery.data ?? [], [collectionsQuery.data])
+  const collections = collectionsQuery.data ?? EMPTY_LIST
   const listStatus = fromQuery(collectionsQuery, {
     isEmpty: collectionsQuery.isSuccess && collections.length === 0,
   })

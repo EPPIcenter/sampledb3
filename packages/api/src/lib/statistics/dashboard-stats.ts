@@ -11,7 +11,8 @@ import {
 } from '../../db/schema'
 import { eq, and, sql, inArray } from 'drizzle-orm'
 import { resolveContainerTypes } from '../container-placement'
-import { buildDateFilter, chunkArray } from './helpers'
+import { buildDateFilter } from './helpers'
+import { chunkArray, SQL_IN_CHUNK_SIZE } from '../sql-helpers'
 import { computeContainerAggregates } from './container-aggregates'
 import {
   resolveContainerIdsAtLocations,
@@ -21,7 +22,7 @@ import { computeSpecimenAggregates } from './specimen-aggregates'
 import { computeStorageStatistics } from './storage-aggregates'
 import type { DashboardStatistics, StatisticsFilters } from './types'
 
-/** Filtered dashboard statistics for specimens, containers, and storage. */
+/** Statistics with every count zero, for filters that match nothing. */
 function emptyDashboardStatistics(): DashboardStatistics {
   return {
     specimens: {
@@ -46,6 +47,7 @@ function emptyDashboardStatistics(): DashboardStatistics {
   }
 }
 
+/** Filtered dashboard statistics for specimens, containers, and storage. */
 export async function getDashboardStatistics(
   database: Database,
   sqliteDatabase: SQLiteDatabase,
@@ -67,8 +69,7 @@ export async function getDashboardStatistics(
     // Build specimen filter conditions
     const specimenConditions = []
     
-    // Filter by study
-    let subjectIds: number[] = []
+    // Filter by study, selecting its subjects with a subquery rather than an id list
     if (studyCode) {
       const studyRecord = await database
         .select()
@@ -80,25 +81,21 @@ export async function getDashboardStatistics(
       if (!studyRecord) {
         return emptyDashboardStatistics()
       }
-      const subjects = await database
+      const studySubjectIds = database
         .select({ id: studySubject.id })
         .from(studySubject)
         .where(eq(studySubject.studyId, studyRecord.id))
-      subjectIds = subjects.map(s => s.id)
-      if (subjectIds.length > 0) {
-        if (subjectIds.length === 1) {
-          specimenConditions.push(
-            eq(specimen.studySubjectId, subjectIds[0])
-          )
-        } else {
-          specimenConditions.push(
-            inArray(specimen.studySubjectId, subjectIds)
-          )
-        }
-      } else {
+      const anySubject = await database
+        .select({ id: studySubject.id })
+        .from(studySubject)
+        .where(eq(studySubject.studyId, studyRecord.id))
+        .limit(1)
+        .get()
+      if (!anySubject) {
         // No subjects in study, return empty results
         return emptyDashboardStatistics()
       }
+      specimenConditions.push(inArray(specimen.studySubjectId, studySubjectIds))
     }
 
     if (sourceType === 'subject') {
@@ -129,8 +126,6 @@ export async function getDashboardStatistics(
     const specimenIds = filteredSpecimens.map(s => s.id)
 
     let specimenAggregates = await computeSpecimenAggregates(database, filteredSpecimens, {
-      studyCode,
-      subjectIds,
       useSpecimenTypeCache: true,
     })
 
@@ -201,7 +196,7 @@ export async function getDashboardStatistics(
 
       // Batch query if too many specimen IDs to avoid SQLite variable limit
       // Use Promise.all to parallelize queries for better performance
-      const specimenChunks = chunkArray(specimenIds, 500)
+      const specimenChunks = chunkArray(specimenIds, SQL_IN_CHUNK_SIZE)
       
       const chunkResults = await Promise.all(
         specimenChunks.map(async (specimenChunk, chunkIndex) => {
@@ -248,7 +243,7 @@ export async function getDashboardStatistics(
         } else {
           // Fetch containers matching location and other filters
           // Use Promise.all to parallelize queries
-          const containerIdChunks = chunkArray(locationFilteredContainerIds, 500)
+          const containerIdChunks = chunkArray(locationFilteredContainerIds, SQL_IN_CHUNK_SIZE)
           const chunkResults = await Promise.all(
             containerIdChunks.map(async (containerIdChunk) => {
               // Tag filter is already intersected into locationFilteredContainerIds.
@@ -263,7 +258,7 @@ export async function getDashboardStatistics(
       } else {
         // No location filter
         if (tagFilteredContainerIds) {
-          const tagIdChunks = chunkArray(tagFilteredContainerIds, 500)
+          const tagIdChunks = chunkArray(tagFilteredContainerIds, SQL_IN_CHUNK_SIZE)
           const chunkResults = await Promise.all(
             tagIdChunks.map((idChunk) =>
               database.select().from(storageContainer).where(inArray(storageContainer.id, idChunk)),
@@ -296,8 +291,6 @@ export async function getDashboardStatistics(
       const adjustedSpecimens = filteredSpecimens.filter((s) => filteredSpecimenIds.has(s.id))
 
       specimenAggregates = await computeSpecimenAggregates(database, adjustedSpecimens, {
-        studyCode,
-        subjectIds,
         useSpecimenTypeCache: false,
       })
     }

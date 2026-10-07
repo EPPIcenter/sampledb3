@@ -385,18 +385,27 @@ export async function executeMoves(database: Database, request: BatchMoveRequest
     const mappingErrors: string[] = []
     for (const m of mappings) {
       if (collectionType === 'sheet') {
-        // Every sheet with the source name (in fromParentName, if given) maps to the one
-        // target sheet; the target must be unambiguous.
+        // A sheet name alone resolves only when exactly one sheet has it; otherwise the
+        // mapping must name the box or bag. Every source sheet in the named parent maps to
+        // the one target sheet (legacy bags can hold several with the same name).
         const fromIds = await resolveSheetsByName(database, m.fromCollectionName, m.fromParentName)
         const toIds = await resolveSheetsByName(database, m.toCollectionName, m.toParentName)
         if (fromIds.length === 0) mappingErrors.push(`Source collection "${m.fromCollectionName}" not found`)
         if (toIds.length === 0) mappingErrors.push(`Target collection "${m.toCollectionName}" not found`)
-        if (toIds.length > 1) {
+        const ambiguousSource = fromIds.length > 1 && m.fromParentName === undefined
+        if (ambiguousSource) {
           mappingErrors.push(
-            `Target sheet "${m.toCollectionName}" matches ${toIds.length} sheets; set toParentName to the box or bag that holds it`,
+            `Source sheet "${m.fromCollectionName}" matches ${fromIds.length} sheets; set fromParentName to the box or bag that holds it`,
           )
         }
-        if (fromIds.length > 0 && toIds.length === 1) {
+        if (toIds.length > 1) {
+          mappingErrors.push(
+            m.toParentName === undefined
+              ? `Target sheet "${m.toCollectionName}" matches ${toIds.length} sheets; set toParentName to the box or bag that holds it`
+              : `Target sheet "${m.toCollectionName}" matches ${toIds.length} sheets in "${m.toParentName}"`,
+          )
+        }
+        if (fromIds.length > 0 && !ambiguousSource && toIds.length === 1) {
           for (const fromId of fromIds) mappingMap.set(fromId, toIds[0])
         }
         continue

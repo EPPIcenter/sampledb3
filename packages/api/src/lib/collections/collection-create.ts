@@ -14,6 +14,7 @@ export {
   CollectionLocationNotFoundError,
   CollectionLocationNotAllowedError,
 } from './collection-lifecycle'
+import { insertedRow } from '../inserted-row'
 
 export class CollectionNameExistsError extends Error {
   constructor(message: string) {
@@ -40,8 +41,7 @@ export async function createMicronixPlate(database: Database, input: CreateColle
       updatedBy: input.userId,
     })
     .returning()
-  const newPlate = inserted.at(0)
-  if (!newPlate) throw new Error('Insert did not return plate row')
+  const newPlate = insertedRow(inserted, 'plate')
   return { plate: { ...newPlate, locationPath: formatLocationPath(loc) } }
 }
 
@@ -63,8 +63,7 @@ export async function createCryovialBox(database: Database, input: CreateCollect
       updatedBy: input.userId,
     })
     .returning()
-  const newBox = inserted.at(0)
-  if (!newBox) throw new Error('Insert did not return cryovial box row')
+  const newBox = insertedRow(inserted, 'cryovial box')
   return { box: { ...newBox, locationPath: formatLocationPath(loc) } }
 }
 
@@ -85,8 +84,7 @@ export async function createGenericBox(database: Database, input: CreateCollecti
       updatedBy: input.userId,
     })
     .returning()
-  const newBox = inserted.at(0)
-  if (!newBox) throw new Error('Insert did not return box row')
+  const newBox = insertedRow(inserted, 'box')
   return { box: { ...newBox, locationPath: formatLocationPath(loc) } }
 }
 
@@ -107,7 +105,6 @@ export async function createBag(database: Database, input: CreateCollectionInput
       updatedBy: input.userId,
     })
     .returning()
-  const newBag = inserted.at(0)
-  if (!newBag) throw new Error('Insert did not return bag row')
+  const newBag = insertedRow(inserted, 'bag')
   return { bag: { ...newBag, locationPath: formatLocationPath(loc) } }
 }

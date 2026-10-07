@@ -15,8 +15,8 @@ import {
   createTestStorageType,
   createTestLocation,
   createTestMicronixPlate,
+  createTestMicronixTube,
 } from '../../__tests__/helpers/factories'
-import { micronixTube } from '../../db/schema'
 import { createActivityRoutes } from '../activity'
 
 describe('Activity API', () => {
@@ -71,7 +71,9 @@ describe('Activity API', () => {
 
       const res = await ctx.request('/api/activity/recent', { method: 'GET' })
       expect(res.status).toBe(200)
-      const data = (await res.json()) as { activity?: Array<{ id: number; type: string; label: string }> }
+      const data = (await res.json()) as {
+        activity?: Array<{ id: number; type: string; label: string; context?: string }>
+      }
       expect(Array.isArray(data.activity)).toBe(true)
 
       const specimenActivity = data.activity!.find(
@@ -81,6 +83,10 @@ describe('Activity API', () => {
       expect(specimenActivity!.label).not.toMatch(/#\d+/)
       expect(specimenActivity!.label).toContain('HPV18 DBS Control')
       expect(specimenActivity!.label).toContain('HPV18-2024-001')
+      expect(specimenActivity).toMatchObject({
+        label: 'DBS • HPV18 DBS Control (HPV18-2024-001)',
+        context: '2024-01-15',
+      })
     })
 
     it('labels subject specimens and their containers with subject and study', async () => {
@@ -92,7 +98,12 @@ describe('Activity API', () => {
       const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
       const loc = await createTestLocation(ctx.db, { name: 'Loc', storageTypeId: String(storageType.id) })
       const plate = await createTestMicronixPlate(ctx.db, { name: 'P1', locationId: loc.id })
-      await ctx.db.insert(micronixTube).values({ id: container.id, collectionId: plate.id, barcode: 'MT-9', position: 'A01' })
+      await createTestMicronixTube(ctx.db, {
+        containerId: container.id,
+        collectionId: plate.id,
+        barcode: 'MT-9',
+        position: 'A01',
+      })
 
       const res = await ctx.request('/api/activity/recent', { method: 'GET' })
       const data = (await res.json()) as { activity: Array<{ id: number; type: string; label: string; context?: string }> }

@@ -6,6 +6,7 @@ import type * as schema from '../../db/schema'
 import { location, micronixPlate, cryovialBox, box, bag } from '../../db/schema'
 import { resolveCollection } from './collection-resolve'
 import { utcNow } from '../datetime'
+import { insertedRow } from '../inserted-row'
 
 type DatabaseOrTransaction =
   | Database
@@ -94,8 +95,7 @@ export async function createOrResolveCollection(
         updatedBy: input.userId,
       })
       .returning()
-    const row = inserted.at(0)
-    if (!row) throw new Error('Insert did not return box row')
+    const row = insertedRow(inserted, 'box')
     collectionMap?.set(key, row.id)
     return row.id
   }
@@ -112,8 +112,7 @@ export async function createOrResolveCollection(
         updatedBy: input.userId,
       })
       .returning()
-    const row = inserted.at(0)
-    if (!row) throw new Error('Insert did not return bag row')
+    const row = insertedRow(inserted, 'bag')
     collectionMap?.set(key, row.id)
     return row.id
   }
@@ -131,8 +130,7 @@ export async function createOrResolveCollection(
         updatedBy: input.userId,
       })
       .returning()
-    const row = inserted.at(0)
-    if (!row) throw new Error('Insert did not return micronix plate row')
+    const row = insertedRow(inserted, 'micronix plate')
     collectionMap?.set(key, row.id)
     return row.id
   }
@@ -149,8 +147,7 @@ export async function createOrResolveCollection(
       updatedBy: input.userId,
     })
     .returning()
-  const row = inserted.at(0)
-  if (!row) throw new Error('Insert did not return cryovial box row')
+  const row = insertedRow(inserted, 'cryovial box')
   collectionMap?.set(key, row.id)
   return row.id
 }

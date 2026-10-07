@@ -15,7 +15,7 @@ import {
   useControlDefinitionWizardSeed,
 } from '../hooks/useControls'
 import { useUser } from '../contexts/UserContext'
-import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
+import { PageError, fromQuery, getHttpStatus, getQueryErrorMessage } from '../ui'
 import '../styles/blood-controls.css'
 import { localToday } from '../lib/date-utils'
 
@@ -203,6 +203,8 @@ function ControlBatchWizardContent() {
       return getQueryErrorMessage(batchBootstrapQuery.error, 'Failed to load batch')
     }
     if (isCreateFromDefinition && definitionSeedQuery.isError) {
+      // The definition summary and batch-name routes both 404 for a missing or non-blood definition.
+      if (getHttpStatus(definitionSeedQuery.error) === 404) return 'Control definition not found'
       return getQueryErrorMessage(definitionSeedQuery.error, 'Failed to load control definition')
     }
     if (isCompositionCsvFlow && compositionQuery.isError) {

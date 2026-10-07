@@ -3,13 +3,17 @@ import type { Database } from '../../../db/client'
 import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { setupTestDatabase, cleanupTestDatabase } from '../../../__tests__/helpers/db-setup'
 import {
+  createTestBag,
+  createTestBox,
   createTestLocation,
   createTestMicronixPlate,
+  createTestMicronixTube,
+  createTestPaper,
+  createTestSheet,
+  createTestStaticWell,
   createTestStorageContainer,
   createTestStorageType,
 } from '../../../__tests__/helpers/factories'
-import { micronixTube, staticWell, box, bag, sheet, paper } from '../../../db/schema'
-import { utcNow } from '../../datetime'
 import {
   resolveContainerIdsAtLocations,
   resolveStatisticsLocationFilter,
@@ -83,8 +87,8 @@ describe('location-filter', () => {
     await createTestMicronixPlate(testDb, { name: 'Plate 2', locationId: otherLoc.id })
 
     const container = await createTestStorageContainer(testDb)
-    await testDb.insert(micronixTube).values({
-      id: container.id,
+    await createTestMicronixTube(testDb, {
+      containerId: container.id,
       collectionId: plate.id,
       barcode: 'MX-LOC-1',
       position: 'A01',
@@ -98,21 +102,18 @@ describe('location-filter', () => {
   it('resolveContainerIdsAtLocations includes static wells and papers in boxes and bags', async () => {
     const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
     const loc = await createTestLocation(testDb, { name: 'Freezer A', storageTypeId: String(storageType.id) })
-    const now = utcNow()
     const plate = await createTestMicronixPlate(testDb, { name: 'P1', locationId: loc.id })
     const well = await createTestStorageContainer(testDb)
-    await testDb.insert(staticWell).values({ id: well.id, collectionId: plate.id, position: 'A01' })
-    const [boxRow] = await testDb.insert(box).values({ name: 'Box1', locationId: loc.id, created: now, lastUpdated: now }).returning()
-    const [bagRow] = await testDb.insert(bag).values({ name: 'Bag1', locationId: loc.id, created: now, lastUpdated: now }).returning()
-    const [boxSheet] = await testDb.insert(sheet).values({ name: 'S1', boxId: boxRow.id }).returning()
-    const [bagSheet] = await testDb.insert(sheet).values({ name: 'S1', bagId: bagRow.id }).returning()
+    await createTestStaticWell(testDb, { containerId: well.id, collectionId: plate.id, position: 'A01' })
+    const boxRow = await createTestBox(testDb, { name: 'Box1', locationId: loc.id })
+    const bagRow = await createTestBag(testDb, { name: 'Bag1', locationId: loc.id })
+    const boxSheet = await createTestSheet(testDb, { name: 'S1', boxId: boxRow.id })
+    const bagSheet = await createTestSheet(testDb, { name: 'S1', bagId: bagRow.id })
     const reuse = { specimenId: well.specimenId, unitId: well.unitId! }
     const paperInBox = await createTestStorageContainer(testDb, reuse)
     const paperInBag = await createTestStorageContainer(testDb, reuse)
-    await testDb.insert(paper).values([
-      { id: paperInBox.id, sheetId: boxSheet.id },
-      { id: paperInBag.id, sheetId: bagSheet.id },
-    ])
+    await createTestPaper(testDb, { containerId: paperInBox.id, sheetId: boxSheet.id })
+    await createTestPaper(testDb, { containerId: paperInBag.id, sheetId: bagSheet.id })
 
     const ids = await resolveContainerIdsAtLocations(testDb, [loc.id])
 

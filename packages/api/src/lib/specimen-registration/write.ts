@@ -3,6 +3,7 @@ import type { Database } from '../../db/client'
 import { paper, sheet, specimen, storageContainer, type Specimen } from '../../db/schema'
 import { utcNow } from '../datetime'
 import { sqliteConstraintConflict } from '../error-handler'
+import { insertedRow } from '../inserted-row'
 import type { CollectionTarget, PlannedCollection } from './collections'
 import type { RegistrationPlan } from './plan'
 import { GRID_COLLECTION_TABLES, GRID_CONTAINER_TABLES, PARENT_COLLECTION_TABLES } from './tables'
@@ -12,13 +13,6 @@ import {
   type RegisteredEntry,
   type RegistrationResult,
 } from './types'
-
-/** The row an `INSERT … RETURNING` gave back; throws if it gave none. */
-function insertedRow<T>(rows: T[], what: string): T {
-  const row = rows.at(0)
-  if (row === undefined) throw new Error(`Insert did not return ${what} row`)
-  return row
-}
 
 type ContainerRef = { entryIndex: number; containerIndex?: number }
 

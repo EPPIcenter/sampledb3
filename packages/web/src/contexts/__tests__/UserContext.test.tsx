@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { renderHook, act, waitFor } from '@testing-library/react'
+import { render, renderHook, act, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
-import { UserProvider, useUser, resetUserContextForTesting } from '../UserContext'
+import { StrictMode, type ReactNode } from 'react'
+import { UserProvider, useUser } from '../UserContext'
 import { authApi } from '../../lib/api/auth'
 import { axiosApi } from '../../lib/api/client'
 
@@ -13,7 +13,7 @@ describe('UserProvider', () => {
   let queryClient: QueryClient
 
   beforeEach(() => {
-    resetUserContextForTesting()
+    vi.clearAllMocks()
     vi.mocked(authApi.getCurrentUser).mockResolvedValue({ user: alice } as never)
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   })
@@ -26,6 +26,24 @@ describe('UserProvider', () => {
     )
     return renderHook(() => useUser(), { wrapper })
   }
+
+  it('loads the current user once under Strict Mode', async () => {
+    function SignedInAs() {
+      return <p>{useUser().user?.name ?? 'nobody'}</p>
+    }
+    render(
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <UserProvider>
+            <SignedInAs />
+          </UserProvider>
+        </QueryClientProvider>
+      </StrictMode>,
+    )
+
+    expect(await screen.findByText('Alice')).toBeInTheDocument()
+    expect(authApi.getCurrentUser).toHaveBeenCalledTimes(1)
+  })
 
   it("clears cached queries when a different user signs in, so the next user never sees the last one's data", async () => {
     const { result } = renderUser()

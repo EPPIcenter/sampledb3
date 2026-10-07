@@ -27,6 +27,7 @@ import type { BatchContainerInput } from './batch-schemas'
 import { withWriteTransaction } from '../../db/write-transaction'
 import { validateCollectionDate } from '../validation'
 import { ConflictError, ValidationError, sqliteConstraintConflict } from '../error-handler'
+import { insertedRow } from '../inserted-row'
 
 export interface CreateBatchWithSpecimensRequest {
   batch: {
@@ -237,10 +238,7 @@ export async function createBatchWithSpecimens(
       })
       .returning()
 
-    const batchRecord = batchResult.at(0)
-    if (!batchRecord) {
-      throw new Error('Failed to create batch - no record returned')
-    }
+    const batchRecord = insertedRow(batchResult, 'control batch')
     const batchId = extractId(batchRecord)
 
     const createdSpecimens: CreatedSpecimen[] = []
@@ -255,10 +253,7 @@ export async function createBatchWithSpecimens(
         })
         .returning()
 
-      const specimenRecord = specimenResult.at(0)
-      if (!specimenRecord) {
-        throw new Error('Failed to create specimen - no record returned')
-      }
+      const specimenRecord = insertedRow(specimenResult, 'specimen')
       const specimenId = extractId(specimenRecord)
 
       const containerIds: number[] = []
@@ -343,10 +338,7 @@ export async function addSpecimensToBatch(
           })
           .returning()
 
-        const specimenRecord = specimenResult.at(0)
-        if (!specimenRecord) {
-          throw new Error('Failed to create specimen - no record returned')
-        }
+        const specimenRecord = insertedRow(specimenResult, 'specimen')
         specimenId = extractId(specimenRecord)
       }
 

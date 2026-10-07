@@ -192,7 +192,8 @@ function AppContent() {
 
   const commands = useCommands({
     navigate,
-    location,
+    pathname: location.pathname,
+    search: location.search,
     canWrite,
     isAdmin,
     canManageReferenceData,

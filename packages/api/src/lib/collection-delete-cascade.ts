@@ -49,71 +49,98 @@ export interface DeleteCollectionWithContentsResult {
   subjectsDeleted: number
 }
 
+/** Per-kind table access. A Record, so adding a CollectionEntityType fails to compile until it has an entry. */
+interface CollectionKind {
+  label: string
+  /** All storage_container ids in the collection (tubes, wells, papers). */
+  containerIds(database: Database, id: number): number[]
+  exists(database: Database, id: number): boolean
+  /** Deletes the collection row (and a box's or bag's sheets); returns the number of sheets deleted. */
+  deleteRow(database: Database, id: number): number
+}
+
+function paperIdsOnSheets(database: Database, sheetColumn: typeof sheet.boxId | typeof sheet.bagId, id: number): number[] {
+  return database
+    .select({ id: paper.id })
+    .from(paper)
+    .innerJoin(sheet, eq(paper.sheetId, sheet.id))
+    .where(eq(sheetColumn, id))
+    .all()
+    .map((x) => x.id)
+}
+
+function deleteSheets(database: Database, sheetColumn: typeof sheet.boxId | typeof sheet.bagId, id: number): number {
+  return database.delete(sheet).where(eq(sheetColumn, id)).returning({ id: sheet.id }).all().length
+}
+
+const COLLECTION_KINDS: Record<CollectionEntityType, CollectionKind> = {
+  micronix_plate: {
+    label: 'Micronix plate',
+    containerIds: (database, id) => [
+      ...database.select({ id: micronixTube.id }).from(micronixTube).where(eq(micronixTube.collectionId, id)).all(),
+      ...database.select({ id: staticWell.id }).from(staticWell).where(eq(staticWell.collectionId, id)).all(),
+    ].map((x) => x.id),
+    exists: (database, id) =>
+      database.select({ id: micronixPlate.id }).from(micronixPlate).where(eq(micronixPlate.id, id)).get() != null,
+    deleteRow: (database, id) => {
+      requireDeleted(database.delete(micronixPlate).where(eq(micronixPlate.id, id)).returning().all(), 'Micronix plate', id)
+      return 0
+    },
+  },
+  cryovial_box: {
+    label: 'Cryovial box',
+    containerIds: (database, id) =>
+      database
+        .select({ id: cryovialTube.id })
+        .from(cryovialTube)
+        .where(eq(cryovialTube.collectionId, id))
+        .all()
+        .map((x) => x.id),
+    exists: (database, id) =>
+      database.select({ id: cryovialBox.id }).from(cryovialBox).where(eq(cryovialBox.id, id)).get() != null,
+    deleteRow: (database, id) => {
+      requireDeleted(database.delete(cryovialBox).where(eq(cryovialBox.id, id)).returning().all(), 'Cryovial box', id)
+      return 0
+    },
+  },
+  box: {
+    label: 'Box',
+    containerIds: (database, id) => paperIdsOnSheets(database, sheet.boxId, id),
+    exists: (database, id) => database.select({ id: box.id }).from(box).where(eq(box.id, id)).get() != null,
+    deleteRow: (database, id) => {
+      const sheetsDeleted = deleteSheets(database, sheet.boxId, id)
+      requireDeleted(database.delete(box).where(eq(box.id, id)).returning().all(), 'Box', id)
+      return sheetsDeleted
+    },
+  },
+  bag: {
+    label: 'Bag',
+    containerIds: (database, id) => paperIdsOnSheets(database, sheet.bagId, id),
+    exists: (database, id) => database.select({ id: bag.id }).from(bag).where(eq(bag.id, id)).get() != null,
+    deleteRow: (database, id) => {
+      const sheetsDeleted = deleteSheets(database, sheet.bagId, id)
+      requireDeleted(database.delete(bag).where(eq(bag.id, id)).returning().all(), 'Bag', id)
+      return sheetsDeleted
+    },
+  },
+}
+
+function requireDeleted(rows: unknown[], label: string, id: number): void {
+  if (rows.length === 0) throw new NotFoundError(label, id)
+}
+
 /** Collect all storage_container ids in this collection (tubes, wells, papers, etc.) */
 export async function collectContainerIdsInCollection(
   database: Database,
   type: CollectionEntityType,
   id: number
 ): Promise<number[]> {
-  if (type === 'micronix_plate') {
-    const [tubeRows, wellRows] = await Promise.all([
-      database
-        .select({ id: micronixTube.id })
-        .from(micronixTube)
-        .where(eq(micronixTube.collectionId, id))
-        .all(),
-      database
-        .select({ id: staticWell.id })
-        .from(staticWell)
-        .where(eq(staticWell.collectionId, id))
-        .all(),
-    ])
-    return [...tubeRows.map((x) => x.id), ...wellRows.map((x) => x.id)]
-  }
-  if (type === 'cryovial_box') {
-    const rows = await database
-      .select({ id: cryovialTube.id })
-      .from(cryovialTube)
-      .where(eq(cryovialTube.collectionId, id))
-      .all()
-    return rows.map((x) => x.id)
-  }
-  if (type === 'box') {
-    const rows = await database
-      .select({ id: paper.id })
-      .from(paper)
-      .innerJoin(sheet, eq(paper.sheetId, sheet.id))
-      .where(eq(sheet.boxId, id))
-      .all()
-    return rows.map((x) => x.id)
-  }
-  const rows = await database
-    .select({ id: paper.id })
-    .from(paper)
-    .innerJoin(sheet, eq(paper.sheetId, sheet.id))
-    .where(eq(sheet.bagId, id))
-    .all()
-  return rows.map((x) => x.id)
+  return COLLECTION_KINDS[type].containerIds(database, id)
 }
 
-async function ensureCollectionRowExists(
-  database: Database,
-  type: CollectionEntityType,
-  id: number
-): Promise<void> {
-  if (type === 'micronix_plate') {
-    const p = await database.select().from(micronixPlate).where(eq(micronixPlate.id, id)).get()
-    if (!p) throw new NotFoundError('Micronix plate', id)
-  } else if (type === 'cryovial_box') {
-    const b = await database.select().from(cryovialBox).where(eq(cryovialBox.id, id)).get()
-    if (!b) throw new NotFoundError('Cryovial box', id)
-  } else if (type === 'box') {
-    const b = await database.select().from(box).where(eq(box.id, id)).get()
-    if (!b) throw new NotFoundError('Box', id)
-  } else {
-    const b = await database.select().from(bag).where(eq(bag.id, id)).get()
-    if (!b) throw new NotFoundError('Bag', id)
-  }
+function ensureCollectionRowExists(database: Database, type: CollectionEntityType, id: number): void {
+  const kind = COLLECTION_KINDS[type]
+  if (!kind.exists(database, id)) throw new NotFoundError(kind.label, id)
 }
 
 /**
@@ -291,7 +318,7 @@ export async function preflightCollectionDelete(
   database: Database,
   request: Pick<DeleteCollectionWithContentsRequest, 'type' | 'id'>
 ): Promise<CollectionDeletePreflight> {
-  await ensureCollectionRowExists(database, request.type, request.id)
+  ensureCollectionRowExists(database, request.type, request.id)
 
   const containerIdList = await collectContainerIdsInCollection(database, request.type, request.id)
   const containerIdSet = new Set(containerIdList)
@@ -318,7 +345,7 @@ export async function deleteCollectionWithContents(
 ): Promise<DeleteCollectionWithContentsResult> {
   const { type, id, removeEmptySubjects } = request
 
-  await ensureCollectionRowExists(database, type, id)
+  ensureCollectionRowExists(database, type, id)
 
   const containerIdList = await collectContainerIdsInCollection(database, type, id)
   const containerIdSet = new Set(containerIdList)
@@ -395,45 +422,7 @@ export async function deleteCollectionWithContents(
       }
     }
 
-    if (type === 'box') {
-      const sheetRows = await tx
-        .select({ id: sheet.id })
-        .from(sheet)
-        .where(eq(sheet.boxId, id))
-        .all()
-      sheetsDeleted = sheetRows.length
-      if (sheetRows.length > 0) {
-        tx.delete(sheet).where(eq(sheet.boxId, id)).run()
-      }
-      const boxDel = await tx.delete(box).where(eq(box.id, id)).returning()
-      if (boxDel.length === 0) {
-        throw new NotFoundError('Box', id)
-      }
-    } else if (type === 'bag') {
-      const sheetRows = await tx
-        .select({ id: sheet.id })
-        .from(sheet)
-        .where(eq(sheet.bagId, id))
-        .all()
-      sheetsDeleted = sheetRows.length
-      if (sheetRows.length > 0) {
-        tx.delete(sheet).where(eq(sheet.bagId, id)).run()
-      }
-      const bagDel = await tx.delete(bag).where(eq(bag.id, id)).returning()
-      if (bagDel.length === 0) {
-        throw new NotFoundError('Bag', id)
-      }
-    } else if (type === 'micronix_plate') {
-      const plateDel = await tx.delete(micronixPlate).where(eq(micronixPlate.id, id)).returning()
-      if (plateDel.length === 0) {
-        throw new NotFoundError('Micronix plate', id)
-      }
-    } else {
-      const cryoDel = await tx.delete(cryovialBox).where(eq(cryovialBox.id, id)).returning()
-      if (cryoDel.length === 0) {
-        throw new NotFoundError('Cryovial box', id)
-      }
-    }
+    sheetsDeleted = COLLECTION_KINDS[type].deleteRow(tx, id)
   })
 
   return {
