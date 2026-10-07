@@ -237,6 +237,39 @@ describe('Specimen registration', () => {
     })
   })
 
+  describe('Collection location', () => {
+    let other: number
+
+    beforeEach(async () => {
+      const storageType = await createTestStorageType(db, { name: 'Fridge' })
+      other = (await createTestLocation(db, { name: 'Other', storageTypeId: String(storageType.id), canContainCollections: true })).id
+    })
+
+    it('rejects a new plate given another location by a later call', async () => {
+      await registerSpecimens(db, [entry([tube('T1', { name: 'NEW', locationId, position: 'A01' })])])
+
+      const error = await rejection([entry([tube('T2', { name: 'NEW', locationId: other, position: 'A02' })])])
+
+      expect(error.errors[0]).toMatchObject({ field: 'collection', message: "Micronix plate 'NEW' is stored at a different location from the one given." })
+    })
+
+    it('rejects a box given another location than the one it is stored at', async () => {
+      await registerSpecimens(db, [entry([paperOn('Sheet-1')])])
+
+      const error = await rejection([
+        entry([{ containerType: 'paper', collection: { type: 'sheet', name: 'Sheet-2', parent: { type: 'box', name: 'PaperBox', locationId: other } } }]),
+      ])
+
+      expect(error.errors[0].message).toBe("Box 'PaperBox' is stored at a different location from the one given.")
+    })
+
+    it('accepts an existing plate given its own location or none', async () => {
+      await expect(
+        registerSpecimens(db, [entry([tube('T1', { name: 'P1', locationId, position: 'A02' }), tube('T2', { name: 'P1', position: 'A03' })])]),
+      ).resolves.toBeDefined()
+    })
+  })
+
   describe('Paper on Sheets', () => {
     it('puts several papers on one new sheet', async () => {
       const result = await registerSpecimens(db, [

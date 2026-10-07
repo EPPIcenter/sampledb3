@@ -32,7 +32,13 @@ export type PlannedCollection =
 
 export type Resolution = { target: CollectionTarget } | { error: string }
 
-type Candidate = { target: CollectionTarget; name: string; barcode: string | null }
+type Candidate = {
+  target: CollectionTarget
+  type: GridCollectionType | ParentCollectionType
+  name: string
+  barcode: string | null
+  locationId: number | null
+}
 
 const LABELS: Record<GridCollectionType | ParentCollectionType, string> = {
   micronix_plate: 'Micronix plate',
@@ -78,21 +84,25 @@ export class CollectionPlanner {
       if (planned.type === type && match(planned)) {
         out.push({
           target: { plannedIndex },
+          type,
           name: planned.name,
           barcode: 'barcode' in planned ? (planned.barcode ?? null) : null,
+          locationId: 'locationId' in planned ? planned.locationId : null,
         })
       }
     })
     return out
   }
 
-  private plannedLocationConflict(target: CollectionTarget, locationId: number | undefined): string | null {
-    if (!('plannedIndex' in target) || locationId == null) return null
-    const planned = this.planned[target.plannedIndex]
-    if ('locationId' in planned && planned.locationId !== locationId) {
-      return `${LABELS[planned.type]} '${planned.name}' is given two different locations in this request.`
-    }
-    return null
+  /**
+   * A location given for a Collection that exists or is already planned must be the one it has.
+   * Checking stored Collections too makes the rule hold when a request is split over several calls.
+   */
+  private locationConflict(match: Candidate, locationId: number | undefined): string | null {
+    if (locationId == null || match.locationId === locationId) return null
+    return 'plannedIndex' in match.target
+      ? `${LABELS[match.type]} '${match.name}' is given two different locations in this request.`
+      : `${LABELS[match.type]} '${match.name}' is stored at a different location from the one given.`
   }
 
   async resolveGrid(type: GridCollectionType, collection: GridCollectionInput): Promise<Resolution> {
@@ -102,31 +112,31 @@ export class CollectionPlanner {
 
     if (collection.id != null) {
       const row = await this.database
-        .select({ id: table.id, name: table.name, barcode: table.barcode })
+        .select({ id: table.id, name: table.name, barcode: table.barcode, locationId: table.locationId })
         .from(table)
         .where(eq(table.id, collection.id))
         .get()
       if (!row) return { error: `${label} not found: id ${collection.id}` }
-      candidates.push({ target: { existingId: row.id }, name: row.name, barcode: row.barcode })
+      candidates.push({ target: { existingId: row.id }, type, ...row })
     }
     if (collection.barcode) {
       const barcode = collection.barcode
       const row = await this.database
-        .select({ id: table.id, name: table.name, barcode: table.barcode })
+        .select({ id: table.id, name: table.name, barcode: table.barcode, locationId: table.locationId })
         .from(table)
         .where(eq(table.barcode, barcode))
         .get()
-      if (row) candidates.push({ target: { existingId: row.id }, name: row.name, barcode: row.barcode })
+      if (row) candidates.push({ target: { existingId: row.id }, type, ...row })
       else candidates.push(...this.plannedCandidates(type, (p) => 'barcode' in p && p.barcode === barcode))
     }
     if (collection.name) {
       const name = collection.name
       const row = await this.database
-        .select({ id: table.id, name: table.name, barcode: table.barcode })
+        .select({ id: table.id, name: table.name, barcode: table.barcode, locationId: table.locationId })
         .from(table)
         .where(eq(table.name, name))
         .get()
-      if (row) candidates.push({ target: { existingId: row.id }, name: row.name, barcode: row.barcode })
+      if (row) candidates.push({ target: { existingId: row.id }, type, ...row })
       else candidates.push(...this.plannedCandidates(type, (p) => p.name === name))
     }
 
@@ -149,7 +159,7 @@ export class CollectionPlanner {
         const found = collection.id != null ? `${label} id ${collection.id}` : `${label} with barcode '${collection.barcode ?? ''}'`
         return { error: `${found} is named '${match.name}', not '${collection.name}'.` }
       }
-      const conflict = this.plannedLocationConflict(match.target, collection.locationId)
+      const conflict = this.locationConflict(match, collection.locationId)
       if (conflict) return { error: conflict }
       return { target: match.target }
     }
@@ -180,21 +190,21 @@ export class CollectionPlanner {
 
     if (parent.id != null) {
       const row = await this.database
-        .select({ id: table.id, name: table.name })
+        .select({ id: table.id, name: table.name, locationId: table.locationId })
         .from(table)
         .where(eq(table.id, parent.id))
         .get()
       if (!row) return { error: `${label} not found: id ${parent.id}` }
-      candidates.push({ target: { existingId: row.id }, name: row.name, barcode: null })
+      candidates.push({ target: { existingId: row.id }, type, barcode: null, ...row })
     }
     if (parent.name) {
       const name = parent.name
       const row = await this.database
-        .select({ id: table.id, name: table.name })
+        .select({ id: table.id, name: table.name, locationId: table.locationId })
         .from(table)
         .where(eq(table.name, name))
         .get()
-      if (row) candidates.push({ target: { existingId: row.id }, name: row.name, barcode: null })
+      if (row) candidates.push({ target: { existingId: row.id }, type, barcode: null, ...row })
       else candidates.push(...this.plannedCandidates(type, (p) => p.name === name))
     }
 
@@ -204,7 +214,7 @@ export class CollectionPlanner {
       if (matches.length > 1 || (parent.name && match.name !== parent.name)) {
         return { error: `${label} id ${parent.id ?? ''} is named '${match.name}', not '${parent.name ?? ''}'.` }
       }
-      const conflict = this.plannedLocationConflict(match.target, parent.locationId)
+      const conflict = this.locationConflict(match, parent.locationId)
       if (conflict) return { error: conflict }
       return { target: match.target }
     }
