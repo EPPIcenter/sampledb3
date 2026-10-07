@@ -93,6 +93,7 @@ export async function writeRegistration(
     for (let entryIndex = 0; entryIndex < plan.entrySpecimen.length; entryIndex++) {
       current = { entryIndex }
       const index = plan.entrySpecimen[entryIndex]
+      if (index === undefined) throw new Error('Registration plan has an entry without a specimen')
       const planned = plan.specimens[index]
       let row = specimenRows[index]
       let reused = true

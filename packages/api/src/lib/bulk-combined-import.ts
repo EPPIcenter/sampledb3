@@ -73,14 +73,6 @@ export interface BulkCombinedError {
 /** The subjects could not all be registered; nothing was written. */
 class BulkCombinedRejected extends RefusedWithErrors<BulkCombinedError> {}
 
-/** Combined-import wording for module messages. */
-function combinedMessage(message: string): string {
-  if (message.includes('Position (well) is required')) {
-    return 'Position is required for this container type (e.g. A01)'
-  }
-  return message
-}
-
 /** A subject's own study wins over the payload-level default. */
 export function resolveSubjectStudyShortCode(
   payloadStudyShortCode: string | undefined,
@@ -185,7 +177,7 @@ async function registerSubjects(
     registration = await registerSpecimens(database, entries, { userId })
   } catch (error) {
     if (!(error instanceof SpecimenRegistrationError)) throw error
-    const mapped = error.errors.map((e) => ({ ...entryRefs[e.entryIndex], message: combinedMessage(e.message) }))
+    const mapped = error.errors.map((e) => ({ ...entryRefs[e.entryIndex], message: e.message }))
     if (error.status === 409) throw new BulkCombinedRejected(409, [...errors, ...mapped])
     errors.push(...mapped)
   }

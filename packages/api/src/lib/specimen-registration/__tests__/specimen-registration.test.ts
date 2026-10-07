@@ -294,6 +294,14 @@ describe('Specimen registration', () => {
     })
   })
 
+  it('keys a missing position to the position field', async () => {
+    const error = await rejection([entry([tube('T1', { name: 'P1' })])])
+
+    expect(error.errors).toEqual([
+      { entryIndex: 0, containerIndex: 0, field: 'position', message: 'Position is required for micronix tubes (e.g. A01).' },
+    ])
+  })
+
   it('rejects a unit not allowed for the container type', async () => {
     const other = await createTestUnit(db, { symbol: 'mg', name: 'milligram', category: 'mass' })
 
