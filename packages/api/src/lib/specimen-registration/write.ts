@@ -13,7 +13,8 @@ import {
   type RegistrationResult,
 } from './types'
 
-function only<T>(rows: T[], what: string): T {
+/** The row an `INSERT … RETURNING` gave back; throws if it gave none. */
+function insertedRow<T>(rows: T[], what: string): T {
   const row = rows.at(0)
   if (row === undefined) throw new Error(`Insert did not return ${what} row`)
   return row
@@ -62,14 +63,14 @@ export async function writeRegistration(
         case 'cryovial_box': {
           const table = GRID_COLLECTION_TABLES[planned.type]
           const values = { name: planned.name, barcode: planned.barcode ?? null, locationId: planned.locationId, ...audit }
-          id = only(await database.insert(table).values(values).returning({ id: table.id }), planned.type).id
+          id = insertedRow(await database.insert(table).values(values).returning({ id: table.id }), planned.type).id
           break
         }
         case 'box':
         case 'bag': {
           const table = PARENT_COLLECTION_TABLES[planned.type]
           const values = { name: planned.name, locationId: planned.locationId, ...audit }
-          id = only(await database.insert(table).values(values).returning({ id: table.id }), planned.type).id
+          id = insertedRow(await database.insert(table).values(values).returning({ id: table.id }), planned.type).id
           break
         }
         case 'sheet': {
@@ -80,7 +81,7 @@ export async function writeRegistration(
             bagId: planned.parentType === 'bag' ? parentId : null,
             ...audit,
           }
-          id = only(await database.insert(sheet).values(values).returning({ id: sheet.id }), 'sheet').id
+          id = insertedRow(await database.insert(sheet).values(values).returning({ id: sheet.id }), 'sheet').id
           break
         }
       }
@@ -102,7 +103,7 @@ export async function writeRegistration(
           row = planned.existing
         } else {
           const { existing: _existing, ...values } = planned
-          row = only(await database.insert(specimen).values({ ...values, ...audit }).returning(), 'specimen')
+          row = insertedRow(await database.insert(specimen).values({ ...values, ...audit }).returning(), 'specimen')
           reused = false
         }
         specimenRows[index] = row
@@ -114,7 +115,7 @@ export async function writeRegistration(
       current = { entryIndex: container.entryIndex, containerIndex: container.containerIndex }
       const entry = entries[container.entryIndex]
       const input = container.input
-      const { id } = only(
+      const { id } = insertedRow(
         await database
           .insert(storageContainer)
           .values({
