@@ -104,7 +104,7 @@ export function createActivityRoutes(database: Database): Hono {
     // One batched Source lookup for every specimen in the feed: a fixed number of queries.
     const sources = await resolveSpecimenSources(database, [
       ...recentSpecimens.map((s) => s.id),
-      ...recentContainers.flatMap((c) => (c.specimenId != null ? [c.specimenId] : [])),
+      ...recentContainers.map((c) => c.specimenId),
     ])
 
     const enrichedSpecimens = recentSpecimens.map((spec) => {
@@ -171,7 +171,7 @@ export function createActivityRoutes(database: Database): Hono {
       }
 
       let context: string | undefined = container.specimenTypeName ?? undefined
-      const source = container.specimenId != null ? sources.get(container.specimenId) : null
+      const source = sources.get(container.specimenId)
       if (source?.type === 'subject') {
         context = `${container.specimenTypeName || ''} • ${source.name} (${source.study.code})`.trim()
       }
