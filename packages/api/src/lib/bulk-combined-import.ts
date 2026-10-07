@@ -294,6 +294,12 @@ export async function runBulkCombinedImport(
 /**
  * Check a bulk combined import by running it in full_file mode and rolling it back.
  * Reports every problem, whatever atomicMode the import will use.
+ *
+ * For a full_file import, validate passes exactly when the import succeeds. A per_subject import
+ * commits each subject that passes, so there validate passes exactly when every subject imports,
+ * and each subject it flags is one the import rejects. The import can reject more: a subject that
+ * relies on something an earlier, failing subject would have created (a new plate or sheet) fails
+ * too, while validate, checking the file as one import, flags only the earlier subject.
  */
 export async function validateBulkCombinedPayload(
   database: Database,

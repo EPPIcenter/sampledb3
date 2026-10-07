@@ -352,6 +352,38 @@ describe('bulk-combined-import', () => {
       { name: 'a missing study on one subject', valid: false, subjects: () => [subject('A'), subject('B', undefined, 'NOPE')] },
     ]
 
+    // per_subject commits each subject that passes, so the property is weaker: validate passes
+    // exactly when every subject imports, and each subject validate flags is one the import rejects.
+    for (const fixture of fixtures) {
+      it(`${fixture.name} (per_subject)`, async () => {
+        const payload = { studyShortCode: 'ST1', subjects: fixture.subjects() }
+
+        const validation = await validateBulkCombinedPayload(testDb, payload)
+        const imported = await runBulkCombinedImport(testDb, { ...payload, atomicMode: 'per_subject' }, undefined)
+
+        const flagged = new Set(validation.errors.map((e) => e.subjectIndex))
+        const rejected = new Set((imported.errors ?? []).map((e) => e.index))
+        expect(validation.valid).toBe(fixture.valid)
+        expect(rejected.size === 0).toBe(validation.valid)
+        expect([...flagged].every((index) => rejected.has(index))).toBe(true)
+      })
+    }
+
+    it('per_subject also rejects a subject that needed a collection from a subject that failed', async () => {
+      // B finds the new plate only because A, which fails, would create it. Validate checks the
+      // file as one import, so it flags A alone; per_subject drops A's plate and B fails too.
+      const subjects = () => [
+        subject('A', tube('TAKEN', { name: 'NEW', locationId, position: 'A01' })),
+        subject('B', tube('T2', { name: 'NEW', position: 'A02' })),
+      ]
+
+      const validation = await validateBulkCombinedPayload(testDb, { studyShortCode: 'ST1', subjects: subjects() })
+      const imported = await runBulkCombinedImport(testDb, { studyShortCode: 'ST1', subjects: subjects(), atomicMode: 'per_subject' }, undefined)
+
+      expect(validation.errors.map((e) => e.subjectIndex)).toEqual([0])
+      expect((imported.errors ?? []).map((e) => e.index)).toEqual([0, 1])
+    })
+
     it('says a sublabel repeats in the file', async () => {
       const validation = await validateBulkCombinedPayload(testDb, {
         studyShortCode: 'ST1',

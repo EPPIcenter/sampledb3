@@ -34,4 +34,5 @@ We put **Specimen registration** (see [CONTEXT.md](../../CONTEXT.md)) behind one
 ## Consequences
 
 - Validate endpoints keep their wire shapes; each route maps module errors to its existing response.
+- Bulk combined validate always checks the file as one `full_file` import. For a `per_subject` import that is deliberately stricter than the import: validate passes exactly when every subject would import, and each subject it flags is rejected by the import. The import can reject more, because a subject that relies on a collection an earlier, failing subject would have created fails once that subject is rolled back.
 - Migration is in slices, each deleting the code it replaces: bulk combined import, `/subjects/with-specimens`, and `/specimens/bulk`; `POST /specimens` and add-container; derivations and the derivation CSV; control batches. `/subjects/with-specimens` and `/specimens/bulk` moved into the first slice: the first shares bulk combined's code, and the second's validator was the last user of the old placement resolver (ADR 0006).
