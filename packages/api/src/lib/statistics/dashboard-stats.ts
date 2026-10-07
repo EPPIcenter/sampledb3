@@ -69,8 +69,7 @@ export async function getDashboardStatistics(
     // Build specimen filter conditions
     const specimenConditions = []
     
-    // Filter by study
-    let subjectIds: number[] = []
+    // Filter by study, selecting its subjects with a subquery rather than an id list
     if (studyCode) {
       const studyRecord = await database
         .select()
@@ -82,25 +81,21 @@ export async function getDashboardStatistics(
       if (!studyRecord) {
         return emptyDashboardStatistics()
       }
-      const subjects = await database
+      const studySubjectIds = database
         .select({ id: studySubject.id })
         .from(studySubject)
         .where(eq(studySubject.studyId, studyRecord.id))
-      subjectIds = subjects.map(s => s.id)
-      if (subjectIds.length > 0) {
-        if (subjectIds.length === 1) {
-          specimenConditions.push(
-            eq(specimen.studySubjectId, subjectIds[0])
-          )
-        } else {
-          specimenConditions.push(
-            inArray(specimen.studySubjectId, subjectIds)
-          )
-        }
-      } else {
+      const anySubject = await database
+        .select({ id: studySubject.id })
+        .from(studySubject)
+        .where(eq(studySubject.studyId, studyRecord.id))
+        .limit(1)
+        .get()
+      if (!anySubject) {
         // No subjects in study, return empty results
         return emptyDashboardStatistics()
       }
+      specimenConditions.push(inArray(specimen.studySubjectId, studySubjectIds))
     }
 
     if (sourceType === 'subject') {
@@ -131,8 +126,6 @@ export async function getDashboardStatistics(
     const specimenIds = filteredSpecimens.map(s => s.id)
 
     let specimenAggregates = await computeSpecimenAggregates(database, filteredSpecimens, {
-      studyCode,
-      subjectIds,
       useSpecimenTypeCache: true,
     })
 
@@ -298,8 +291,6 @@ export async function getDashboardStatistics(
       const adjustedSpecimens = filteredSpecimens.filter((s) => filteredSpecimenIds.has(s.id))
 
       specimenAggregates = await computeSpecimenAggregates(database, adjustedSpecimens, {
-        studyCode,
-        subjectIds,
         useSpecimenTypeCache: false,
       })
     }

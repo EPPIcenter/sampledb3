@@ -6,7 +6,7 @@ import {
   study,
   micronixTube,
 } from '../../db/schema'
-import { eq, and, or, inArray, gte, lte, sql } from 'drizzle-orm'
+import { eq, and, or, inArray, gte, lte, sql, type SQL } from 'drizzle-orm'
 import { resolveSubjectsByStudyGrouped } from '../identifier-resolution'
 import { resolveContainerIdsWithAllTags } from '../container-tag-filter'
 import { enrichContainerData } from './enrich'
@@ -36,54 +36,45 @@ export async function buildContainerQuery(database: Database, filters: ExportFil
     throw new Error(`Study with short code '${filters.study}' not found`)
   }
 
-  // Get subject IDs for this study
-  const subjects = await database
+  // A subject list (or per-subject dates) needs the study's subject ids; a whole-study export
+  // selects them with a subquery instead of an id list.
+  const studySubjectIds = database
     .select({ id: studySubject.id })
     .from(studySubject)
     .where(eq(studySubject.studyId, studyRecord.id))
 
-  const subjectIds = subjects.map(s => s.id)
+  const subjectDates =
+    filters.subject_dates && Object.keys(filters.subject_dates).length > 0 ? filters.subject_dates : undefined
+  const listsSubjects = (filters.subject_ids && filters.subject_ids.length > 0) || subjectDates !== undefined
 
-  // If filtering by specific subjects, intersect
-  let filteredSubjectIds = subjectIds
-  if (filters.subject_ids && filters.subject_ids.length > 0) {
-    filteredSubjectIds = subjectIds.filter(id => filters.subject_ids!.includes(id))
+  let filteredSubjectIds: number[] = []
+  if (listsSubjects) {
+    filteredSubjectIds = (await studySubjectIds).map((s) => s.id)
+    if (filters.subject_ids && filters.subject_ids.length > 0) {
+      const requested = new Set(filters.subject_ids)
+      filteredSubjectIds = filteredSubjectIds.filter((id) => requested.has(id))
+    }
+    if (filteredSubjectIds.length === 0) {
+      return { containers: [], study: studyRecord, specimens: [] }
+    }
   }
 
-  if (filteredSubjectIds.length === 0) {
-    return { containers: [], study: studyRecord, specimens: [] }
-  }
-
-  // Build conditions for specimen query
-  const specimenConditions: any[] = []
-  specimenConditions.push(
-    sql`${specimen.studySubjectId} IS NOT NULL` as any
-  )
-
-  if (filteredSubjectIds.length === 1) {
-    specimenConditions.push(
-      eq(specimen.studySubjectId, filteredSubjectIds[0])
-    )
-  } else {
-    specimenConditions.push(
-      inArray(specimen.studySubjectId, filteredSubjectIds)
-    )
-  }
-
+  const specimenConditions: SQL[] = [sql`${specimen.studySubjectId} IS NOT NULL`]
   if (filters.specimen_type_ids && filters.specimen_type_ids.length > 0) {
-    specimenConditions.push(
-      inArray(specimen.specimenTypeId, filters.specimen_type_ids)
-    )
+    specimenConditions.push(inArray(specimen.specimenTypeId, filters.specimen_type_ids))
   }
+  const globalDateConditions = [
+    ...(filters.date_from ? [gte(specimen.collectionDate, filters.date_from)] : []),
+    ...(filters.date_to ? [lte(specimen.collectionDate, filters.date_to)] : []),
+  ]
 
-  // Handle per-subject date filtering
-  if (filters.subject_dates && Object.keys(filters.subject_dates).length > 0) {
+  /** Subject (and collection date) condition for one chunk of listed subjects. */
+  const subjectChunkCondition = (subjectIds: number[]): SQL | undefined => {
+    if (!subjectDates) return and(inArray(specimen.studySubjectId, subjectIds), ...globalDateConditions)
     const tolerance = filters.date_tolerance || 0
-    const subjectDates = filters.subject_dates
-    const subjectDateConditions: any[] = []
+    const conditions: SQL[] = []
     const undatedSubjectIds: number[] = []
-
-    for (const subjectId of filteredSubjectIds) {
+    for (const subjectId of subjectIds) {
       const entry = subjectDates[subjectId] as SubjectDateFilter | SubjectDateFilter[] | undefined
       const dateConditions = (entry == null ? [] : Array.isArray(entry) ? entry : [entry])
         .map((dateFilter) => subjectDateCondition(dateFilter, tolerance))
@@ -94,47 +85,43 @@ export async function buildContainerQuery(database: Database, filters: ExportFil
         continue
       }
       // Several entries for one subject (one per visit) are alternatives.
-      subjectDateConditions.push(and(eq(specimen.studySubjectId, subjectId), or(...dateConditions)))
+      conditions.push(and(eq(specimen.studySubjectId, subjectId), or(...dateConditions))!)
     }
-
     if (undatedSubjectIds.length > 0) {
-      subjectDateConditions.push(
-        and(
-          inArray(specimen.studySubjectId, undatedSubjectIds),
-          ...(filters.date_from ? [gte(specimen.collectionDate, filters.date_from)] : []),
-          ...(filters.date_to ? [lte(specimen.collectionDate, filters.date_to)] : []),
-        ),
-      )
+      conditions.push(and(inArray(specimen.studySubjectId, undatedSubjectIds), ...globalDateConditions)!)
     }
-
-    specimenConditions.push(or(...subjectDateConditions) as any)
-  } else {
-    // Use global date filters if no per-subject dates
-    if (filters.date_from) {
-      specimenConditions.push(
-        gte(specimen.collectionDate, filters.date_from)
-      )
-    }
-
-    if (filters.date_to) {
-      specimenConditions.push(
-        lte(specimen.collectionDate, filters.date_to)
-      )
-    }
+    return or(...conditions)
   }
 
-  // Get matching specimens
-  const specimens = await database
-    .select({
-      id: specimen.id,
-      studySubjectId: specimen.studySubjectId,
-      controlBatchId: specimen.controlBatchId,
-      specimenTypeId: specimen.specimenTypeId,
-      collectionDate: specimen.collectionDate,
-      created: specimen.created,
-    })
-    .from(specimen)
-    .where(and(...specimenConditions) as any)
+  // Listed subjects are queried a chunk at a time, so neither the IN list nor the per-subject
+  // OR grows with the upload.
+  const subjectConditions = listsSubjects
+    ? chunkArray(filteredSubjectIds, SQL_IN_CHUNK_SIZE).map(subjectChunkCondition)
+    : [and(inArray(specimen.studySubjectId, studySubjectIds), ...globalDateConditions)]
+
+  const specimens: Array<{
+    id: number
+    studySubjectId: number | null
+    controlBatchId: number | null
+    specimenTypeId: number
+    collectionDate: string | null
+    created: string
+  }> = []
+  for (const subjectCondition of subjectConditions) {
+    specimens.push(
+      ...(await database
+        .select({
+          id: specimen.id,
+          studySubjectId: specimen.studySubjectId,
+          controlBatchId: specimen.controlBatchId,
+          specimenTypeId: specimen.specimenTypeId,
+          collectionDate: specimen.collectionDate,
+          created: specimen.created,
+        })
+        .from(specimen)
+        .where(and(...specimenConditions, subjectCondition))),
+    )
+  }
 
   const specimenIds = specimens.map(s => s.id)
   if (specimenIds.length === 0) {

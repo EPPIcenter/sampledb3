@@ -14,8 +14,6 @@ export type SpecimenAggregates = {
 }
 
 type ComputeSpecimenAggregatesOptions = {
-  studyCode?: string
-  subjectIds: number[]
   useSpecimenTypeCache?: boolean
 }
 
@@ -50,7 +48,7 @@ export async function computeSpecimenAggregates(
   specimens: Array<typeof specimen.$inferSelect>,
   options: ComputeSpecimenAggregatesOptions,
 ): Promise<SpecimenAggregates> {
-  const { studyCode, subjectIds, useSpecimenTypeCache = false } = options
+  const { useSpecimenTypeCache = false } = options
 
   const bySourceType: Record<string, number> = {}
   specimens.forEach((s) => {
@@ -87,38 +85,36 @@ export async function computeSpecimenAggregates(
   })
 
   const byStudy: Record<string, number> = {}
-  if (subjectIds.length > 0 || !studyCode) {
-    const subjectSpecimens = specimens.filter((s) => s.studySubjectId)
-    const uniqueSubjectIds = [...new Set(subjectSpecimens.map((s) => s.studySubjectId!))]
+  const subjectSpecimens = specimens.filter((s) => s.studySubjectId)
+  const uniqueSubjectIds = [...new Set(subjectSpecimens.map((s) => s.studySubjectId!))]
 
-    if (uniqueSubjectIds.length > 0) {
-      const subjectChunks = chunkArray(uniqueSubjectIds, SQL_IN_CHUNK_SIZE)
-      const allSubjects: Array<{ id: number; studyId: number }> = []
+  if (uniqueSubjectIds.length > 0) {
+    const subjectChunks = chunkArray(uniqueSubjectIds, SQL_IN_CHUNK_SIZE)
+    const allSubjects: Array<{ id: number; studyId: number }> = []
 
-      for (const chunk of subjectChunks) {
-        const subjects = await database
-          .select({
-            id: studySubject.id,
-            studyId: studySubject.studyId,
-          })
-          .from(studySubject)
-          .where(inArray(studySubject.id, chunk))
-        allSubjects.push(...subjects)
-      }
-
-      const studyIds = [...new Set(allSubjects.map((s) => s.studyId))]
-      if (studyIds.length > 0) {
-        const studies = await database.select().from(study).where(inArray(study.id, studyIds))
-        const studyMap = new Map(studies.map((s) => [s.id, s.shortCode]))
-        const subjectStudyMap = new Map(allSubjects.map((s) => [s.id, studyMap.get(s.studyId)]))
-
-        subjectSpecimens.forEach((s) => {
-          const code = subjectStudyMap.get(s.studySubjectId!)
-          if (code) {
-            byStudy[code] = (byStudy[code] || 0) + 1
-          }
+    for (const chunk of subjectChunks) {
+      const subjects = await database
+        .select({
+          id: studySubject.id,
+          studyId: studySubject.studyId,
         })
-      }
+        .from(studySubject)
+        .where(inArray(studySubject.id, chunk))
+      allSubjects.push(...subjects)
+    }
+
+    const studyIds = [...new Set(allSubjects.map((s) => s.studyId))]
+    if (studyIds.length > 0) {
+      const studies = await database.select().from(study).where(inArray(study.id, studyIds))
+      const studyMap = new Map(studies.map((s) => [s.id, s.shortCode]))
+      const subjectStudyMap = new Map(allSubjects.map((s) => [s.id, studyMap.get(s.studyId)]))
+
+      subjectSpecimens.forEach((s) => {
+        const code = subjectStudyMap.get(s.studySubjectId!)
+        if (code) {
+          byStudy[code] = (byStudy[code] || 0) + 1
+        }
+      })
     }
   }
 
