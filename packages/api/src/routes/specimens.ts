@@ -6,16 +6,14 @@ import { z } from 'zod'
 import { listSpecimens } from '../lib/specimens/specimen-read'
 import { validateSpecimenData } from '../lib/validation'
 import { createContainerForSpecimen, pickContainerQuantity } from '../lib/container-creation'
-import {
-  toContainerWriteInput,
-  type BulkCombinedContainerInput,
-} from '../lib/container-write-placement'
-import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
+import type { RegistrationContainer } from '../lib/specimen-registration'
+import { ConflictError, handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import { containerSchema, containerSchemaWithLocation } from '../lib/schemas'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { validateBulkSpecimenRows, createBulkSpecimenRows } from '../lib/registration-orchestrator'
+import { insertedRow } from '../lib/inserted-row'
 
 /**
  * Create specimens routes with database injection
@@ -112,10 +110,10 @@ specimens.post('/:id/containers', memberMiddleware, async (c) => {
     if (parsed == null) {
       throw new ValidationError('Container is required')
     }
-    const container = parsed as BulkCombinedContainerInput
+    const container = parsed as RegistrationContainer
 
     const user = c.get('user')
-    const result = await createContainerForSpecimen(id, toContainerWriteInput(container), dbInstance, {
+    const result = await createContainerForSpecimen(id, container, dbInstance, {
       userId: user?.id,
       quantity: pickContainerQuantity(container),
     })
@@ -178,22 +176,19 @@ specimens.post('/', memberMiddleware, async (c) => {
       insertData.collectionDate = validation.resolved.collectionDate
     }
     
-    const [newSpecimen] = await dbInstance
-      .insert(specimen)
-      .values(insertData)
-      .returning()
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
-    if (!newSpecimen) {
-      throw new Error('Insert did not return specimen row')
-    }
+    const newSpecimen = insertedRow(
+      await dbInstance
+        .insert(specimen)
+        .values(insertData)
+        .returning(),
+      'specimen',
+    )
     let containerResult: { success: boolean; containerId?: number; error?: string } | null = null
 
     if (data.container) {
       try {
-        const container = data.container as BulkCombinedContainerInput
-        const writeInput = toContainerWriteInput(container)
-        const result = await createContainerForSpecimen(newSpecimen.id, writeInput, dbInstance, {
+        const container = data.container as RegistrationContainer
+        const result = await createContainerForSpecimen(newSpecimen.id, container, dbInstance, {
           userId: user?.id,
           quantity: pickContainerQuantity(container),
         })
@@ -206,7 +201,8 @@ specimens.post('/', memberMiddleware, async (c) => {
       } catch (err) {
         await dbInstance.delete(storageContainer).where(eq(storageContainer.specimenId, newSpecimen.id))
         await dbInstance.delete(specimen).where(eq(specimen.id, newSpecimen.id))
-        throw err instanceof ValidationError ? err : new ValidationError(err instanceof Error ? err.message : 'Failed to create container')
+        if (err instanceof ValidationError || err instanceof ConflictError) throw err
+        throw new ValidationError(err instanceof Error ? err.message : 'Failed to create container')
       }
     }
     

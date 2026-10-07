@@ -1,6 +1,6 @@
 # Frontend testing guide
 
-Web tests run on Vitest with jsdom and React Testing Library. `src/__tests__/setup.ts` runs before every file. It stubs `IntersectionObserver` and `localStorage` and mocks the `auth` and `settings` domain modules; override those per file as needed.
+Web tests run on Vitest with jsdom and React Testing Library. `src/__tests__/setup.ts` runs before every file. It stubs `IntersectionObserver`, `scrollIntoView` and `localStorage` and mocks the `auth` and `settings` domain modules; override those per file as needed.
 
 This guide covers the helpers. The rules are under Web tests in `CODING_STANDARDS.md`.
 

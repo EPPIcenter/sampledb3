@@ -52,15 +52,13 @@ export default function ContainerTypeUnitsManager({
   // All available units
   const [allUnits, setAllUnits] = useState<Unit[]>([])
 
-  // loadData is also called from handlers, so the mount effect goes through an Effect Event.
-  const loadInitialData = useEffectEvent(() => {
-    void loadData()
-  })
+  // Bumped by handlers to reload; the effect owns loading.
+  const [reloadCount, setReloadCount] = useState(0)
   useEffect(() => {
-    loadInitialData()
-  }, [])
+    void loadData()
+  }, [reloadCount])
 
-  const loadData = async () => {
+  const loadData = useEffectEvent(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -114,7 +112,7 @@ export default function ContainerTypeUnitsManager({
     } finally {
       setLoading(false)
     }
-  }
+  })
 
   const handleToggleUnit = async (containerType: ContainerType, unitId: number) => {
     const currentAllowed = allowedUnits[containerType]
@@ -152,7 +150,7 @@ export default function ContainerTypeUnitsManager({
       setError(errorMsg)
       onError?.(errorMsg)
       // Reload to get correct state
-      await loadData()
+      setReloadCount((n) => n + 1)
     }
   }
 

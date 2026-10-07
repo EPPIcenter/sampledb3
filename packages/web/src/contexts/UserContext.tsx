@@ -5,20 +5,6 @@ import { setSessionExpiredHandler } from '../lib/api/client'
 import { addRecentUser } from '../lib/localUserHistory'
 import { UserContext } from './user-context-instance'
 
-// Run refresh once per app load; cache result for remounts (e.g. Strict Mode)
-let userDidInit = false
-let userCachedUser: User | null = null
-let userCachedLoading = true
-let userCachedError: string | null = null
-
-/** For tests: forget the once-per-app-load user cache so each test starts signed out. */
-export function resetUserContextForTesting(): void {
-  userDidInit = false
-  userCachedUser = null
-  userCachedLoading = true
-  userCachedError = null
-}
-
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
@@ -26,6 +12,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const queryClient = useQueryClient()
   const currentUserId = useRef<number | null>(null)
+  // Strict Mode runs mount effects twice on the same instance; refs survive, so this loads the user once.
+  const didInit = useRef(false)
 
   const setUser = useCallback((u: User | null) => {
     // Cached queries include per-user data (personal export configs, settings); never show
@@ -36,9 +24,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
     currentUserId.current = nextId
     setUserState(u)
-    userCachedUser = u
-    userCachedLoading = false
-    userCachedError = null
   }, [queryClient])
 
   // A 401 from a data request means the session is gone: sign out so AuthGuard redirects.
@@ -50,8 +35,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const refreshUser = useCallback(async () => {
     setLoading(true)
     setError(null)
-    userCachedLoading = true
-    userCachedError = null
     try {
       const response = await authApi.getCurrentUser()
       const userData = response.user
@@ -67,17 +50,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
           const errMsg = axiosErr.response?.data?.error || 'Failed to load user'
           setError(errMsg)
           setUser(null)
-          userCachedError = errMsg
         }
       } else {
-        const errMsg = 'Failed to load user'
-        setError(errMsg)
+        setError('Failed to load user')
         setUser(null)
-        userCachedError = errMsg
       }
     } finally {
       setLoading(false)
-      userCachedLoading = false
     }
   }, [setUser])
 
@@ -130,15 +109,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [setUser])
 
   useEffect(() => {
-    if (!userDidInit) {
-      userDidInit = true
-      void refreshUser()
-    } else {
-      setUser(userCachedUser)
-      setLoading(userCachedLoading)
-      setError(userCachedError)
-    }
-  }, [refreshUser, setUser])
+    if (didInit.current) return
+    didInit.current = true
+    void refreshUser()
+  }, [refreshUser])
 
   // Permission helpers
   const canWrite = useMemo(() => user?.role === 'admin' || user?.role === 'member', [user])

@@ -219,7 +219,7 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
     ctx.save()
     ctx.translate(margin.left, margin.top)
 
-    const axisColors = getAppAxisColors()
+    const axisColors = getAppAxisColors(theme)
 
     // Create scales
     const xScale = scaleLinear()
@@ -353,7 +353,6 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
       .style('font-size', '14px')
       .style('text-anchor', 'middle')
       .text('Subject')
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads CSS variables; theme changes them
   }, [theme, allPoints, dateRange, filteredSubjects, yAxisLabels, seriesData])
 
   // Handle mouse move for tooltip

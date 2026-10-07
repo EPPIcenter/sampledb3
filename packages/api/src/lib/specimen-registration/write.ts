@@ -1,23 +1,12 @@
 /** Carry out a registration plan that has no errors. Call inside a write transaction. */
 import type { Database } from '../../db/client'
-import {
-  bag,
-  box,
-  cryovialBox,
-  cryovialTube,
-  micronixPlate,
-  micronixTube,
-  paper,
-  sheet,
-  specimen,
-  staticWell,
-  storageContainer,
-  type Specimen,
-} from '../../db/schema'
+import { paper, sheet, specimen, storageContainer, type Specimen } from '../../db/schema'
 import { utcNow } from '../datetime'
 import { sqliteConstraintConflict } from '../error-handler'
-import type { CollectionTarget } from './collections'
+import { insertedRow } from '../inserted-row'
+import type { CollectionTarget, PlannedCollection } from './collections'
 import type { RegistrationPlan } from './plan'
+import { GRID_COLLECTION_TABLES, GRID_CONTAINER_TABLES, PARENT_COLLECTION_TABLES } from './tables'
 import {
   SpecimenRegistrationError,
   type CreatedCollection,
@@ -25,10 +14,23 @@ import {
   type RegistrationResult,
 } from './types'
 
-function only<T>(rows: T[], what: string): T {
-  const row = rows.at(0)
-  if (row === undefined) throw new Error(`Insert did not return ${what} row`)
-  return row
+type ContainerRef = { entryIndex: number; containerIndex?: number }
+
+/** The first container that needs each planned Collection: directly, or as its Sheet's box or bag. */
+function collectionRequesters(plan: RegistrationPlan): ContainerRef[] {
+  const requesters: Array<ContainerRef | undefined> = plan.collections.map(() => undefined)
+  for (const { entryIndex, containerIndex, collection } of plan.containers) {
+    let target: CollectionTarget | null = collection
+    while (target && 'plannedIndex' in target) {
+      requesters[target.plannedIndex] ??= { entryIndex, containerIndex }
+      const planned: PlannedCollection = plan.collections[target.plannedIndex]
+      target = planned.type === 'sheet' ? planned.parent : null
+    }
+  }
+  return requesters.map((requester) => {
+    if (!requester) throw new Error('Planned collection is not used by any container')
+    return requester
+  })
 }
 
 export async function writeRegistration(
@@ -38,7 +40,8 @@ export async function writeRegistration(
 ): Promise<RegistrationResult> {
   const now = utcNow()
   const audit = { created: now, lastUpdated: now, createdBy: userId, updatedBy: userId }
-  let current: { entryIndex: number; containerIndex?: number } = { entryIndex: 0 }
+  const requesters = collectionRequesters(plan)
+  let current: ContainerRef = { entryIndex: 0 }
 
   try {
     const collectionIds: number[] = []
@@ -46,21 +49,22 @@ export async function writeRegistration(
     const idOf = (target: CollectionTarget): number =>
       'existingId' in target ? target.existingId : collectionIds[target.plannedIndex]
 
-    for (const planned of plan.collections) {
+    for (const [plannedIndex, planned] of plan.collections.entries()) {
+      current = requesters[plannedIndex]
       let id: number
       switch (planned.type) {
         case 'micronix_plate':
         case 'cryovial_box': {
-          const table = planned.type === 'micronix_plate' ? micronixPlate : cryovialBox
+          const table = GRID_COLLECTION_TABLES[planned.type]
           const values = { name: planned.name, barcode: planned.barcode ?? null, locationId: planned.locationId, ...audit }
-          id = only(await database.insert(table).values(values).returning({ id: table.id }), planned.type).id
+          id = insertedRow(await database.insert(table).values(values).returning({ id: table.id }), planned.type).id
           break
         }
         case 'box':
         case 'bag': {
-          const table = planned.type === 'box' ? box : bag
+          const table = PARENT_COLLECTION_TABLES[planned.type]
           const values = { name: planned.name, locationId: planned.locationId, ...audit }
-          id = only(await database.insert(table).values(values).returning({ id: table.id }), planned.type).id
+          id = insertedRow(await database.insert(table).values(values).returning({ id: table.id }), planned.type).id
           break
         }
         case 'sheet': {
@@ -71,7 +75,7 @@ export async function writeRegistration(
             bagId: planned.parentType === 'bag' ? parentId : null,
             ...audit,
           }
-          id = only(await database.insert(sheet).values(values).returning({ id: sheet.id }), 'sheet').id
+          id = insertedRow(await database.insert(sheet).values(values).returning({ id: sheet.id }), 'sheet').id
           break
         }
       }
@@ -84,6 +88,7 @@ export async function writeRegistration(
     for (let entryIndex = 0; entryIndex < plan.entrySpecimen.length; entryIndex++) {
       current = { entryIndex }
       const index = plan.entrySpecimen[entryIndex]
+      if (index === undefined) throw new Error('Registration plan has an entry without a specimen')
       const planned = plan.specimens[index]
       let row = specimenRows[index]
       let reused = true
@@ -92,7 +97,7 @@ export async function writeRegistration(
           row = planned.existing
         } else {
           const { existing: _existing, ...values } = planned
-          row = only(await database.insert(specimen).values({ ...values, ...audit }).returning(), 'specimen')
+          row = insertedRow(await database.insert(specimen).values({ ...values, ...audit }).returning(), 'specimen')
           reused = false
         }
         specimenRows[index] = row
@@ -104,7 +109,7 @@ export async function writeRegistration(
       current = { entryIndex: container.entryIndex, containerIndex: container.containerIndex }
       const entry = entries[container.entryIndex]
       const input = container.input
-      const { id } = only(
+      const { id } = insertedRow(
         await database
           .insert(storageContainer)
           .values({
@@ -119,21 +124,14 @@ export async function writeRegistration(
         'container',
       )
       const collectionId = idOf(container.collection)
-      switch (input.containerType) {
-        case 'micronix_tube':
-          await database.insert(micronixTube).values({ id, collectionId, barcode: input.barcode.trim(), position: container.position })
-          break
-        case 'cryovial_tube':
-          await database
-            .insert(cryovialTube)
-            .values({ id, collectionId, barcode: input.barcode?.trim() || null, position: container.position })
-          break
-        case 'static_well':
-          await database.insert(staticWell).values({ id, collectionId, position: container.position })
-          break
-        case 'paper':
-          await database.insert(paper).values({ id, sheetId: collectionId, sublabel: input.sublabel?.trim() || null })
-          break
+      if (input.containerType === 'paper') {
+        await database.insert(paper).values({ id, sheetId: collectionId, sublabel: input.sublabel?.trim() || null })
+      } else {
+        // The plan checked that a micronix tube has a barcode.
+        const barcode = 'barcode' in input ? input.barcode?.trim() || null : null
+        await database
+          .insert(GRID_CONTAINER_TABLES[input.containerType])
+          .values({ id, collectionId, position: container.position, ...(barcode !== null && { barcode }) })
       }
       entry.containerIds.push(id)
     }

@@ -7,6 +7,10 @@ import {
   createTestSpecimenType,
   createTestSpecimen,
   createTestUnit,
+  createTestBox,
+  createTestSheet,
+  createTestStorageContainer,
+  createTestPaper,
 } from '../../__tests__/helpers/factories'
 import {
   resolveContainerByPosition,
@@ -17,7 +21,7 @@ import {
   type ContainerInfo,
 } from '../container-move'
 import { storageContainer } from '../../db/schema'
-import { micronixTube, staticWell, box, sheet, paper } from '../../db/schema'
+import { micronixTube, staticWell, paper } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { utcNow } from '../datetime'
 
@@ -568,16 +572,12 @@ describe('container-move', () => {
       const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
       const specimen = await createTestSpecimen(testDb, specimenType.id)
       const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
-      const now = utcNow()
-      const [boxA] = await testDb.insert(box).values({ name: 'BA', locationId: location.id, created: now, lastUpdated: now }).returning()
-      const [boxB] = await testDb.insert(box).values({ name: 'BB', locationId: location.id, created: now, lastUpdated: now }).returning()
-      const [sheetA] = await testDb.insert(sheet).values({ name: 'Sheet-1', boxId: boxA.id }).returning()
-      const [sheetB] = await testDb.insert(sheet).values({ name: 'Sheet-1', boxId: boxB.id }).returning()
-      const [container] = await testDb
-        .insert(storageContainer)
-        .values({ specimenId: specimen.id, unitId: unit.id, totalQuantity: 1, remainingQuantity: 1, created: now, lastUpdated: now })
-        .returning()
-      await testDb.insert(paper).values({ id: container!.id, sheetId: sheetB.id })
+      const boxA = await createTestBox(testDb, { name: 'BA', locationId: location.id })
+      const boxB = await createTestBox(testDb, { name: 'BB', locationId: location.id })
+      const sheetA = await createTestSheet(testDb, { name: 'Sheet-1', boxId: boxA.id })
+      const sheetB = await createTestSheet(testDb, { name: 'Sheet-1', boxId: boxB.id })
+      const container = await createTestStorageContainer(testDb, { specimenId: specimen.id, unitId: unit.id })
+      await createTestPaper(testDb, { containerId: container.id, sheetId: sheetB.id })
 
       const ambiguous = await executeMoves(testDb, {
         mappings: [{ fromCollectionName: 'Sheet-1', toCollectionName: 'Sheet-1' }],
@@ -593,6 +593,50 @@ describe('container-move', () => {
       expect(result.success).toBe(true)
       const [moved] = await testDb.select().from(paper).all()
       expect(moved.sheetId).toBe(sheetA.id)
+    })
+
+    /** Boxes BA, BB, BC; Sheet-1 in BA and BB, Only-Sheet in BA, Dest in BC; one paper on BA's Sheet-1. */
+    async function seedSheets() {
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const [boxA, boxB, boxC] = await Promise.all(
+        ['BA', 'BB', 'BC'].map((name) => createTestBox(testDb, { name, locationId: location.id })),
+      )
+      const sheetA = await createTestSheet(testDb, { name: 'Sheet-1', boxId: boxA.id })
+      await createTestSheet(testDb, { name: 'Sheet-1', boxId: boxB.id })
+      const onlySheet = await createTestSheet(testDb, { name: 'Only-Sheet', boxId: boxA.id })
+      const dest = await createTestSheet(testDb, { name: 'Dest', boxId: boxC.id })
+      const container = await createTestStorageContainer(testDb)
+      await createTestPaper(testDb, { containerId: container.id, sheetId: sheetA.id })
+      return { container, sheetA, onlySheet, dest }
+    }
+
+    it('reports a source sheet name shared by several sheets instead of moving from all of them', async () => {
+      const { container, sheetA } = await seedSheets()
+
+      const result = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: 'Sheet-1', toCollectionName: 'Dest' }],
+        moves: [{ identifier: { type: 'container_id', containerId: container.id }, targetPosition: '' }],
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.errors?.[0].error).toMatch(/Source sheet "Sheet-1" matches 2 sheets; set fromParentName/)
+      const [unmoved] = await testDb.select().from(paper).all()
+      expect(unmoved.sheetId).toBe(sheetA.id)
+    })
+
+    it('resolves sheet names without parent names when each matches one sheet', async () => {
+      const { container, onlySheet, dest } = await seedSheets()
+      await testDb.update(paper).set({ sheetId: onlySheet.id }).run()
+
+      const result = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: 'Only-Sheet', toCollectionName: 'Dest' }],
+        moves: [{ identifier: { type: 'container_id', containerId: container.id }, targetPosition: '' }],
+      })
+
+      expect(result.success).toBe(true)
+      const [moved] = await testDb.select().from(paper).all()
+      expect(moved.sheetId).toBe(dest.id)
     })
   })
 })

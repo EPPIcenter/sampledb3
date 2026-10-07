@@ -30,6 +30,11 @@ export type RegistrationEntry =
 
 export type RegistrationOptions = {
   userId?: number
+  /**
+   * How errors name the caller's input when a value repeats in it, for example 'your file'
+   * for a CSV import. Defaults to 'this request'.
+   */
+  inputName?: string
 }
 
 /** Keyed to the input: entries[entryIndex].containers[containerIndex]. */
@@ -60,21 +65,20 @@ export type RegistrationResult = {
   collectionsCreated: CreatedCollection[]
 }
 
-export type RegistrationCheck = {
-  errors: RegistrationError[]
-  collectionsToCreate: Array<Omit<CreatedCollection, 'id'>>
-}
-
 /**
- * Registration refused. Status 400: the input has problems, all listed. Status 409: a write hit
- * a database constraint the plan did not foresee (for example a concurrent registration).
+ * A write refused with every problem found, keyed however the caller keys its input.
+ * Status 400: the input has problems, all listed. Status 409: a write hit a database constraint
+ * the plan did not foresee (for example a concurrent registration).
  */
-export class SpecimenRegistrationError extends Error {
+export class RefusedWithErrors<E extends { message: string }> extends Error {
   constructor(
     readonly status: 400 | 409,
-    readonly errors: RegistrationError[],
+    readonly errors: E[],
   ) {
-    super(errors[0]?.message ?? 'Specimen registration failed')
-    this.name = 'SpecimenRegistrationError'
+    super(errors[0]?.message ?? 'Request refused')
+    this.name = new.target.name
   }
 }
+
+/** Registration refused; errors are keyed to the registration's entries. */
+export class SpecimenRegistrationError extends RefusedWithErrors<RegistrationError> {}

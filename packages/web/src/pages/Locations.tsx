@@ -158,8 +158,7 @@ export default function Locations() {
     if (nodeRef && tree) {
       // Small delay to ensure DOM is updated
       setTimeout(() => {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- jsdom has no scrollIntoView
-        nodeRef.scrollIntoView?.({
+        nodeRef.scrollIntoView({
           behavior: 'smooth',
           block: 'center',
           inline: 'nearest',

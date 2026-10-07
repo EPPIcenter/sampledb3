@@ -12,6 +12,7 @@ import {
 import type { Database } from '../../../db/client'
 import { storageContainerTag, specimen as specimenTable } from '../../../db/schema'
 import { utcNow } from '../../datetime'
+import { eq } from 'drizzle-orm'
 import {
   buildContainerQuery,
   buildMultiStudyContainerQuery,
@@ -121,6 +122,65 @@ describe('buildContainerQuery', () => {
     expect(result.containers).toHaveLength(1)
     expect(result.containers[0].id).toBe(bothTagsContainer.id)
   })
+})
+
+describe('buildContainerQuery for studies with more subjects than SQLite allows as bound parameters', () => {
+  let testDb: Database
+  let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
+  const count = 70_000
+
+  beforeEach(async () => {
+    const setup = await setupTestDatabase()
+    testDb = setup.db
+    sqlite = setup.sqlite
+  })
+
+  afterEach(() => {
+    if (sqlite) cleanupTestDatabase(sqlite)
+  })
+
+  /** 70,000 subjects; the first three have one dated specimen and container each. */
+  async function seedBigStudy() {
+    const study = await createTestStudy(testDb, { title: 'Big Study', shortCode: 'BIG' })
+    const type = await createTestSpecimenType(testDb, { name: 'DBS' })
+    const subjectIds: number[] = []
+    sqlite.exec('BEGIN')
+    const addSubject = sqlite.prepare(
+      "INSERT INTO study_subject (study_id, name, created, last_updated) VALUES (?, ?, '2024-01-01', '2024-01-01')",
+    )
+    for (let i = 0; i < count; i++) {
+      subjectIds.push(Number(addSubject.run(study.id, `S${i}`).lastInsertRowid))
+    }
+    sqlite.exec('COMMIT')
+    const unit = await createTestUnit(testDb, { symbol: 'spots', name: 'spots', category: 'count' })
+    for (const [i, subjectId] of subjectIds.slice(0, 3).entries()) {
+      const spec = await createTestSpecimen(testDb, type.id, { studySubjectId: subjectId })
+      await testDb.update(specimenTable).set({ collectionDate: `2024-0${i + 1}-01` }).where(eq(specimenTable.id, spec.id))
+      await createTestStorageContainer(testDb, { specimenId: spec.id, unitId: unit.id })
+    }
+    return subjectIds
+  }
+
+  it('exports the whole study', async () => {
+    await seedBigStudy()
+
+    const result = await buildContainerQuery(testDb, { study: 'BIG' })
+
+    expect(result.containers).toHaveLength(3)
+  }, 60_000)
+
+  it('exports a listed subject set with per-subject dates', async () => {
+    const subjectIds = await seedBigStudy()
+
+    const result = await buildContainerQuery(testDb, {
+      study: 'BIG',
+      subject_ids: subjectIds,
+      subject_dates: { [subjectIds[0]]: [{ exact: '2024-01-01' }], [subjectIds[1]]: [{ exact: '2030-01-01' }] },
+    })
+
+    // Subject 0 matches its date, subject 1 does not, subject 2 is listed without a date.
+    expect(result.specimens?.map((s) => s.studySubjectId).sort((a, b) => a! - b!)).toEqual([subjectIds[0], subjectIds[2]])
+  }, 60_000)
 })
 
 describe('resolveMicronixBarcodesToContainers', () => {

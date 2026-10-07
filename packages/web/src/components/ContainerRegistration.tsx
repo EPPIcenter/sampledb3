@@ -133,14 +133,18 @@ export default function ContainerRegistration({
     }
   }
 
-  // When allowed types are restricted and current type is not allowed, reset to first allowed
-  useEffect(() => {
+  // When allowed types are restricted and current type is not allowed, reset to first allowed.
+  // Runs when the allowed list changes; the select only offers allowed types.
+  const resetDisallowedContainerType = useEffectEvent(() => {
     if (allowedContainerTypes.length > 0 && !allowedContainerTypes.includes(containerType)) {
       const first = allowedContainerTypes[0] as ContainerType
       setContainerType(first)
       setFormData((prev) => ({ ...prev, containerType: first }))
     }
-  }, [allowedContainerTypes, containerType])
+  })
+  useEffect(() => {
+    resetDisallowedContainerType()
+  }, [allowedContainerTypes])
 
   // Read at use time, so a unit picked while defaults load is kept.
   const hasChosenUnit = useEffectEvent(() => Boolean(selectedUnitId || defaultValue?.unitId))

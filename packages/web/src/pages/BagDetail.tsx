@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import CollectionTableWithExport from '../components/CollectionTableWithExport'
@@ -12,6 +12,7 @@ import {
   type CollectionTableEntry,
 } from '../lib/collection-table-columns'
 import { useTableViewConfigurations } from '../hooks/useTableViewConfigurations'
+import { useCollectionSheets } from '../hooks/useCollectionSheets'
 import CollectionDeleteDialog from '../components/CollectionDeleteDialog'
 import '../styles/storage.css'
 
@@ -24,8 +25,6 @@ export default function BagDetail() {
   const detailStatus = fromQuery(dataQuery)
   const [viewMode, setViewMode] = useState<'sheets' | 'table'>('sheets')
   const [showDeleteCollection, setShowDeleteCollection] = useState(false)
-  const [expandedSheets, setExpandedSheets] = useState<Set<number>>(new Set())
-  const initializedSheets = useRef(false)
   const {
     configurations: viewConfigurations,
     selectedConfigId,
@@ -33,31 +32,7 @@ export default function BagDetail() {
     loading: loadingConfigs,
   } = useTableViewConfigurations()
 
-  useEffect(() => {
-    initializedSheets.current = false
-    setExpandedSheets(new Set())
-  }, [bagId])
-
-  // Initialize expanded sheets (default to collapsed if more than 3 sheets)
-  // This hook must be called before any conditional returns to maintain hook order
-  const sheets = useMemo(
-    () =>
-      (data?.contents.sheets || []) as Array<{
-        id: number
-        name?: string
-        papers?: CollectionTableEntry[]
-      }>,
-    [data],
-  )
-  useEffect(() => {
-    if (sheets.length > 0 && !initializedSheets.current) {
-      initializedSheets.current = true
-      // Default to expanded if 3 or fewer sheets, otherwise collapsed
-      if (sheets.length <= 3) {
-        setExpandedSheets(new Set(sheets.map((s: any) => s.id)))
-      }
-    }
-  }, [sheets])
+  const { sheets, expandedSheets, toggleSheet } = useCollectionSheets(bagId, data?.contents)
 
   const tableRows = useMemo(() => {
     const bag = data?.bag
@@ -146,18 +121,6 @@ export default function BagDetail() {
   const activeSpots = sheets.reduce((sum: number, sheet: any) => 
     sum + (sheet.papers?.filter((p: any) => p.container?.remainingQuantity > 0).length || 0), 0
   )
-
-  const toggleSheet = (sheetId: number) => {
-    setExpandedSheets(prev => {
-      const next = new Set(prev)
-      if (next.has(sheetId)) {
-        next.delete(sheetId)
-      } else {
-        next.add(sheetId)
-      }
-      return next
-    })
-  }
 
   return (
     <div className="storage-page">

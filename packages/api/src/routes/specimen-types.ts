@@ -17,6 +17,7 @@ import { parseId, requireParam } from '../lib/common-validators'
 import { handleRouteError, NotFoundError } from '../lib/error-handler'
 import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
+import { chunkArray, SQL_IN_CHUNK_SIZE } from '../lib/sql-helpers'
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -54,17 +55,6 @@ async function checkSpecimenTypeInUse(id: number, database: any): Promise<string
 }
 
 /**
- * Helper function to chunk an array into smaller arrays
- */
-function chunkArray<T>(array: T[], chunkSize: number): T[][] {
-  const chunks: T[][] = []
-  for (let i = 0; i < array.length; i += chunkSize) {
-    chunks.push(array.slice(i, i + chunkSize))
-  }
-  return chunks
-}
-
-/**
  * Check if a container type is in use by existing containers for a specimen type
  */
 async function checkContainerTypeInUse(
@@ -87,10 +77,8 @@ async function checkContainerTypeInUse(
 
     const containerIds = containers.map((c: any) => c.id)
 
-    // SQLite has a limit on the number of variables in a query (typically 999)
-    // Batch the queries to avoid exceeding this limit
-    const SQLITE_MAX_VARS = 500 // Conservative limit
-    const chunks = chunkArray(containerIds, SQLITE_MAX_VARS)
+    // Batch the queries to stay under SQLite's parameter limit
+    const chunks = chunkArray(containerIds, SQL_IN_CHUNK_SIZE)
 
     // Check if any of these containers exist in the specific container type table
     let foundContainer: any = null

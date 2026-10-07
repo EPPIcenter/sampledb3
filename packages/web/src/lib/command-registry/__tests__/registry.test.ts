@@ -5,7 +5,8 @@ import type { CommandDependencies } from '../command-deps'
 function mockDeps(overrides: Partial<CommandDependencies> = {}): CommandDependencies {
   return {
     navigate: vi.fn() as CommandDependencies['navigate'],
-    location: { pathname: '/', search: '', hash: '', state: null, key: 'default' },
+    pathname: '/',
+    search: '',
     canWrite: true,
     isAdmin: false,
     canManageReferenceData: false,

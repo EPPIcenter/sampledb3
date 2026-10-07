@@ -2,6 +2,7 @@ import type { Database } from '../db/client'
 import type { ContainerWriteInput } from '@sampledb/contract'
 import type { DatabaseOrTransaction } from './db-types'
 import { registerSpecimens, SpecimenRegistrationError } from './specimen-registration'
+import { ConflictError } from './error-handler'
 
 export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
 
@@ -28,6 +29,7 @@ export type CreateContainerForSpecimenOptions = {
 /**
  * Add one Container to an existing Specimen through Specimen registration.
  * Callers not yet migrated to registerSpecimens use this; it reports the first problem.
+ * A write that hits a database constraint throws ConflictError, so every caller replies 409.
  */
 export async function createContainerForSpecimen(
   specimenId: number,
@@ -46,6 +48,7 @@ export async function createContainerForSpecimen(
     return { success: true, containerId: result.entries[0]?.containerIds[0] }
   } catch (error) {
     if (error instanceof SpecimenRegistrationError) {
+      if (error.status === 409) throw new ConflictError(error.message, { errors: error.errors })
       return { success: false, error: error.message }
     }
     throw error

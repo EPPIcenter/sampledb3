@@ -45,6 +45,9 @@ export async function findActiveUserByEmailOrUsername(
   )
 }
 
+/** bcrypt cost for every stored password hash, and for the throwaway hash in the login timing guard. */
+export const BCRYPT_COST = 10
+
 let dummyPasswordHash: string | null = null
 
 /**
@@ -53,7 +56,7 @@ let dummyPasswordHash: string | null = null
  */
 export async function verifyPasswordConstantTime(password: string, passwordHash: string | undefined): Promise<boolean> {
   if (passwordHash) return bcrypt.compare(password, passwordHash)
-  dummyPasswordHash ??= await bcrypt.hash('no-such-user', 10)
+  dummyPasswordHash ??= await bcrypt.hash('no-such-user', BCRYPT_COST)
   await bcrypt.compare(password, dummyPasswordHash)
   return false
 }
@@ -117,7 +120,7 @@ export async function registerApprovedUser(
       throw new ValidationError('Username already in use')
     }
   }
-  const passwordHash = await bcrypt.hash(data.password, 10)
+  const passwordHash = await bcrypt.hash(data.password, BCRYPT_COST)
   const createdAt = utcNow()
   const [user] = await database
     .insert(users)

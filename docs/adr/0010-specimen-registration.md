@@ -18,10 +18,10 @@ We put **Specimen registration** (see [CONTEXT.md](../../CONTEXT.md)) behind one
 ## Rules the module owns
 
 - **Specimen identity**: (Source, specimen type, collection date), a missing date matching only a missing date. A match is reused and reported as `reused`; entries with the same key in one request become one Specimen.
-- **Collection identity**: every identifier given (id, barcode, name) must resolve to the same **Collection**. One that misses while another matches, or two that match different collections, is an error. A Collection is created only when nothing matches and a location is given. Sheets are created under their box or bag when missing.
+- **Collection identity**: every identifier given (id, barcode, name) must resolve to the same **Collection**. One that misses while another matches, or two that match different collections, is an error. A Collection is created only when nothing matches and a location is given. A location given for a Collection that exists, or that the request already creates, must be the one it has, so one new plate given two locations fails however the request is split into calls. Sheets are created under their box or bag when missing.
 - **Placement**: one **Grid position** per container per collection, checked against the database and the rest of the request by resolved collection, after normalizing positions (`A2` → `A02`). Any number of Papers share a Sheet; a duplicate sublabel on one Sheet is an error.
 - **Units**: an omitted unit takes the configured default for the container type; an unknown or disallowed unit is an error. No hardcoded container-type default.
-- **Atomicity**: one call writes everything or nothing. Atomicity across calls is the caller's choice: bulk combined `per_subject` mode calls once per subject in its own savepoint.
+- **Atomicity**: one call writes everything or nothing. Atomicity across calls is the caller's choice: bulk combined `per_subject` mode registers each subject in its own `withWriteTransaction`, which becomes a savepoint when an outer transaction is open, so a failed subject leaves nothing behind, its Subject row included.
 - **Errors**: problems found while planning are a `SpecimenRegistrationError` with status 400 and the full error list. A constraint violation while writing is the same error with status 409.
 
 ## Considered options
@@ -34,4 +34,5 @@ We put **Specimen registration** (see [CONTEXT.md](../../CONTEXT.md)) behind one
 ## Consequences
 
 - Validate endpoints keep their wire shapes; each route maps module errors to its existing response.
-- Migration is in slices, each deleting the code it replaces: bulk combined import; `/specimens/bulk`, `/subjects/with-specimens`, `POST /specimens` and add-container; derivations and the derivation CSV; control batches.
+- Bulk combined validate always checks the file as one `full_file` import. For a `per_subject` import that is deliberately stricter than the import: validate passes exactly when every subject would import, and each subject it flags is rejected by the import. The import can reject more, because a subject that relies on a collection an earlier, failing subject would have created fails once that subject is rolled back.
+- Migration is in slices, each deleting the code it replaces: bulk combined import, `/subjects/with-specimens`, and `/specimens/bulk`; `POST /specimens` and add-container; derivations and the derivation CSV; control batches. `/subjects/with-specimens` and `/specimens/bulk` moved into the first slice: the first shares bulk combined's code, and the second's validator was the last user of the old placement resolver (ADR 0006).

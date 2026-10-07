@@ -20,6 +20,10 @@ import {
   createTestStorageType,
   createTestLocation,
   createTestMicronixPlate,
+  createTestMicronixTube,
+  createTestBag,
+  createTestSpecimen,
+  createTestStorageContainer,
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
 import { utcNow } from '../datetime'
@@ -338,12 +342,12 @@ describe('derivations-csv', () => {
           .insert(storageContainer)
           .values({ specimenId: parentSpecimen.id, unitId: unit.id, totalQuantity: quantity, remainingQuantity: quantity, created: now, lastUpdated: now })
           .returning()
-        await testDb.insert(micronixTube).values({ id: sc.id, collectionId: plate.id, position, barcode })
+        await createTestMicronixTube(testDb, { containerId: sc.id, collectionId: plate.id, position, barcode })
         return sc
       }
       const parent = await addTube('MT-PARENT', 'A01', 10)
       await addTube('MT-TAKEN', 'A02', 1)
-      return { parent }
+      return { parent, loc, plate, unit }
     }
 
     it('checks non-padded positions against stored ones and against each other', async () => {
@@ -355,6 +359,21 @@ describe('derivations-csv', () => {
       expect(result.rows.map((r) => r.valid)).toEqual([false, true, false])
       expect(result.rows[0].error).toMatch(/already used in that plate/)
       expect(result.rows[2].error).toMatch(/more than once in your file/)
+    })
+
+    it('warns about a mismatched source type even when the first row has no parent', async () => {
+      const { parent, plate, unit } = await seedParent()
+      const plasmaType = await createTestSpecimenType(testDb, { name: 'Plasma' })
+      const plasma = await createTestSpecimen(testDb, plasmaType.id)
+      const plasmaTube = await createTestStorageContainer(testDb, { specimenId: plasma.id, unitId: unit.id })
+      await createTestMicronixTube(testDb, { containerId: plasmaTube.id, collectionId: plate.id, barcode: 'MT-PLASMA', position: 'H12' })
+      const csv = [header, '99999,PlateDef,B01,C0', `${parent.id},PlateDef,B02,C1`, `${plasmaTube.id},PlateDef,B03,C2`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, { ...settings, validateSourceSpecimenType: true })
+
+      expect(result.rows[0].valid).toBe(false)
+      expect(result.rows[1].warnings).toBeUndefined()
+      expect(result.rows[2].warnings).toContain('Source specimen type does not match other rows')
     })
 
     it('reports a quantity that is not a number instead of dropping it', async () => {
@@ -388,6 +407,25 @@ describe('derivations-csv', () => {
 
       expect(result.rows[0].valid).toBe(false)
       expect(result.rows[0].error).toMatch(/Box 'No Such Box' not found/)
+    })
+
+    it('finds the bag named by bag_name for paper rows', async () => {
+      const { parent, loc } = await seedParent()
+      await createTestBag(testDb, { name: 'Shared Name', locationId: loc.id })
+      const csv = ['parent_container_id,container_type,bag_name,sheet_name,sublabel', `${parent.id},paper,Shared Name,Sheet-1,S1`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, { ...settings, containerType: '' })
+
+      expect(result.rows[0]).toMatchObject({ valid: true, collectionStatus: 'existing' })
+    })
+
+    it('reports a paper row with neither box_name nor bag_name as a missing field', async () => {
+      const { parent } = await seedParent()
+      const csv = ['parent_container_id,container_type,box_name,sheet_name,sublabel', `${parent.id},paper,,Sheet-1,S1`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, { ...settings, containerType: '' })
+
+      expect(result.rows[0].error).toBe('box_name or bag_name is required for paper')
     })
   })
 })
