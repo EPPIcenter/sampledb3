@@ -126,4 +126,22 @@ describe('multi-step writes roll back on failure', () => {
 
     await expect(moveSheetsToCollection(testDb, [moving.id], boxB.id, 'box')).rejects.toBeInstanceOf(SheetNameConflictError)
   })
+
+  it('sheet move gives the name conflict, not a constraint error, to the losing side of a race', async () => {
+    const { loc } = await setupMicronixPlate()
+    const [boxA, boxB, target] = await Promise.all(
+      ['BoxA', 'BoxB', 'Target'].map((name) => createTestBox(testDb, { name, locationId: loc.id })),
+    )
+    const fromA = await createTestSheet(testDb, { name: 'Sheet-1', boxId: boxA.id })
+    const fromB = await createTestSheet(testDb, { name: 'Sheet-1', boxId: boxB.id })
+
+    const results = await Promise.allSettled([
+      moveSheetsToCollection(testDb, [fromA.id], target.id, 'box'),
+      moveSheetsToCollection(testDb, [fromB.id], target.id, 'box'),
+    ])
+
+    expect(results.map((r) => r.status).sort()).toEqual(['fulfilled', 'rejected'])
+    const rejected = results.find((r) => r.status === 'rejected') as PromiseRejectedResult
+    expect(rejected.reason).toBeInstanceOf(SheetNameConflictError)
+  })
 })
