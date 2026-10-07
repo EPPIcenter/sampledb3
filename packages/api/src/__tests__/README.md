@@ -83,7 +83,8 @@ describe('Search API', () => {
 `helpers/test-client.ts`:
 
 - `getResponseData(response)` unpacks `{ data }` from a standard API response.
-- `authenticatedRequest(app, path, options)` sends a request with a session cookie.
-- `loginAndGetCookie` and `createAuthenticatedClientWrapper` manage sessions by hand.
+- `authenticatedRequest(app, path, options)` sends a request with a session cookie. `ctx.request` calls it for you.
+- `createAuthenticatedClientWrapper(client, ctx.cookie)` adds the session cookie to a typed `hono/testing` client, for tests that build one on top of `setupAuthenticatedRouteTest`.
+- `loginAndGetCookie` logs in and returns the session cookie. Call it directly only in tests of the login flow itself, such as `routes/__tests__/auth.test.ts` and `middleware/__tests__/auth.test.ts`.
 
 `helpers/auth-helpers.ts` creates users and sessions and seeds the password, session, and pagination settings.

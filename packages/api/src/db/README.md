@@ -2,7 +2,7 @@
 
 SampleDB stores **operational data** (studies, subjects, specimens, containers, controls, and related records) in SQLite. This package owns how that file is opened, versioned, and evolved.
 
-See [ADR-0003: SQLite schema evolution](../../../docs/adr/0003-sqlite-schema-evolution.md) for rationale (snapshot + deltas, no drizzle-kit migrate, fail-hard on error).
+See [ADR 0003: SQLite schema evolution](../../../docs/adr/0003-sqlite-schema-evolution.md) for rationale (snapshot + deltas, no drizzle-kit migrate, fail-hard on error).
 
 ## Changing the schema
 
@@ -27,6 +27,7 @@ Migration `001` is **only** for legacy files; fresh installs from the snapshot s
 ## Schema version
 
 - Table: `schema_version` with a single row (`version INTEGER NOT NULL`).
+- Constant: `CURRENT_SCHEMA_VERSION` in `schema-evolution.ts`, the version the code expects. "How evolution works" calls it `CURRENT`.
 - Inspect in support: `SELECT version FROM schema_version;`
 
 ## Opening a database

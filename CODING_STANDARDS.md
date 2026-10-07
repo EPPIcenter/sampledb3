@@ -2,13 +2,13 @@
 
 ## Domain language
 
-- Name a domain concept with the term `CONTEXT.md` defines for it, in code, test names, issue titles, and proposals. A term the glossary lists under _Avoid_ is a synonym to replace with the defined term.
-- When a concept has no glossary entry, say so in the issue, PR, or proposal before introducing a term for it.
-- A change that contradicts an ADR in `docs/adr/` names the ADR and gives the reason to reopen it, in the PR or proposal. For example: _Contradicts ADR-0006 (unified container inbound write), but worth reopening because…_
+- Name a domain concept with the term `CONTEXT.md` defines for it, in code, test names, issue titles, and proposals. Treat a term the glossary lists under _Avoid_ as a synonym, and replace it with the defined term.
+- When a concept has no glossary entry, say so in the issue, PR, or proposal before you introduce a term for it.
+- When a change contradicts an ADR in `docs/adr/`, name the ADR and give the reason to reopen it, in the PR or proposal. For example: _Contradicts ADR 0006 (unified container inbound write), but worth reopening because…_
 
 ## Tests
 
-- A test asserts the expected behaviour. When it fails, fix the code under test and keep the assertion as strict as before. A new test may land failing if it states the expected behaviour.
+- Assert the expected behaviour. When a test fails, fix the code under test and keep the assertion as strict as before. You may land a new test that fails, if it states the expected behaviour.
 
 ## API
 
@@ -16,9 +16,9 @@ Paths are relative to `packages/api/`.
 
 ### Database
 
-- A write of several statements that `await`s runs inside `withWriteTransaction` from `src/db/write-transaction.ts`.
-- Change the schema with a numbered migration, following the recipe in `src/db/README.md`. DDL lives only in the migrations and `initial_schema.sql`.
-- Code opens a database through `openOperationalDatabase`.
+- Run a write of several statements that `await`s inside `withWriteTransaction` from `src/db/write-transaction.ts`. Drizzle's bun-sqlite `db.transaction(async () => …)` commits at the callback's first `await` instead of awaiting the returned Promise, so the rest of the write runs outside the transaction. ESLint rejects an `async` callback passed to `.transaction(...)`.
+- Change the schema with a numbered migration, following the recipe in `src/db/README.md`. Keep DDL in the migrations and `initial_schema.sql` only.
+- Open a database through `openOperationalDatabase`, which runs schema evolution. Open the file directly only when the code must not migrate it, and say why in a comment. For example, `src/scripts/check-integrity.ts` opens a backup with `new Database(path, { readonly: true })` so that checking it leaves it unchanged.
 
 ### Domain modules
 
@@ -45,10 +45,11 @@ Paths are relative to `packages/api/`.
 
 ### API tests
 
-- Each test gets its own database from `setupTestDatabase()` and closes it with `cleanupTestDatabase()` in `afterEach`.
+- Give each test its own database from `setupTestDatabase()`, and close it with `cleanupTestDatabase()` in `afterEach`.
 - Seed rows with the factories in `src/__tests__/helpers/factories.ts`.
-- A route behind session auth is tested through `setupAuthenticatedRouteTest`.
-- A CRUD route with `checkInUse` has a delete test for both the in-use and the free case.
+- Test a route behind session auth through `setupAuthenticatedRouteTest`. Log in by hand with `loginAndGetCookie` only when the login flow is under test, as in the auth route and middleware tests.
+- For a CRUD route with `checkInUse`, write a delete test for both the in-use and the free case.
+- Test a route's error cases as well as its success: validation errors, 404s, and duplicates.
 
 ## Web
 
@@ -67,7 +68,9 @@ Paths are relative to `packages/web/`.
 
 ### Web tests
 
-- Components render through `await render(...)` from `src/__tests__/helpers/render`.
-- A test mocks the domain module the code imports with `createMockedDomainModule`. An override replaces a whole `*Api` object and resolves to the same body the real module returns.
+- Render components with `await render(...)` from `src/__tests__/helpers/render`.
+- Mock the domain module the code imports with `createMockedDomainModule`. Make each override replace a whole `*Api` object and resolve to the same body the real module returns.
 - Query elements by role or label (`getByRole`, `getByLabelText`), and drive interactions with `@testing-library/user-event`.
-- A mutation hook's test asserts which queries it invalidates.
+- Wait for async results with `findBy*` queries or `waitFor`.
+- Test a component's loading and error states, not only its loaded state.
+- In a mutation hook's test, assert which queries it invalidates.

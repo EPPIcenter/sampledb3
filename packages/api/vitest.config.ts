@@ -20,6 +20,7 @@ export default defineConfig({
         'src/**/__tests__/**',
         'dist/**',
       ],
+      // Applies only to Vitest coverage runs. Targets: Coverage in the root README.md.
       thresholds: {
         statements: 60,
         branches: 60,
