@@ -77,11 +77,14 @@ Available factories:
 - `createTestStrain`
 - `createTestStorageContainer`
 - `createTestLocation`
+- `createTestMicronixPlate`, `createTestCryovialBox`, `createTestBox`, `createTestBag`, `createTestSheet`
+- `createTestMicronixTube`, `createTestCryovialTube`, `createTestStaticWell`, `createTestPaper` (give an existing storage container its subtype row)
 - `createTestControlDefinition`
 - `createTestSpecimen`
 - `createTestUnit`
 - `createTestStudy`
 - `createTestStudySubject`
+- `createTestControlBatch`
 
 ## Authenticated route tests
 

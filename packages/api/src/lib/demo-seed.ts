@@ -20,6 +20,7 @@ import {
 } from '../db/schema'
 import { sql, eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
+import { BCRYPT_COST } from './auth/auth-service'
 import {
   setContainerDefaults,
   setPaginationSettings,
@@ -88,7 +89,7 @@ export async function runDemoSeed(
   }
 
   // 1. Create admin user
-  const passwordHash = await bcrypt.hash(adminPassword, 10)
+  const passwordHash = await bcrypt.hash(adminPassword, BCRYPT_COST)
   await database.insert(users).values({
     id: 1,
     name: 'Demo Admin',

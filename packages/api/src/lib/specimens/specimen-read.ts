@@ -3,7 +3,7 @@ import { specimen, storageContainer, studySubject, study, specimenType, controlB
 import { eq, and, or, sql } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../constants'
 import { resolveContainerByBarcode } from '../identifier-resolution'
-import { dateToUpperBound } from '../statistics/helpers'
+import { dateToUpperBound } from '../sql-helpers'
 import { likeContains } from '../sql-like'
 
 export type ListSpecimensQuery = {

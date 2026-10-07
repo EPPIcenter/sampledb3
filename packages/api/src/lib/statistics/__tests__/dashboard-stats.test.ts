@@ -9,6 +9,7 @@ import {
   createTestStorageType,
   createTestSpecimen,
   createTestSpecimenType,
+  createTestStudy,
 } from '../../../__tests__/helpers/factories'
 import { utcNow } from '../../datetime'
 import { micronixTube } from '../../../db/schema'
@@ -115,4 +116,27 @@ describe('dashboard-stats', () => {
     expect(data.containers.byStatus['In Use']).toBe(1)
     expect(data.containers.total).toBe(1)
   })
+
+  it('filters by a study with more subjects than SQLite allows as bound parameters', async () => {
+    const study = await createTestStudy(testDb, { title: 'Big Study', shortCode: 'BIG' })
+    const type = await createTestSpecimenType(testDb, { name: 'DBS' })
+    sqlite.exec('BEGIN')
+    const addSubject = sqlite.prepare(
+      "INSERT INTO study_subject (study_id, name, created, last_updated) VALUES (?, ?, '2024-01-01', '2024-01-01')",
+    )
+    const subjectIds: number[] = []
+    for (let i = 0; i < 70_000; i++) {
+      subjectIds.push(Number(addSubject.run(study.id, `S${i}`).lastInsertRowid))
+    }
+    sqlite.exec('COMMIT')
+    for (const subjectId of subjectIds.slice(0, 3)) {
+      await createTestSpecimen(testDb, type.id, { studySubjectId: subjectId })
+    }
+    await createTestSpecimen(testDb, type.id) // in another study
+
+    const data = await getDashboardStatistics(testDb, sqlite as SQLiteDatabase, { study: 'BIG' })
+
+    expect(data.specimens.total).toBe(3)
+    expect(data.specimens.byStudy).toEqual({ BIG: 3 })
+  }, 60_000)
 })

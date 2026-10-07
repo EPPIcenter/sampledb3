@@ -195,7 +195,11 @@ async function ensureGridCollectionId(
   return id
 }
 
-async function lookupParentCollectionId(
+/**
+ * Find an existing box or bag (a paper Sheet's parent) by id or name, or `null` when a
+ * named one does not exist. Throws when an id does not exist or neither id nor name is given.
+ */
+export async function lookupParentCollectionId(
   database: DatabaseOrTransaction,
   parent: { type: 'box' | 'bag'; id?: number; name?: string; locationId?: number },
   collectionMap?: Map<string, number>

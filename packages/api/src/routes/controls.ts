@@ -9,7 +9,11 @@ import { eq, and, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { parseControlProperties } from '../lib/control-properties'
 import { validateControlBatchName, generateUniqueBatchName } from '../lib/validation'
-import { generateControlDefinitionName, generateUniqueControlDefinitionName } from '../lib/control-name-generation'
+import {
+  generateControlDefinitionName,
+  generateUniqueControlDefinitionName,
+  isControlDefinitionNameTaken,
+} from '../lib/control-name-generation'
 import { handleRouteError } from '../lib/error-handler'
 import type { BloodControlProperties } from '../types/properties'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
@@ -397,12 +401,7 @@ controls.post('/definitions/bulk', memberMiddleware, async (c) => {
       let finalName: string
       const customName = providedNames[i]?.trim()
       if (customName) {
-        const existingByName = await dbInstance
-          .select({ id: controlDefinition.id })
-          .from(controlDefinition)
-          .where(eq(controlDefinition.name, customName))
-          .get()
-        if (existingByName) {
+        if (await isControlDefinitionNameTaken(dbInstance, customName)) {
           return c.json({ error: `Control definition name "${customName}" is already in use` }, 400)
         }
         finalName = customName
@@ -498,12 +497,7 @@ controls.post('/', memberMiddleware, async (c) => {
         strains: strainsWithNames,
       })
     } else {
-      const existingByName = await dbInstance
-        .select()
-        .from(controlDefinition)
-        .where(eq(controlDefinition.name, finalName))
-        .get()
-      if (existingByName) {
+      if (await isControlDefinitionNameTaken(dbInstance, finalName)) {
         return c.json({ error: 'A control definition with this name already exists' }, 409)
       }
     }
@@ -586,12 +580,7 @@ controls.patch('/:id', memberMiddleware, async (c) => {
     }
 
     if (baseData.name !== undefined && baseData.name !== existing.name) {
-      const existingByName = await dbInstance
-        .select({ id: controlDefinition.id })
-        .from(controlDefinition)
-        .where(eq(controlDefinition.name, baseData.name))
-        .get()
-      if (existingByName) {
+      if (await isControlDefinitionNameTaken(dbInstance, baseData.name)) {
         return c.json({ error: 'A control definition with this name already exists' }, 409)
       }
     }

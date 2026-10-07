@@ -2,7 +2,7 @@ import type { Database } from '../../db/client'
 import { storageContainer, storageContainerTag, tag } from '../../db/schema'
 import { eq, inArray } from 'drizzle-orm'
 import type { ContainerSubtype } from '../container-placement'
-import { chunkArray } from './helpers'
+import { chunkArray, SQL_IN_CHUNK_SIZE } from '../sql-helpers'
 
 export type ContainerAggregates = {
   byType: Record<string, number>
@@ -28,7 +28,7 @@ export async function computeContainerAggregates(
   let containerTags: Array<{ containerId: number; tagId: number; tagName: string }> = []
 
   if (finalContainerIds.length > 0) {
-    const containerIdChunks = chunkArray(finalContainerIds, 500)
+    const containerIdChunks = chunkArray(finalContainerIds, SQL_IN_CHUNK_SIZE)
     const tagChunkResults = await Promise.all(
       containerIdChunks.map(async (chunk) => {
         return database
