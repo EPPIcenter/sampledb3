@@ -17,8 +17,8 @@ describe('Statistics API', () => {
         password: 'password123',
         role: 'admin',
       },
-      mount: (app, { db, sqlite }) => {
-        app.route('/api/statistics', createStatisticsRoutes(db, sqlite))
+      mount: (app, { db }) => {
+        app.route('/api/statistics', createStatisticsRoutes(db))
       },
     })
   })
