@@ -1,5 +1,8 @@
 import type { ContainerExportData } from '@sampledb/contract'
+import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
+import { study } from '../../db/schema'
+import { selectContainers, type ContainerSelection, type ContainerSelectionFilters } from '../container-selection'
 import { ExpectedNotFoundError, RouteError } from '../error-handler'
 import { enrichContainerData } from './enrich'
 import { filterContainerIdsByType } from './filter'
@@ -83,6 +86,24 @@ export function buildPostExportEnvelope(params: {
   }
 }
 
+/**
+ * Container selection filters for an export request (ADR 0011). Export's
+ * `created_from`/`created_to` mean Container created.
+ */
+function exportSelectionFilters(filters: Omit<ExportFilters, 'study'>): ContainerSelectionFilters {
+  return {
+    specimenTypeIds: filters.specimen_type_ids,
+    collectionDate: { from: filters.date_from, to: filters.date_to },
+    containerCreated: { from: filters.created_from, to: filters.created_to },
+    containerTypes: filters.container_types,
+    tagIds: filters.tag_ids,
+  }
+}
+
+async function findStudyByShortCode(database: Database, shortCode: string): Promise<StudyRecord | undefined> {
+  return database.select().from(study).where(eq(study.shortCode, shortCode)).get()
+}
+
 async function formatContainerExport(
   database: Database,
   data: ContainerExportData[],
@@ -124,22 +145,23 @@ export async function runSingleStudyContainerExportGet(
   | { kind: 'json'; json: Awaited<ReturnType<typeof formatAsJSON>>; filename: string }
 > {
   const { filters, format, columns, csvOptions, userId, countOnly } = params
-  let result
-  try {
-    result = await buildContainerQuery(database, filters)
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Not found'
-    throw new ExpectedNotFoundError(message)
+  const studyRecord = await findStudyByShortCode(database, filters.study)
+  if (!studyRecord) {
+    throw new ExpectedNotFoundError(`Study with short code '${filters.study}' not found`)
   }
 
+  const selectionFilters = exportSelectionFilters(filters)
+  const selection: ContainerSelection = filters.subject_ids?.length
+    ? {
+        kind: 'subjects',
+        subjects: filters.subject_ids.map((subjectId) => ({ studyId: studyRecord.id, subjectId })),
+        filters: selectionFilters,
+      }
+    : { kind: 'study', studyId: studyRecord.id, filters: selectionFilters }
+  const result = await selectContainers(database, selection)
+
   if (countOnly) {
-    let filteredContainers = result.containers
-    if (filters.container_types?.length && filteredContainers.length > 0) {
-      const containerIds = filteredContainers.map((c) => c.id)
-      const matchingIds = await filterContainerIdsByType(database, containerIds, filters.container_types)
-      filteredContainers = filteredContainers.filter((c) => matchingIds.includes(c.id))
-    }
-    return { kind: 'count', count: filteredContainers.length }
+    return { kind: 'count', count: result.containers.length }
   }
 
   if (result.containers.length === 0) {
@@ -151,20 +173,13 @@ export async function runSingleStudyContainerExportGet(
     throw new RouteError(400, { error: 'Invalid format. Use csv, xlsx, or json.' })
   }
 
-  const enrichedData = await enrichContainerData(
-    database,
-    result.containers,
-    result.specimens ?? [],
-    result.study,
-    filters.container_types,
-    undefined
-  )
+  const enrichedData = await enrichContainerData(database, result.containers, result.specimens, studyRecord)
 
   const timestamp = formatExportTimestamp()
-  const filenameBase = `study_${result.study.shortCode}_export_${timestamp}`
+  const filenameBase = `study_${studyRecord.shortCode}_export_${timestamp}`
 
   if (format === 'json') {
-    const json = await formatAsJSON(database, enrichedData, filters, result.study, columns, userId)
+    const json = await formatAsJSON(database, enrichedData, filters, studyRecord, columns, userId)
     return { kind: 'json', json, filename: `${filenameBase}.json` }
   }
 

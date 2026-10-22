@@ -14,6 +14,13 @@ import {
   createTestSpecimenType,
   createTestSpecimen,
   createTestStorageContainer,
+  createTestUnit,
+  createTestStorageType,
+  createTestLocation,
+  createTestMicronixPlate,
+  createTestMicronixTube,
+  createTestCryovialBox,
+  createTestCryovialTube,
 } from '../../__tests__/helpers/factories'
 
 describe('Export API', () => {
@@ -36,6 +43,32 @@ describe('Export API', () => {
   afterEach(() => {
     ctx.cleanup()
   })
+
+  /** One Subject in a new Study with a micronix tube and, optionally, a cryovial tube. */
+  async function seedTypedContainers(shortCode: string, options: { cryovial: boolean }) {
+    const study = await createTestStudy(ctx.db, { title: `${shortCode} Study`, shortCode })
+    const subject = await createTestStudySubject(ctx.db, { studyId: study.id, name: 'Subj1' })
+    const specimenType = await createTestSpecimenType(ctx.db, { name: 'Blood' })
+    const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+    const storageType = await createTestStorageType(ctx.db, { name: 'Freezer -80' })
+    const freezer = await createTestLocation(ctx.db, {
+      name: 'Freezer',
+      storageTypeId: String(storageType.id),
+      canContainCollections: true,
+    })
+    const plate = await createTestMicronixPlate(ctx.db, { name: 'Plate', locationId: freezer.id })
+    const spec = await createTestSpecimen(ctx.db, specimenType.id, { studySubjectId: subject.id })
+    const micronix = await createTestStorageContainer(ctx.db, { specimenId: spec.id, unitId: unit.id as number })
+    await createTestMicronixTube(ctx.db, { containerId: micronix.id, collectionId: plate.id, barcode: `${shortCode}-MX` })
+    let cryovialId: number | undefined
+    if (options.cryovial) {
+      const box = await createTestCryovialBox(ctx.db, { name: 'Box', locationId: freezer.id })
+      const cryovial = await createTestStorageContainer(ctx.db, { specimenId: spec.id, unitId: unit.id as number })
+      await createTestCryovialTube(ctx.db, { containerId: cryovial.id, collectionId: box.id })
+      cryovialId = cryovial.id
+    }
+    return { micronixId: micronix.id, cryovialId }
+  }
 
   describe('GET /api/export/specimens.csv', () => {
     it('returns 200 with auth and CSV content type', async () => {
@@ -191,6 +224,44 @@ describe('Export API', () => {
       await new Promise((resolve) => setTimeout(resolve, 50))
       const rowsAfter = await ctx.db.select().from(errorLogs)
       expect(rowsAfter.length).toBe(rowsBefore.length)
+    })
+
+    it('exports only Containers of the requested container_types', async () => {
+      const { cryovialId } = await seedTypedContainers('TYPES', { cryovial: true })
+
+      const res = await ctx.request('/api/export/containers?study=TYPES&format=json&container_types=cryovial_tube', {
+        method: 'GET',
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        export_metadata: { count: number }
+        containers: Array<{ container_id: number; container_type: string }>
+      }
+      expect(data.containers.map((row) => [row.container_id, row.container_type])).toEqual([
+        [cryovialId, 'cryovial_tube'],
+      ])
+      expect(data.export_metadata.count).toBe(1)
+
+      const countRes = await ctx.request('/api/export/containers?study=TYPES&count_only=true&container_types=cryovial_tube', {
+        method: 'GET',
+      })
+      expect(await countRes.json()).toEqual({ count: 1 })
+    })
+
+    it('returns 404 when every Container in the study is of another container type', async () => {
+      await seedTypedContainers('MXONLY', { cryovial: false })
+
+      const res = await ctx.request('/api/export/containers?study=MXONLY&format=csv&container_types=cryovial_tube', {
+        method: 'GET',
+      })
+      expect(res.status).toBe(404)
+      const data = (await res.json()) as { error?: string }
+      expect(data.error).toBe('No containers found for this study')
+
+      const countRes = await ctx.request('/api/export/containers?study=MXONLY&count_only=true&container_types=cryovial_tube', {
+        method: 'GET',
+      })
+      expect(await countRes.json()).toEqual({ count: 0 })
     })
 
     it('returns 400 for invalid format', async () => {
