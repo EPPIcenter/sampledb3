@@ -92,10 +92,10 @@ async function formatContainerExport(
   columns: string[] | undefined,
   csvOptions: CSVExportOptions | undefined,
   userId: number | null | undefined
-): Promise<{ csv?: string; xlsx?: Buffer; json?: ContainerExportData[] }> {
+): Promise<{ csv?: string; xlsx?: Buffer; jsonData?: ContainerExportData[] }> {
   if (format === 'json') {
     const json = await formatAsJSON(database, data, filters, study, columns, userId)
-    return { json: json.containers }
+    return { jsonData: json.containers }
   }
 
   if (format === 'csv') {
