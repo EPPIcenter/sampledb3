@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import type { Database } from '../../../db/client'
-import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { setupTestDatabase, cleanupTestDatabase } from '../../../__tests__/helpers/db-setup'
 import {
   createTestLocation,
@@ -10,9 +9,13 @@ import {
   createTestSpecimen,
   createTestSpecimenType,
   createTestStudy,
+  createTestStudySubject,
+  createTestTag,
+  createTestUnit,
 } from '../../../__tests__/helpers/factories'
 import { utcNow } from '../../datetime'
-import { micronixTube } from '../../../db/schema'
+import { eq } from 'drizzle-orm'
+import { micronixTube, specimen, storageContainerTag } from '../../../db/schema'
 import { getDashboardStatistics } from '../dashboard-stats'
 
 describe('dashboard-stats', () => {
@@ -32,7 +35,7 @@ describe('dashboard-stats', () => {
   })
 
   it('returns expected shape on empty database', async () => {
-    const data = await getDashboardStatistics(testDb, sqlite as SQLiteDatabase, {})
+    const data = await getDashboardStatistics(testDb, {})
 
     expect(data.specimens).toMatchObject({
       total: 0,
@@ -54,7 +57,7 @@ describe('dashboard-stats', () => {
   })
 
   it('returns empty results for unknown study short code', async () => {
-    const data = await getDashboardStatistics(testDb, sqlite as SQLiteDatabase, {
+    const data = await getDashboardStatistics(testDb, {
       study: 'NONEXISTENT',
     })
 
@@ -68,8 +71,8 @@ describe('dashboard-stats', () => {
     const type = await createTestSpecimenType(testDb, { name: 'Blood' })
     await createTestSpecimen(testDb, type.id)
 
-    const all = await getDashboardStatistics(testDb, sqlite as SQLiteDatabase, {})
-    const unknown = await getDashboardStatistics(testDb, sqlite as SQLiteDatabase, { study: 'NONEXISTENT' })
+    const all = await getDashboardStatistics(testDb, {})
+    const unknown = await getDashboardStatistics(testDb, { study: 'NONEXISTENT' })
 
     expect(all.specimens.total).toBe(1)
     expect(unknown.specimens.total).toBe(0)
@@ -80,9 +83,55 @@ describe('dashboard-stats', () => {
     await createTestSpecimen(testDb, type.id)
     const today = utcNow().slice(0, 10)
 
-    const data = await getDashboardStatistics(testDb, sqlite as SQLiteDatabase, { created_to: today })
+    const data = await getDashboardStatistics(testDb, { created_to: today })
 
     expect(data.specimens.total).toBe(1)
+  })
+
+  it('filters created_from and created_to on when the Specimen was created', async () => {
+    const type = await createTestSpecimenType(testDb, { name: 'Blood' })
+    const older = await createTestSpecimen(testDb, type.id)
+    await createTestStorageContainer(testDb, { specimenId: older.id })
+    await testDb.update(specimen).set({ created: '2020-06-01T00:00:00.000Z' }).where(eq(specimen.id, older.id))
+    await createTestSpecimen(testDb, type.id)
+
+    const data = await getDashboardStatistics(testDb, { created_from: '2020-01-01', created_to: '2020-12-31' })
+
+    expect(data.specimens.total).toBe(1)
+    expect(data.containers.total).toBe(1)
+  })
+
+  it('counts only Specimens with a Container carrying every selected Tag', async () => {
+    const type = await createTestSpecimenType(testDb, { name: 'Blood' })
+    const red = await createTestTag(testDb, { name: 'red' })
+    const blue = await createTestTag(testDb, { name: 'blue' })
+    const unitId = (await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })).id
+    const both = await createTestStorageContainer(testDb, { specimenId: (await createTestSpecimen(testDb, type.id)).id, unitId })
+    const redOnly = await createTestStorageContainer(testDb, { specimenId: (await createTestSpecimen(testDb, type.id)).id, unitId })
+    await testDb.insert(storageContainerTag).values([
+      { storageContainerId: both.id, tagId: red.id },
+      { storageContainerId: both.id, tagId: blue.id },
+      { storageContainerId: redOnly.id, tagId: red.id },
+    ])
+
+    const data = await getDashboardStatistics(testDb, { tag_ids: [red.id, blue.id] })
+
+    expect(data.specimens.total).toBe(1)
+    expect(data.containers.total).toBe(1)
+    expect(data.containers.averagePerSpecimen).toBe(1)
+  })
+
+  it('matches nothing for control Specimens within a Study', async () => {
+    const study = await createTestStudy(testDb, { title: 'Study', shortCode: 'ST' })
+    const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'S1' })
+    const type = await createTestSpecimenType(testDb, { name: 'Blood' })
+    await createTestSpecimen(testDb, type.id, { studySubjectId: subject.id })
+
+    const subjects = await getDashboardStatistics(testDb, { study: 'ST', source_type: 'subject' })
+    const controls = await getDashboardStatistics(testDb, { study: 'ST', source_type: 'control' })
+
+    expect(subjects.specimens.total).toBe(1)
+    expect(controls.specimens.total).toBe(0)
   })
 
   it('includes containers at a filtered location', async () => {
@@ -100,7 +149,7 @@ describe('dashboard-stats', () => {
       position: 'B01',
     })
 
-    const data = await getDashboardStatistics(testDb, sqlite as SQLiteDatabase, {
+    const data = await getDashboardStatistics(testDb, {
       location_id: String(loc.id),
     })
 
@@ -111,7 +160,7 @@ describe('dashboard-stats', () => {
   it('returns byStatus for containers with remaining quantity', async () => {
     const container = await createTestStorageContainer(testDb)
 
-    const data = await getDashboardStatistics(testDb, sqlite as SQLiteDatabase, {})
+    const data = await getDashboardStatistics(testDb, {})
 
     expect(data.containers.byStatus['In Use']).toBe(1)
     expect(data.containers.total).toBe(1)
@@ -134,7 +183,7 @@ describe('dashboard-stats', () => {
     }
     await createTestSpecimen(testDb, type.id) // in another study
 
-    const data = await getDashboardStatistics(testDb, sqlite as SQLiteDatabase, { study: 'BIG' })
+    const data = await getDashboardStatistics(testDb, { study: 'BIG' })
 
     expect(data.specimens.total).toBe(3)
     expect(data.specimens.byStudy).toEqual({ BIG: 3 })

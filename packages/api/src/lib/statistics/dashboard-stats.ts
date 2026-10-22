@@ -1,23 +1,8 @@
+import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
-import type { Database as SQLiteDatabase } from 'bun:sqlite'
-import {
-  specimen,
-  storageContainer,
-  studySubject,
-  study,
-  specimenType,
-  tag,
-  storageContainerTag,
-} from '../../db/schema'
-import { eq, and, sql, inArray } from 'drizzle-orm'
-import { resolveContainerTypes } from '../container-placement'
-import { buildDateFilter } from './helpers'
-import { chunkArray, SQL_IN_CHUNK_SIZE } from '../sql-helpers'
+import { study } from '../../db/schema'
+import { selectContainers, type ContainerSelection, type ContainerSelectionFilters } from '../container-selection'
 import { computeContainerAggregates } from './container-aggregates'
-import {
-  resolveContainerIdsAtLocations,
-  resolveStatisticsLocationFilter,
-} from './location-filter'
 import { computeSpecimenAggregates } from './specimen-aggregates'
 import { computeStorageStatistics } from './storage-aggregates'
 import type { DashboardStatistics, StatisticsFilters } from './types'
@@ -47,272 +32,79 @@ function emptyDashboardStatistics(): DashboardStatistics {
   }
 }
 
+/** Parse an integer id query value; anything else means no filter. */
+function parseId(value: string | undefined): number | undefined {
+  if (!value) return undefined
+  const id = parseInt(value)
+  return isNaN(id) ? undefined : id
+}
+
+/** Map the statistics query to Container selection filters (ADR 0011). */
+function selectionFilters(filters: StatisticsFilters): ContainerSelectionFilters {
+  const specimenTypeId = parseId(filters.specimen_type_id)
+  return {
+    specimenTypeIds: specimenTypeId === undefined ? undefined : [specimenTypeId],
+    collectionDate: { from: filters.collection_date_from, to: filters.collection_date_to },
+    specimenCreated: { from: filters.created_from, to: filters.created_to },
+    containerTypes: filters.container_type ? [filters.container_type] : undefined,
+    tagIds: filters.tag_ids,
+    locationId: parseId(filters.location_id),
+  }
+}
+
+/**
+ * The selection the statistics query describes, or null when it matches nothing: an
+ * unknown Study, or control Specimens within a Study. An unknown Location or Tag
+ * matches nothing inside the selection.
+ */
+async function statisticsSelection(
+  database: Database,
+  filters: StatisticsFilters,
+): Promise<ContainerSelection | null> {
+  const sourceType =
+    filters.source_type === 'subject' || filters.source_type === 'control' ? filters.source_type : undefined
+  if (!filters.study) return { kind: 'database', sourceType, filters: selectionFilters(filters) }
+  if (sourceType === 'control') return null
+  const studyRecord = await database
+    .select({ id: study.id })
+    .from(study)
+    .where(eq(study.shortCode, filters.study))
+    .get()
+  if (!studyRecord) return null
+  return { kind: 'study', studyId: studyRecord.id, filters: selectionFilters(filters) }
+}
+
 /** Filtered dashboard statistics for specimens, containers, and storage. */
 export async function getDashboardStatistics(
   database: Database,
-  sqliteDatabase: SQLiteDatabase,
   filters: StatisticsFilters,
 ): Promise<DashboardStatistics> {
-    const {
-      study: studyCode,
-      source_type: sourceType,
-      specimen_type_id: specimenTypeId,
-      container_type: containerType,
-      tag_ids: tagIds,
-      location_id: locationId,
-      collection_date_from: collectionDateFrom,
-      collection_date_to: collectionDateTo,
-      created_from: createdFrom,
-      created_to: createdTo,
-    } = filters
+  const selection = await statisticsSelection(database, filters)
+  if (!selection) return emptyDashboardStatistics()
+  const { containers, specimens, containerTypes } = await selectContainers(database, selection)
+  if (specimens.length === 0) return emptyDashboardStatistics()
 
-    // Build specimen filter conditions
-    const specimenConditions = []
-    
-    // Filter by study, selecting its subjects with a subquery rather than an id list
-    if (studyCode) {
-      const studyRecord = await database
-        .select()
-        .from(study)
-        .where(eq(study.shortCode, studyCode))
-        .get()
-      
-      // An unknown study matches nothing; it must not fall through to whole-database totals.
-      if (!studyRecord) {
-        return emptyDashboardStatistics()
-      }
-      const studySubjectIds = database
-        .select({ id: studySubject.id })
-        .from(studySubject)
-        .where(eq(studySubject.studyId, studyRecord.id))
-      const anySubject = await database
-        .select({ id: studySubject.id })
-        .from(studySubject)
-        .where(eq(studySubject.studyId, studyRecord.id))
-        .limit(1)
-        .get()
-      if (!anySubject) {
-        // No subjects in study, return empty results
-        return emptyDashboardStatistics()
-      }
-      specimenConditions.push(inArray(specimen.studySubjectId, studySubjectIds))
-    }
+  const hasContainerFilter =
+    !!filters.container_type || (filters.tag_ids?.length ?? 0) > 0 || parseId(filters.location_id) !== undefined
+  const specimenAggregates = await computeSpecimenAggregates(database, specimens, {
+    useSpecimenTypeCache: !hasContainerFilter,
+  })
+  const containerTotal = containers.length
+  const averagePerSpecimen = specimenAggregates.total > 0 ? containerTotal / specimenAggregates.total : 0
+  const containerAggregates = await computeContainerAggregates(database, containers, containerTypes)
+  const storage = await computeStorageStatistics(
+    database,
+    containers.map((container) => container.id),
+    containerTotal,
+  )
 
-    if (sourceType === 'subject') {
-      specimenConditions.push(sql`${specimen.studySubjectId} IS NOT NULL`)
-    } else if (sourceType === 'control') {
-      specimenConditions.push(sql`${specimen.controlBatchId} IS NOT NULL`)
-    }
-
-    if (specimenTypeId) {
-      const typeId = parseInt(specimenTypeId)
-      if (!isNaN(typeId)) {
-        specimenConditions.push(eq(specimen.specimenTypeId, typeId))
-      }
-    }
-
-    // Date filters for specimens
-    const collectionDateFilters = buildDateFilter(specimen.collectionDate, collectionDateFrom, collectionDateTo)
-    const createdDateFilters = buildDateFilter(specimen.created, createdFrom, createdTo)
-    specimenConditions.push(...collectionDateFilters, ...createdDateFilters)
-
-    // Get filtered specimens
-    let specimenQuery = database.select().from(specimen)
-    if (specimenConditions.length > 0) {
-      specimenQuery = specimenQuery.where(and(...specimenConditions) as any) as any
-    }
-    const filteredSpecimens = await specimenQuery
-
-    const specimenIds = filteredSpecimens.map(s => s.id)
-
-    let specimenAggregates = await computeSpecimenAggregates(database, filteredSpecimens, {
-      useSpecimenTypeCache: true,
-    })
-
-    // Location Filtering - Query matching location IDs and their descendants
-    const hasLocationFilter = !!locationId
-    const locationFilter = await resolveStatisticsLocationFilter(database, sqliteDatabase, locationId)
-    let filteredLocationIds: number[] = []
-
-    if (locationFilter.kind === 'not_found') {
-      return emptyDashboardStatistics()
-    }
-
-    if (locationFilter.kind === 'resolved') {
-      filteredLocationIds = locationFilter.filteredLocationIds
-    }
-
-    // Get container IDs filtered by tags if tag filter is provided
-    // Using AND logic: containers must have ALL selected tags
-    let tagFilteredContainerIds: number[] | null = null
-    if (tagIds && tagIds.length > 0) {
-      
-      // For AND logic, find containers that have all selected tags
-      // Query containers for each tag and find the intersection
-      const containerSets: Set<number>[] = []
-      
-      for (const tagId of tagIds) {
-        const containersWithTag = await database
-          .select({ containerId: storageContainerTag.storageContainerId })
-          .from(storageContainerTag)
-          .where(eq(storageContainerTag.tagId, tagId))
-        containerSets.push(new Set(containersWithTag.map(ct => ct.containerId)))
-      }
-      
-      // Find intersection: containers that appear in all sets
-      if (containerSets.length > 0) {
-        let intersection = containerSets[0]
-        for (let i = 1; i < containerSets.length; i++) {
-          intersection = new Set([...intersection].filter(id => containerSets[i].has(id)))
-        }
-        tagFilteredContainerIds = Array.from(intersection)
-      } else {
-        tagFilteredContainerIds = []
-      }
-
-      if (tagFilteredContainerIds.length === 0) {
-        // No containers match all the tags, return empty results
-        return emptyDashboardStatistics()
-      }
-    }
-
-    // Container Statistics
-    // Use efficient joins when location filter is present
-    let filteredContainers: Array<typeof storageContainer.$inferSelect> = []
-
-    if (specimenIds.length > 0) {
-      // Get location-filtered container IDs once (if location filter is active)
-      let locationFilteredContainerIds: number[] | null = null
-      if (hasLocationFilter && filteredLocationIds.length > 0) {
-        locationFilteredContainerIds = await resolveContainerIdsAtLocations(
-          database,
-          filteredLocationIds,
-          tagFilteredContainerIds,
-        )
-      }
-      
-      const locationFilteredIdSet = locationFilteredContainerIds ? new Set(locationFilteredContainerIds) : null
-      const tagFilteredIdSet = tagFilteredContainerIds ? new Set(tagFilteredContainerIds) : null
-
-      // Batch query if too many specimen IDs to avoid SQLite variable limit
-      // Use Promise.all to parallelize queries for better performance
-      const specimenChunks = chunkArray(specimenIds, SQL_IN_CHUNK_SIZE)
-      
-      const chunkResults = await Promise.all(
-        specimenChunks.map(async (specimenChunk, chunkIndex) => {
-          const containers = await database
-            .select()
-            .from(storageContainer)
-            .where(inArray(storageContainer.specimenId, specimenChunk))
-          // Location and tag filters are applied in memory: as IN lists they can exceed
-          // SQLite's parameter limit on large locations.
-          return containers.filter(
-            (c) =>
-              (!locationFilteredIdSet || locationFilteredIdSet.has(c.id)) &&
-              (!tagFilteredIdSet || tagFilteredIdSet.has(c.id)),
-          )
-        })
-      )
-      
-      // Flatten results
-      filteredContainers = chunkResults.flat()
-      
-      // Remove duplicates (in case a container appears in multiple chunks - shouldn't happen, but be safe)
-      const seenIds = new Set<number>()
-      filteredContainers = filteredContainers.filter(c => {
-        if (seenIds.has(c.id)) {
-          return false
-        }
-        seenIds.add(c.id)
-        return true
-      })
-    } else if (filteredSpecimens.length === 0) {
-      // No specimens match, so no containers
-      return emptyDashboardStatistics()
-    } else {
-      // No specimen filter, but we might have state/status/location filters
-      if (hasLocationFilter && filteredLocationIds.length > 0) {
-        const locationFilteredContainerIds = await resolveContainerIdsAtLocations(
-          database,
-          filteredLocationIds,
-          tagFilteredContainerIds,
-        )
-
-        if (locationFilteredContainerIds.length === 0) {
-          filteredContainers = []
-        } else {
-          // Fetch containers matching location and other filters
-          // Use Promise.all to parallelize queries
-          const containerIdChunks = chunkArray(locationFilteredContainerIds, SQL_IN_CHUNK_SIZE)
-          const chunkResults = await Promise.all(
-            containerIdChunks.map(async (containerIdChunk) => {
-              // Tag filter is already intersected into locationFilteredContainerIds.
-              return await database
-                .select()
-                .from(storageContainer)
-                .where(inArray(storageContainer.id, containerIdChunk))
-            })
-          )
-          filteredContainers = chunkResults.flat()
-        }
-      } else {
-        // No location filter
-        if (tagFilteredContainerIds) {
-          const tagIdChunks = chunkArray(tagFilteredContainerIds, SQL_IN_CHUNK_SIZE)
-          const chunkResults = await Promise.all(
-            tagIdChunks.map((idChunk) =>
-              database.select().from(storageContainer).where(inArray(storageContainer.id, idChunk)),
-            ),
-          )
-          filteredContainers = chunkResults.flat()
-        } else {
-          filteredContainers = await database.select().from(storageContainer)
-        }
-      }
-    }
-
-    // Get container types in batch
-    const containerIds = filteredContainers.map(c => c.id)
-    const containerTypeMap = await resolveContainerTypes(database, containerIds)
-
-    // Filter by container type if specified (before calculating totals)
-    let finalContainers = filteredContainers
-    if (containerType) {
-      finalContainers = filteredContainers.filter(container => 
-        containerTypeMap.get(container.id) === containerType
-      )
-    }
-
-    const containerTotal = finalContainers.length
-    const finalContainerIds = finalContainers.map((c) => c.id)
-
-    if (containerType || tagFilteredContainerIds || hasLocationFilter) {
-      const filteredSpecimenIds = new Set(finalContainers.map(c => c.specimenId))
-      const adjustedSpecimens = filteredSpecimens.filter((s) => filteredSpecimenIds.has(s.id))
-
-      specimenAggregates = await computeSpecimenAggregates(database, adjustedSpecimens, {
-        useSpecimenTypeCache: false,
-      })
-    }
-
-    const averagePerSpecimen =
-      specimenAggregates.total > 0 ? containerTotal / specimenAggregates.total : 0
-
-    const containerAggregates = await computeContainerAggregates(
-      database,
-      finalContainers,
-      containerTypeMap,
-    )
-
-    const storage = await computeStorageStatistics(database, finalContainerIds, containerTotal)
-
-    return {
-      specimens: specimenAggregates,
-      containers: {
-        total: containerTotal,
-        ...containerAggregates,
-        averagePerSpecimen: Math.round(averagePerSpecimen * 100) / 100,
-      },
-      storage,
-    }
+  return {
+    specimens: specimenAggregates,
+    containers: {
+      total: containerTotal,
+      ...containerAggregates,
+      averagePerSpecimen: Math.round(averagePerSpecimen * 100) / 100,
+    },
+    storage,
+  }
 }
