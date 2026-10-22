@@ -1,12 +1,24 @@
-import type { ContainerExportData } from '@sampledb/contract'
+import { subjectDateSelections, type ContainerExportData } from '@sampledb/contract'
+import { eq, inArray } from 'drizzle-orm'
 import type { Database } from '../../db/client'
+import { study, studySubject } from '../../db/schema'
 import { ExpectedNotFoundError, RouteError } from '../error-handler'
 import { enrichContainerData } from './enrich'
 import { filterContainerIdsByType } from './filter'
 import { formatAsCSV, formatAsExcel, formatAsJSON } from './format'
-import { buildContainerQuery, buildContainerQueryByMicronixBarcodes, buildMultiStudyContainerQuery, resolveMicronixBarcodesToContainers } from './query'
+import { buildContainerQuery, resolveMicronixBarcodesToContainers } from './query'
 import { buildExportSummary, validateStudyCodes } from './validate'
-import { resolveSubjectNamesByStudy, resolveStudyByShortCode } from '../identifier-resolution'
+import {
+  resolveSubjectNamesByStudy,
+  resolveStudyByShortCode,
+  resolveSubjectsByStudyGrouped,
+} from '../identifier-resolution'
+import {
+  selectContainers,
+  type ContainerSelectionFilters,
+  type SubjectSelectionEntry,
+} from '../container-selection'
+import { chunkArray, SQL_IN_CHUNK_SIZE } from '../sql-helpers'
 import type {
   CSVExportOptions,
   ExportFilters,
@@ -316,6 +328,33 @@ export async function runSingleStudyContainerExportPost(
   })
 }
 
+/** Placeholder study for export metadata when an export spans Studies or has none (ADR 0011). */
+const MULTI_STUDY_RECORD: StudyRecord = {
+  id: 0,
+  shortCode: 'MULTI',
+  title: 'Multi-Study Export',
+  description: null,
+  leadPerson: '',
+  isLongitudinal: false,
+  created: '',
+  lastUpdated: '',
+  createdBy: null,
+  updatedBy: null,
+}
+
+/** Container selection filters for an export's filters; `created_*` means Container created (ADR 0011). */
+function exportSelectionFilters(
+  filters: Omit<ExportFilters, 'study' | 'subject_ids' | 'subject_dates'>
+): ContainerSelectionFilters {
+  return {
+    specimenTypeIds: filters.specimen_type_ids,
+    collectionDate: { from: filters.date_from, to: filters.date_to },
+    containerCreated: { from: filters.created_from, to: filters.created_to },
+    containerTypes: filters.container_types,
+    tagIds: filters.tag_ids,
+  }
+}
+
 export async function runMultiStudyContainerExportPost(
   database: Database,
   params: {
@@ -330,45 +369,140 @@ export async function runMultiStudyContainerExportPost(
   }
 ): Promise<PostExportEnvelope | { count: number; summary: MultiStudyExportSummary }> {
   const { entries, filters, format, columns, csvOptions, userId, countOnly, dateTolerance = 0 } = params
-  const result = await buildMultiStudyContainerQuery(database, entries, filters, dateTolerance)
+  const filenameBase = `multi_study_export_${formatExportTimestamp()}`
 
-  if (countOnly) {
-    return { count: result.containers.length, summary: result.summary }
+  const validation = await validateStudyCodes(
+    database,
+    entries.map((entry) => entry.study_short_code)
+  )
+  if (validation.invalid.length > 0) {
+    const summary: MultiStudyExportSummary = {
+      total_containers: 0,
+      studies: [],
+      invalid_study_codes: validation.invalid,
+      errors: [`Invalid study codes: ${validation.invalid.join(', ')}`],
+    }
+    if (countOnly) return { count: 0, summary }
+    const formatted = await formatContainerExport(
+      database,
+      [],
+      format,
+      { study: 'MULTI' },
+      MULTI_STUDY_RECORD,
+      columns,
+      csvOptions,
+      userId
+    )
+    return buildPostExportEnvelope({ format, filenameBase, summary, ...formatted })
   }
 
-  const firstStudy =
-    result.studies.size > 0
-      ? Array.from(result.studies.values())[0]
-      : ({
-          id: 0,
-          shortCode: 'MULTI',
-          title: 'Multi-Study Export',
-          description: null,
-          leadPerson: '',
-          isLongitudinal: false,
-          created: '',
-          lastUpdated: '',
-          createdBy: null,
-          updatedBy: null,
-        } as StudyRecord)
+  const entriesByStudy = new Map<number, MultiStudyExportEntry[]>()
+  for (const entry of entries) {
+    const studyId = validation.valid.get(entry.study_short_code)!
+    entriesByStudy.set(studyId, [...(entriesByStudy.get(studyId) ?? []), entry])
+  }
+  const subjectsByStudy = await resolveSubjectsByStudyGrouped(
+    database,
+    entries.map((entry) => ({
+      studyId: validation.valid.get(entry.study_short_code)!,
+      subjectName: entry.subject_name,
+    }))
+  )
+
+  // The whole upload is one subject-list selection. A Subject listed without a date matches
+  // every collection date.
+  const subjects: SubjectSelectionEntry[] = []
+  const subjectToStudyMap = new Map<number, StudyRecord>()
+  for (const [studyId, studyEntries] of entriesByStudy) {
+    const subjectIds = subjectsByStudy.get(studyId) ?? new Map<string, number>()
+    for (const [subjectName, selection] of subjectDateSelections(studyEntries)) {
+      const subjectId = subjectIds.get(subjectName)
+      if (subjectId === undefined) continue
+      subjects.push({ studyId, subjectId, dates: selection.kind === 'dates' ? selection.filters : undefined })
+      subjectToStudyMap.set(subjectId, validation.studies.get(studyId)!)
+    }
+  }
+
+  const selected =
+    subjects.length > 0
+      ? await selectContainers(database, {
+          kind: 'subjects',
+          subjects,
+          dateTolerance,
+          filters: exportSelectionFilters(filters),
+        })
+      : { containers: [], specimens: [] }
+  const enrichedData = await enrichContainerData(
+    database,
+    selected.containers,
+    selected.specimens,
+    MULTI_STUDY_RECORD,
+    undefined,
+    subjectToStudyMap
+  )
+
+  // The Export summary groups the one selection by Study.
+  const studySummaries: MultiStudyExportSummary['studies'] = []
+  for (const [studyId, studyEntries] of entriesByStudy) {
+    const studyRecord = validation.studies.get(studyId)!
+    const subjectNameToId = subjectsByStudy.get(studyId) ?? new Map<string, number>()
+    const subjectIdToName = new Map([...subjectNameToId].map(([name, id]) => [id, name]))
+    const studyData = enrichedData.filter((row) => row.study_id === studyId)
+    const studySummary = await buildExportSummary(
+      studyData,
+      studyEntries.map((entry) => entry.subject_name),
+      subjectNameToId,
+      subjectIdToName
+    )
+    studySummaries.push({
+      study_code: studyRecord.shortCode,
+      study_title: studyRecord.title,
+      study_lead_person: studyRecord.leadPerson,
+      containers: studyData.length,
+      subjects_with_results: studySummary.subjects_with_results,
+      subjects_no_results: studySummary.subjects_no_results,
+      subjects_not_found: studySummary.subjects_not_found,
+    })
+  }
+  const summary: MultiStudyExportSummary = {
+    total_containers: enrichedData.length,
+    studies: studySummaries,
+    invalid_study_codes: [],
+  }
+
+  if (countOnly) {
+    return { count: enrichedData.length, summary }
+  }
 
   const formatted = await formatContainerExport(
     database,
-    result.containers,
+    enrichedData,
     format,
     { study: 'MULTI' },
-    firstStudy,
+    validation.studies.values().next().value ?? MULTI_STUDY_RECORD,
     columns,
     csvOptions,
     userId
   )
 
-  return buildPostExportEnvelope({
-    format,
-    filenameBase: `multi_study_export_${formatExportTimestamp()}`,
-    summary: result.summary,
-    ...formatted,
-  })
+  return buildPostExportEnvelope({ format, filenameBase, summary, ...formatted })
+}
+
+/** Each Subject's Study, by Subject id. */
+async function loadStudiesBySubject(
+  database: Database,
+  subjectIds: number[]
+): Promise<Map<number, StudyRecord>> {
+  const studiesBySubject = new Map<number, StudyRecord>()
+  for (const chunk of chunkArray([...new Set(subjectIds)], SQL_IN_CHUNK_SIZE)) {
+    const rows = await database
+      .select({ subjectId: studySubject.id, study })
+      .from(studySubject)
+      .innerJoin(study, eq(studySubject.studyId, study.id))
+      .where(inArray(studySubject.id, chunk))
+    for (const row of rows) studiesBySubject.set(row.subjectId, row.study)
+  }
+  return studiesBySubject
 }
 
 export async function runBarcodeContainerExportPost(
@@ -382,73 +516,30 @@ export async function runBarcodeContainerExportPost(
   }
 ): Promise<PostExportEnvelope> {
   const { barcodes, format, columns, csvOptions, userId } = params
+  // Selected Containers carry no barcode, so found and not found come from the tubes.
   const barcodeToContainerId = await resolveMicronixBarcodesToContainers(database, barcodes)
-  const containerIds = Array.from(barcodeToContainerId.values())
   const foundBarcodes = Array.from(barcodeToContainerId.keys())
-  const notFoundBarcodes = barcodes.filter((b) => !barcodeToContainerId.has(b))
 
-  const summary = {
-    total_containers: 0,
-    barcodes_found: foundBarcodes,
-    barcodes_not_found: notFoundBarcodes,
-  }
-
-  if (containerIds.length === 0) {
-    return buildPostExportEnvelope({
-      format,
-      filenameBase: `barcode_export_${formatExportTimestamp()}`,
-      summary,
-      jsonData: [],
-      csv: '',
-      xlsx: Buffer.from(''),
-    })
-  }
-
-  const queryResult = await buildContainerQueryByMicronixBarcodes(database, containerIds)
-  if (queryResult.containers.length === 0) {
-    return buildPostExportEnvelope({
-      format,
-      filenameBase: `barcode_export_${formatExportTimestamp()}`,
-      summary,
-      jsonData: [],
-      csv: '',
-      xlsx: Buffer.from(''),
-    })
-  }
-
-  const firstStudy =
-    queryResult.studies.length > 0
-      ? queryResult.studies[0]
-      : ({
-          id: 0,
-          shortCode: 'MULTI',
-          title: 'Multi-Study Export',
-          description: null,
-          leadPerson: '',
-          isLongitudinal: false,
-          created: '',
-          lastUpdated: '',
-          createdBy: null,
-          updatedBy: null,
-        } as StudyRecord)
-
+  const selected = await selectContainers(database, { kind: 'micronixBarcodes', barcodes: foundBarcodes })
+  const studiesBySubject = await loadStudiesBySubject(
+    database,
+    selected.specimens.flatMap((row) => (row.studySubjectId == null ? [] : [row.studySubjectId]))
+  )
   const enrichedData = await enrichContainerData(
     database,
-    queryResult.containers,
-    queryResult.specimens,
-    firstStudy,
+    selected.containers,
+    selected.specimens,
+    MULTI_STUDY_RECORD,
     undefined,
-    queryResult.subjectToStudyMap
+    studiesBySubject
   )
-
-  summary.total_containers = enrichedData.length
 
   const formatted = await formatContainerExport(
     database,
     enrichedData,
     format,
     { study: 'MULTI' },
-    firstStudy,
+    studiesBySubject.values().next().value ?? MULTI_STUDY_RECORD,
     columns,
     csvOptions,
     userId
@@ -457,7 +548,11 @@ export async function runBarcodeContainerExportPost(
   return buildPostExportEnvelope({
     format,
     filenameBase: `barcode_export_${formatExportTimestamp()}`,
-    summary,
+    summary: {
+      total_containers: enrichedData.length,
+      barcodes_found: foundBarcodes,
+      barcodes_not_found: barcodes.filter((barcode) => !barcodeToContainerId.has(barcode)),
+    },
     ...formatted,
   })
 }

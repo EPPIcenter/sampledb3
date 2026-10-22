@@ -191,6 +191,28 @@ describe('Container export executors', () => {
       expect(containerIds(result.data)).toEqual([alphaJan.id])
     })
 
+    it('keeps every listed visit of a Subject', async () => {
+      const study = await createTestStudy(db, { title: 'Visits', shortCode: 'VIS' })
+      const subject = await createTestStudySubject(db, { studyId: study.id, name: 'S01' })
+      const jan = await seedTube((await seedSpecimen({ studySubjectId: subject.id }, '2024-01-01')).id)
+      const feb = await seedTube((await seedSpecimen({ studySubjectId: subject.id }, '2024-02-03')).id)
+      await seedTube((await seedSpecimen({ studySubjectId: subject.id }, '2024-03-01')).id)
+
+      const result = await runMultiStudyContainerExportPost(db, {
+        entries: [
+          { study_short_code: 'VIS', subject_name: 'S01', collection_date: '2024-01-01' },
+          { study_short_code: 'VIS', subject_name: 'S01', collection_date: '2024-02-01' },
+        ],
+        filters: {},
+        format: 'json',
+        columns,
+        dateTolerance: 2,
+      })
+
+      if (!('data' in result)) throw new Error('expected an export envelope')
+      expect(containerIds(result.data)).toEqual([jan.id, feb.id])
+    })
+
     it('counts with the same summary as the export', async () => {
       await seedTwoStudies()
 
