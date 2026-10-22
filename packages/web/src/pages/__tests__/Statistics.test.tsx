@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import Statistics from '../Statistics'
 import { statisticsApi } from '../../lib/api/statistics'
@@ -69,6 +70,22 @@ describe('Statistics', () => {
       expect(screen.getByText(/Could not load statistics/i)).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
     })
+  })
+
+  it('filters and labels the date range as Specimen created', async () => {
+    const user = userEvent.setup()
+    await render(<Statistics />)
+    await user.click(await screen.findByRole('button', { name: /filters/i }))
+
+    await user.type(screen.getByLabelText('Specimen Created From'), '2024-01-01')
+    await user.type(screen.getByLabelText('Specimen Created To'), '2024-12-31')
+    await user.click(screen.getByRole('button', { name: /apply filters/i }))
+
+    expect(await screen.findByText('Specimen created from: 2024-01-01')).toBeInTheDocument()
+    expect(screen.getByText('Specimen created to: 2024-12-31')).toBeInTheDocument()
+    expect(statisticsApi.get).toHaveBeenLastCalledWith(
+      expect.objectContaining({ created_from: '2024-01-01', created_to: '2024-12-31' }),
+    )
   })
 
   // We do not defend against malformed API responses: the server is under our control
