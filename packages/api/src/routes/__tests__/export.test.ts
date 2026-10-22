@@ -6,7 +6,7 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createExportRoutes } from '../export'
-import { errorLogs } from '../../db/schema'
+import { errorLogs, specimen as specimenTable } from '../../db/schema'
 import * as specimensCsv from '../../lib/export/specimens-csv'
 import {
   createTestStudy,
@@ -311,6 +311,82 @@ describe('Export API', () => {
       expect(typeof data.data).toBe('string')
       expect(data.summary?.total_containers).toBe(1)
       expect(Buffer.from(data.data!, 'base64').toString('utf8')).not.toContain('=""')
+    })
+  })
+
+  describe('POST /api/export/containers filters', () => {
+    type PostSummary = {
+      total_containers: number
+      subjects_with_results: Array<{ name: string; count: number }>
+      subjects_no_results: string[]
+      subjects_not_found: string[]
+    }
+
+    /** POST a CSV export; return its summary and each row's container_id and container_type. */
+    async function postCsvExport(body: Record<string, unknown>) {
+      const res = await ctx.request('/api/export/containers', {
+        method: 'POST',
+        json: { ...body, format: 'csv', csv_bom: false, csv_line_ending: 'LF' },
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { summary: PostSummary; data: string }
+      const [header, ...lines] = Buffer.from(data.data, 'base64').toString('utf8').trim().split('\n')
+      expect(header.startsWith('container_id,container_type,')).toBe(true)
+      const rows = lines.map((line) => {
+        const [id, type] = line.split(',')
+        return [Number(id), type] as const
+      })
+      return { summary: data.summary, rows }
+    }
+
+    it('exports and counts only Containers of the requested container_types', async () => {
+      const { cryovialId } = await seedTypedContainers('PTYPES', { cryovial: true })
+      const body = { study: 'PTYPES', subject_names: ['Subj1', 'Ghost'], container_types: ['cryovial_tube'] }
+
+      const exported = await postCsvExport(body)
+      expect(exported.rows).toEqual([[cryovialId, 'cryovial_tube']])
+      expect(exported.summary).toEqual({
+        total_containers: 1,
+        subjects_with_results: [{ name: 'Subj1', count: 1 }],
+        subjects_no_results: [],
+        subjects_not_found: ['Ghost'],
+      })
+
+      const countRes = await ctx.request('/api/export/containers', {
+        method: 'POST',
+        json: { ...body, count_only: true },
+      })
+      const counted = (await countRes.json()) as { count: number; summary: PostSummary }
+      expect(counted.count).toBe(1)
+      expect(counted.summary.total_containers).toBe(1)
+      expect(counted.summary.subjects_not_found).toEqual(['Ghost'])
+    })
+
+    it('applies per-subject dates with tolerance, and the global range to undated subjects', async () => {
+      const study = await createTestStudy(ctx.db, { title: 'Dates Study', shortCode: 'PDATES' })
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'Blood' })
+      const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const containerOn = async (subjectId: number, collectionDate: string) => {
+        const spec = await createTestSpecimen(ctx.db, specimenType.id, { studySubjectId: subjectId })
+        await ctx.db.update(specimenTable).set({ collectionDate }).where(eq(specimenTable.id, spec.id))
+        return (await createTestStorageContainer(ctx.db, { specimenId: spec.id, unitId: unit.id as number })).id
+      }
+      const dated = await createTestStudySubject(ctx.db, { studyId: study.id, name: 'Dated' })
+      const undated = await createTestStudySubject(ctx.db, { studyId: study.id, name: 'Undated' })
+      const datedJan = await containerOn(dated.id, '2024-01-01')
+      await containerOn(dated.id, '2024-03-01')
+      await containerOn(undated.id, '2024-01-15')
+      const undatedFeb = await containerOn(undated.id, '2024-02-15')
+
+      const exported = await postCsvExport({
+        study: 'PDATES',
+        subject_names: ['Dated', 'Undated'],
+        subject_dates: { Dated: { exact: '2024-01-02' } },
+        date_tolerance: 1,
+        date_from: '2024-02-01',
+      })
+      expect(exported.rows.map(([id]) => id).sort((a, b) => a - b)).toEqual([datedJan, undatedFeb])
+      expect(exported.summary.total_containers).toBe(2)
     })
   })
 

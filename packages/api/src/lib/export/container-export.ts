@@ -1,15 +1,19 @@
-import type { ContainerExportData } from '@sampledb/contract'
+import type { ContainerExportData, SubjectDateFilter } from '@sampledb/contract'
 import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { study } from '../../db/schema'
-import { selectContainers, type ContainerSelection, type ContainerSelectionFilters } from '../container-selection'
+import {
+  selectContainers,
+  type ContainerSelection,
+  type ContainerSelectionFilters,
+  type SubjectSelectionEntry,
+} from '../container-selection'
 import { ExpectedNotFoundError, RouteError } from '../error-handler'
 import { enrichContainerData } from './enrich'
-import { filterContainerIdsByType } from './filter'
 import { formatAsCSV, formatAsExcel, formatAsJSON } from './format'
-import { buildContainerQuery, buildContainerQueryByMicronixBarcodes, buildMultiStudyContainerQuery, resolveMicronixBarcodesToContainers } from './query'
+import { buildContainerQueryByMicronixBarcodes, buildMultiStudyContainerQuery, resolveMicronixBarcodesToContainers } from './query'
 import { buildExportSummary, validateStudyCodes } from './validate'
-import { resolveSubjectNamesByStudy, resolveStudyByShortCode } from '../identifier-resolution'
+import { resolveSubjectNamesByStudy } from '../identifier-resolution'
 import type {
   CSVExportOptions,
   ExportFilters,
@@ -203,7 +207,8 @@ export async function runSingleStudyContainerExportPost(
     csvOptions?: CSVExportOptions
     userId?: number | null
     countOnly?: boolean
-    subjectDates?: ExportFilters['subject_dates']
+    /** Per-Subject collection dates, keyed by subject name. */
+    subjectDates?: Record<string, SubjectDateFilter | SubjectDateFilter[]>
     dateTolerance?: number
   }
 ): Promise<PostExportEnvelope | { count: number; summary: ExportSummary }> {
@@ -220,19 +225,18 @@ export async function runSingleStudyContainerExportPost(
     dateTolerance = 0,
   } = params
 
-  const studyId = await resolveStudyByShortCode(database, studyCode)
-  if (!studyId) {
+  const studyRecord = await findStudyByShortCode(database, studyCode)
+  if (!studyRecord) {
     throw new ExpectedNotFoundError('Study not found')
   }
 
-  const subjectNameToId = await resolveSubjectNamesByStudy(database, subjectNames, studyId)
-  const subjectIds = Array.from(subjectNameToId.values())
+  const subjectNameToId = await resolveSubjectNamesByStudy(database, subjectNames, studyRecord.id)
   const subjectIdToName = new Map<number, string>()
   for (const [name, id] of subjectNameToId.entries()) {
     subjectIdToName.set(id, name)
   }
 
-  if (subjectIds.length === 0) {
+  if (subjectNameToId.size === 0) {
     const summary: ExportSummary = {
       total_containers: 0,
       subjects_with_results: [],
@@ -255,55 +259,34 @@ export async function runSingleStudyContainerExportPost(
     })
   }
 
-  const queryFilters: ExportFilters = {
-    ...filters,
-    study: studyCode,
-    subject_ids: subjectIds,
-    date_tolerance: dateTolerance,
-  }
-
-  if (subjectDates) {
-    queryFilters.subject_dates = {}
-    for (const [subjectName, dateFilter] of Object.entries(subjectDates)) {
-      const subjectId = subjectNameToId.get(subjectName)
-      if (subjectId) {
-        queryFilters.subject_dates![subjectId] = dateFilter as NonNullable<ExportFilters['subject_dates']>[number]
-      }
+  const subjects: SubjectSelectionEntry[] = [...subjectNameToId].map(([name, subjectId]) => {
+    const dates = subjectDates?.[name]
+    return {
+      studyId: studyRecord.id,
+      subjectId,
+      dates: dates === undefined ? undefined : Array.isArray(dates) ? dates : [dates],
     }
-  }
-
-  const result = await buildContainerQuery(database, queryFilters).catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : 'Not found'
-    throw new ExpectedNotFoundError(message)
+  })
+  const result = await selectContainers(database, {
+    kind: 'subjects',
+    subjects,
+    dateTolerance,
+    filters: exportSelectionFilters(filters),
   })
 
   if (countOnly) {
-    let filteredContainers = result.containers
-    if (queryFilters.container_types?.length) {
-      const containerIds = result.containers.map((c) => c.id)
-      const matchingIds = await filterContainerIdsByType(database, containerIds, queryFilters.container_types)
-      filteredContainers = result.containers.filter((c) => matchingIds.includes(c.id))
-    }
-
     const summary: ExportSummary = {
-      total_containers: filteredContainers.length,
+      total_containers: result.containers.length,
       subjects_with_results: [],
       subjects_no_results: [],
       subjects_not_found: subjectNames.filter((name) => !subjectNameToId.has(name)),
       errors: [],
     }
 
-    return { count: filteredContainers.length, summary }
+    return { count: result.containers.length, summary }
   }
 
-  const enrichedData = await enrichContainerData(
-    database,
-    result.containers,
-    result.specimens ?? [],
-    result.study,
-    queryFilters.container_types,
-    undefined
-  )
+  const enrichedData = await enrichContainerData(database, result.containers, result.specimens, studyRecord)
 
   const summary = await buildExportSummary(
     enrichedData,
@@ -316,8 +299,8 @@ export async function runSingleStudyContainerExportPost(
     database,
     enrichedData,
     format,
-    queryFilters,
-    result.study,
+    { ...filters, study: studyCode, date_tolerance: dateTolerance },
+    studyRecord,
     columns,
     csvOptions,
     userId
@@ -325,7 +308,7 @@ export async function runSingleStudyContainerExportPost(
 
   return buildPostExportEnvelope({
     format,
-    filenameBase: `study_${result.study.shortCode}_export_${formatExportTimestamp()}`,
+    filenameBase: `study_${studyRecord.shortCode}_export_${formatExportTimestamp()}`,
     summary,
     ...formatted,
   })
