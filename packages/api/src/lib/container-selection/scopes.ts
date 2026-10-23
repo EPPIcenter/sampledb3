@@ -17,6 +17,12 @@ export interface SelectionScope {
   containers?: SQL
 }
 
+/**
+ * Per-Subject date conditions per query. Each binds at most three parameters, so a query
+ * stays under a fixed bound however many dates a Subject lists.
+ */
+const SUBJECT_DATE_CONDITIONS_PER_QUERY = SQL_IN_CHUNK_SIZE
+
 /** Exactly the micronix tubes with these barcodes, and their Specimens, whatever their Source. */
 export function micronixBarcodeScopes(database: Database, barcodes: readonly string[]): SelectionScope[] {
   const unique = [...new Set(barcodes.filter((barcode) => barcode !== ''))]
@@ -61,7 +67,8 @@ export async function subjectListScopes(
       .from(studySubject)
       .where(inArray(studySubject.id, subjectIds))
     const undated: number[] = []
-    const dated: SQL[] = []
+    // One condition per listed date of a dated Subject, so the OR grows with dates, not Subjects.
+    const subjectDateConditions: SQL[] = []
     for (const subject of subjects) {
       const listed = datesBySubject.get(subject.id)?.find((item) => item.studyId === subject.studyId)
       if (!listed) continue
@@ -72,12 +79,16 @@ export async function subjectListScopes(
               .map((dateFilter) => subjectDateCondition(dateFilter, options.dateTolerance))
               .filter((condition) => condition !== undefined)
       if (dateConditions.length === 0) undated.push(subject.id)
-      else dated.push(and(eq(specimen.studySubjectId, subject.id), or(...dateConditions))!)
+      for (const condition of dateConditions) {
+        subjectDateConditions.push(and(eq(specimen.studySubjectId, subject.id), condition)!)
+      }
     }
     if (undated.length > 0) {
-      dated.push(and(inArray(specimen.studySubjectId, undated), ...options.collectionDate)!)
+      scopes.push({ specimens: and(inArray(specimen.studySubjectId, undated), ...options.collectionDate) })
     }
-    if (dated.length > 0) scopes.push({ specimens: or(...dated) })
+    for (const conditions of chunkArray(subjectDateConditions, SUBJECT_DATE_CONDITIONS_PER_QUERY)) {
+      scopes.push({ specimens: or(...conditions) })
+    }
   }
   return scopes
 }

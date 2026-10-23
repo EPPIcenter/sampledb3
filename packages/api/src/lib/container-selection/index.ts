@@ -62,7 +62,8 @@ export async function selectContainers(
 
 /**
  * Run each scope (one per chunk of a listed selection) and collect its Specimens and the
- * Containers that also pass the Container-level conditions. With any Container-level
+ * Containers that also pass the Container-level conditions. Scopes may overlap, so rows are
+ * collected by id. With any Container-level
  * condition, only Specimens with a matching Container are kept.
  */
 async function runScopes(
@@ -71,7 +72,7 @@ async function runScopes(
   containerConditions: SQL[],
 ): Promise<ContainerSelectionResult> {
   const specimensById = new Map<number, SelectedSpecimen>()
-  const containers: SelectedContainer[] = []
+  const containersById = new Map<number, SelectedContainer>()
   const containerTypes = new Map<number, ContainerSubtype>()
   for (const scope of scopes) {
     for (const row of await database.select().from(specimen).where(scope.specimens)) specimensById.set(row.id, row)
@@ -81,10 +82,11 @@ async function runScopes(
       .innerJoin(specimen, eq(storageContainer.specimenId, specimen.id))
       .where(and(scope.specimens, scope.containers, ...containerConditions))
     for (const row of rows) {
-      containers.push(row.container)
+      containersById.set(row.container.id, row.container)
       containerTypes.set(row.container.id, row.containerType)
     }
   }
+  const containers = [...containersById.values()]
   let specimens = [...specimensById.values()]
   if (containerConditions.length > 0) {
     const stored = new Set(containers.map((container) => container.specimenId))

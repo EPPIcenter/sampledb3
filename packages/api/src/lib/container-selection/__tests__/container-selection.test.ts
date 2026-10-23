@@ -430,6 +430,32 @@ describe('selectContainers', () => {
 
       expect(ids(result.specimens)).toEqual([first.id, last.id])
     })
+
+    it('selects every listed Subject when known Subjects each list many dates', async () => {
+      const study = await createTestStudy(db, { title: 'Study', shortCode: 'S1' })
+      const subjects = []
+      for (let i = 0; i < SQL_IN_CHUNK_SIZE; i++) subjects.push(await seedSubject(study.id, `P${i}`))
+      // Days 1 to 80 of 2023, one per visit: far more date conditions than one query can bind.
+      const dates = Array.from({ length: 80 }, (_, day) => new Date(Date.UTC(2023, 0, day + 1)).toISOString().slice(0, 10))
+      const first = await seedSpecimen({ studySubjectId: subjects[0].id }, { collectionDate: '2023-01-01' })
+      const firstTube = await seedContainer(first.id)
+      await seedSpecimen({ studySubjectId: subjects[0].id }, { collectionDate: '2024-01-01' })
+      const last = await seedSpecimen({ studySubjectId: subjects.at(-1)!.id }, { collectionDate: '2023-03-21' })
+      const lastTube = await seedContainer(last.id)
+
+      const result = await selectContainers(db, {
+        kind: 'subjects',
+        subjects: subjects.map((subject) => ({
+          studyId: study.id,
+          subjectId: subject.id,
+          dates: dates.map((exact) => ({ exact })),
+        })),
+        dateTolerance: 1,
+      })
+
+      expect(ids(result.specimens)).toEqual([first.id, last.id])
+      expect(ids(result.containers)).toEqual([firstTube.id, lastTube.id])
+    }, 60_000)
   })
 
   describe('whole-database selection', () => {
