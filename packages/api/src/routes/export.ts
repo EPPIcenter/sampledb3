@@ -6,18 +6,10 @@ import {
   ExpectedNotFoundError,
   RouteError,
 } from '../lib/error-handler'
-import {
-  specimen,
-  studySubject,
-  study,
-  specimenType,
-  storageContainer,
-  micronixTube,
-  cryovialTube,
-  paper,
-  staticWell,
-} from '../db/schema'
-import { eq, inArray } from 'drizzle-orm'
+import { specimenType } from '../db/schema'
+import { inArray } from 'drizzle-orm'
+import { CONTAINER_TYPES, selectContainers } from '../lib/container-selection'
+import { resolveStudyByShortCode } from '../lib/identifier-resolution'
 import {
   formatExportTimestamp,
   parseCSVExportOptions,
@@ -246,70 +238,28 @@ export function createExportRoutes(database: Database): Hono {
         return c.json({ error: 'Study parameter is required' }, 400)
       }
 
-      const studyRecord = await database.select().from(study).where(eq(study.shortCode, studyCode)).get()
-      if (!studyRecord) {
+      const studyId = await resolveStudyByShortCode(database, studyCode)
+      if (studyId === null) {
         throw new ExpectedNotFoundError('Study not found')
       }
 
-      const subjects = await database
-        .select({ id: studySubject.id })
-        .from(studySubject)
-        .where(eq(studySubject.studyId, studyRecord.id))
-
-      const subjectIds = subjects.map((s) => s.id)
-      if (subjectIds.length === 0) {
+      const selected = await selectContainers(database, { kind: 'study', studyId })
+      if (selected.specimens.length === 0) {
         return c.json({ specimen_types: [], container_types: [] })
       }
 
-      let specimensQuery = database
-        .select({ id: specimen.id, specimenTypeId: specimen.specimenTypeId })
-        .from(specimen)
-
-      specimensQuery =
-        subjectIds.length === 1
-          ? (specimensQuery.where(eq(specimen.studySubjectId, subjectIds[0])) as typeof specimensQuery)
-          : (specimensQuery.where(inArray(specimen.studySubjectId, subjectIds)) as typeof specimensQuery)
-
-      const specimens = await specimensQuery
-      const specimenIds = specimens.map((s) => s.id)
-      if (specimenIds.length === 0) {
-        return c.json({ specimen_types: [], container_types: [] })
-      }
-
-      const specimenTypeIds = [...new Set(specimens.map((s) => s.specimenTypeId))]
+      const specimenTypeIds = [...new Set(selected.specimens.map((row) => row.specimenTypeId))]
       const specimenTypes = await database
-        .select()
+        .select({ id: specimenType.id, name: specimenType.name })
         .from(specimenType)
         .where(inArray(specimenType.id, specimenTypeIds))
+        .orderBy(specimenType.id)
 
-      const containers = await database
-        .select({ id: storageContainer.id })
-        .from(storageContainer)
-        .where(inArray(storageContainer.specimenId, specimenIds))
-
-      const containerIds = containers.map((row) => row.id)
-      if (containerIds.length === 0) {
-        return c.json({
-          specimen_types: specimenTypes.map((st) => ({ id: st.id, name: st.name })),
-          container_types: [],
-        })
-      }
-
-      const [micronixTubes, cryovialTubes, papers, staticWells] = await Promise.all([
-        database.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, containerIds)),
-        database.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, containerIds)),
-        database.select({ id: paper.id }).from(paper).where(inArray(paper.id, containerIds)),
-        database.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.id, containerIds)),
-      ])
-
-      const containerTypes: string[] = []
-      if (micronixTubes.length > 0) containerTypes.push('micronix_tube')
-      if (cryovialTubes.length > 0) containerTypes.push('cryovial_tube')
-      if (papers.length > 0) containerTypes.push('paper')
-      if (staticWells.length > 0) containerTypes.push('static_well')
+      const present = new Set(selected.containerTypes.values())
+      const containerTypes = CONTAINER_TYPES.filter((type) => type !== 'unknown' && present.has(type))
 
       return c.json({
-        specimen_types: specimenTypes.map((st) => ({ id: st.id, name: st.name })),
+        specimen_types: specimenTypes,
         container_types: containerTypes,
       })
     } catch (error) {

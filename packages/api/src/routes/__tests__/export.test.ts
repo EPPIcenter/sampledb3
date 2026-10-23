@@ -6,7 +6,8 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createExportRoutes } from '../export'
-import { errorLogs, specimen as specimenTable } from '../../db/schema'
+import { errorLogs, specimen as specimenTable, study as studyTable, unit as unitTable } from '../../db/schema'
+import { SQL_IN_CHUNK_SIZE } from '../../lib/sql-helpers'
 import * as specimensCsv from '../../lib/export/specimens-csv'
 import {
   createTestStudy,
@@ -456,6 +457,67 @@ describe('Export API', () => {
       expect(Array.isArray(data.data)).toBe(true)
       expect(data.summary?.barcodes_not_found).toContain('UNKNOWN-BARCODE')
     })
+  })
+
+  describe('GET /api/export/available-types', () => {
+    it('returns 400 when study parameter is missing', async () => {
+      const res = await ctx.request('/api/export/available-types', { method: 'GET' })
+      expect(res.status).toBe(400)
+    })
+
+    it('returns 404 when study does not exist', async () => {
+      const res = await ctx.request('/api/export/available-types?study=NOPE', { method: 'GET' })
+      expect(res.status).toBe(404)
+      expect(await res.json()).toMatchObject({ error: 'Study not found' })
+    })
+
+    it("lists the Study's specimen types and container types", async () => {
+      await seedTypedContainers('TYPES', { cryovial: true })
+      const other = await createTestStudy(ctx.db, { title: 'Other', shortCode: 'OTHER' })
+      const otherSubject = await createTestStudySubject(ctx.db, { studyId: other.id, name: 'Subj1' })
+      const plasma = await createTestSpecimenType(ctx.db, { name: 'Plasma' })
+      const [unit] = await ctx.db.select().from(unitTable)
+      await createTestStorageContainer(ctx.db, {
+        specimenId: (await createTestSpecimen(ctx.db, plasma.id, { studySubjectId: otherSubject.id })).id,
+        unitId: unit.id,
+      })
+
+      const res = await ctx.request('/api/export/available-types?study=TYPES', { method: 'GET' })
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { specimen_types: Array<{ id: number; name: string }>; container_types: string[] }
+      expect(data.specimen_types.map((type) => type.name)).toEqual(['Blood'])
+      expect(data.container_types).toEqual(['micronix_tube', 'cryovial_tube'])
+    })
+
+    it('returns empty lists for a Study with Specimens but no Containers', async () => {
+      const study = await createTestStudy(ctx.db, { title: 'Bare', shortCode: 'BARE' })
+      const subject = await createTestStudySubject(ctx.db, { studyId: study.id, name: 'Subj1' })
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'Plasma' })
+      await createTestSpecimen(ctx.db, specimenType.id, { studySubjectId: subject.id })
+
+      const res = await ctx.request('/api/export/available-types?study=BARE', { method: 'GET' })
+
+      expect(await res.json()).toEqual({ specimen_types: [{ id: specimenType.id, name: 'Plasma' }], container_types: [] })
+    })
+
+    it('lists the types of a Study with more Subjects than SQLite allows as bound parameters', async () => {
+      await seedTypedContainers('BIG', { cryovial: false })
+      const [big] = await ctx.db.select().from(studyTable).where(eq(studyTable.shortCode, 'BIG'))
+      ctx.sqlite.exec('BEGIN')
+      const addSubject = ctx.sqlite.prepare(
+        "INSERT INTO study_subject (study_id, name, created, last_updated) VALUES (?, ?, '2024-01-01', '2024-01-01')",
+      )
+      for (let i = 0; i < SQL_IN_CHUNK_SIZE * 140; i++) addSubject.run(big.id, `S${i}`)
+      ctx.sqlite.exec('COMMIT')
+
+      const res = await ctx.request('/api/export/available-types?study=BIG', { method: 'GET' })
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { specimen_types: Array<{ name: string }>; container_types: string[] }
+      expect(data.specimen_types.map((type) => type.name)).toEqual(['Blood'])
+      expect(data.container_types).toEqual(['micronix_tube'])
+    }, 60_000)
   })
 
   describe('error persistence', () => {
