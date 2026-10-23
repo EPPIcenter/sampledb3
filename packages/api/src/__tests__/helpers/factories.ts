@@ -21,6 +21,7 @@ import {
   cryovialTube,
   staticWell,
   paper,
+  storageContainerTag,
 } from '../../db/schema'
 import { utcNow } from '../../lib/datetime'
 
@@ -103,7 +104,7 @@ export async function createTestUnit(db: Database, data: {
  */
 export async function createTestStorageContainer(
   db: Database,
-  options?: { specimenId?: number; unitId?: number }
+  options?: { specimenId?: number; unitId?: number; created?: string }
 ) {
   // Create unit if not provided
   let unitId = options?.unitId
@@ -129,8 +130,19 @@ export async function createTestStorageContainer(
     unitId: unitId as number,
     totalQuantity: 1.0,
     remainingQuantity: 1.0,
+    ...(options?.created ? { created: options.created } : {}),
   }).returning()
   return result
+}
+
+/**
+ * Link Tags to a storage container
+ */
+export async function createTestContainerTags(db: Database, storageContainerId: number, tagIds: readonly number[]) {
+  return db
+    .insert(storageContainerTag)
+    .values(tagIds.map((tagId) => ({ storageContainerId, tagId })))
+    .returning()
 }
 
 /**
@@ -348,7 +360,7 @@ export async function createTestStudySubject(db: Database, data: { studyId: numb
 export async function createTestSpecimen(
   db: Database,
   specimenTypeId: number,
-  options: { studySubjectId?: number; controlBatchId?: number } = {}
+  options: { studySubjectId?: number; controlBatchId?: number; collectionDate?: string; created?: string } = {}
 ) {
   const now = utcNow()
   let { studySubjectId, controlBatchId } = options
@@ -370,7 +382,8 @@ export async function createTestSpecimen(
     specimenTypeId,
     studySubjectId,
     controlBatchId,
-    created: now,
+    collectionDate: options.collectionDate,
+    created: options.created ?? now,
     lastUpdated: now,
   }).returning()
   return result

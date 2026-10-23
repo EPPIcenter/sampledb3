@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { count, eq } from 'drizzle-orm'
+import { count } from 'drizzle-orm'
 import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { setupTestDatabase, cleanupTestDatabase } from '../../../__tests__/helpers/db-setup'
 import { SQL_IN_CHUNK_SIZE } from '../../sql-helpers'
@@ -7,6 +7,7 @@ import {
   createTestControlBatch,
   createTestControlDefinition,
   createTestCryovialBox,
+  createTestContainerTags,
   createTestCryovialTube,
   createTestLocation,
   createTestMicronixPlate,
@@ -26,11 +27,7 @@ import {
   createTestUnit,
 } from '../../../__tests__/helpers/factories'
 import type { Database } from '../../../db/client'
-import {
-  specimen as specimenTable,
-  storageContainer as storageContainerTable,
-  storageContainerTag,
-} from '../../../db/schema'
+import { storageContainer as storageContainerTable } from '../../../db/schema'
 import { containerHasAllTags, containerTypesFilter, selectContainers, type ContainerSelection, type ContainerSelectionFilters } from '..'
 
 describe('selectContainers', () => {
@@ -65,15 +62,11 @@ describe('selectContainers', () => {
     source: { studySubjectId: number } | { controlBatchId: number },
     fields: { collectionDate?: string; created?: string; specimenTypeId?: number } = {},
   ) {
-    const row = await createTestSpecimen(db, fields.specimenTypeId ?? specimenTypeId, source)
-    await db
-      .update(specimenTable)
-      .set({
-        collectionDate: fields.collectionDate ?? null,
-        ...(fields.created ? { created: fields.created } : {}),
-      })
-      .where(eq(specimenTable.id, row.id))
-    return row
+    return createTestSpecimen(db, fields.specimenTypeId ?? specimenTypeId, {
+      ...source,
+      collectionDate: fields.collectionDate,
+      created: fields.created,
+    })
   }
 
   type ContainerKind = 'micronix_tube' | 'cryovial_tube' | 'untyped'
@@ -82,13 +75,7 @@ describe('selectContainers', () => {
     specimenId: number,
     options: { kind?: ContainerKind; created?: string; collectionId?: number; barcode?: string } = {},
   ) {
-    const container = await createTestStorageContainer(db, { specimenId, unitId })
-    if (options.created) {
-      await db
-        .update(storageContainerTable)
-        .set({ created: options.created })
-        .where(eq(storageContainerTable.id, container.id))
-    }
+    const container = await createTestStorageContainer(db, { specimenId, unitId, created: options.created })
     const kind = options.kind ?? 'micronix_tube'
     if (kind === 'micronix_tube') {
       barcodeCount += 1
@@ -101,10 +88,6 @@ describe('selectContainers', () => {
       await createTestCryovialTube(db, { containerId: container.id, collectionId: options.collectionId ?? cryovialBoxId })
     }
     return container
-  }
-
-  async function tag(containerId: number, ...tagIds: number[]) {
-    await db.insert(storageContainerTag).values(tagIds.map((tagId) => ({ storageContainerId: containerId, tagId })))
   }
 
   const ids = (rows: Array<{ id: number }>) => rows.map((row) => row.id)
@@ -263,9 +246,9 @@ describe('selectContainers', () => {
       const blue = (await createTestTag(db, { name: 'blue' })).id
       const both = await seedSpecimen({ studySubjectId: subject.id })
       const bothTube = await seedContainer(both.id)
-      await tag(bothTube.id, red, blue)
+      await createTestContainerTags(db, bothTube.id, [red, blue])
       const redOnly = await seedSpecimen({ studySubjectId: subject.id })
-      await tag((await seedContainer(redOnly.id)).id, red)
+      await createTestContainerTags(db, (await seedContainer(redOnly.id)).id, [red])
 
       const result = await selectContainers(db, select(study.id, subject.id, { tagIds: [red, blue] }))
 
@@ -278,7 +261,7 @@ describe('selectContainers', () => {
       const red = (await createTestTag(db, { name: 'red' })).id
       const subject = await seedSubject(study.id, 'P1')
       const specimen = await seedSpecimen({ studySubjectId: subject.id })
-      await tag((await seedContainer(specimen.id)).id, red)
+      await createTestContainerTags(db, (await seedContainer(specimen.id)).id, [red])
 
       const result = await selectContainers(db, select(study.id, subject.id, { tagIds: [red, red + 999] }))
 
@@ -537,14 +520,9 @@ describe('containerHasAllTags', () => {
     const specimenId = (await createTestSpecimen(db, specimenTypeId)).id
     const containers = []
     for (let i = 0; i < 4; i++) containers.push(await createTestStorageContainer(db, { specimenId, unitId }))
-    const links = [
-      { storageContainerId: containers[0].id, tagId: red },
-      { storageContainerId: containers[0].id, tagId: blue },
-      { storageContainerId: containers[1].id, tagId: red },
-      { storageContainerId: containers[2].id, tagId: red },
-      { storageContainerId: containers[2].id, tagId: blue },
-    ]
-    await db.insert(storageContainerTag).values(links)
+    await createTestContainerTags(db, containers[0].id, [red, blue])
+    await createTestContainerTags(db, containers[1].id, [red])
+    await createTestContainerTags(db, containers[2].id, [red, blue])
 
     const where = containerHasAllTags([red, blue, red])
     const page = await db
