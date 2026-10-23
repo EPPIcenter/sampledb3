@@ -18,8 +18,12 @@ export interface ContainerSelectionFilters {
   specimenCreated?: DateRange
   /** When the Container was created. A Container-level filter. */
   containerCreated?: DateRange
-  /** Container types (`ContainerSubtype` values); unknown values match nothing. A Container-level filter. */
-  containerTypes?: readonly string[]
+  /**
+   * Container types. Omitted means every type; an empty list matches nothing. `'unknown'`
+   * matches Containers with no subtype row. Narrow wire values with `containerTypesFilter`,
+   * which drops unrecognised ones. A Container-level filter.
+   */
+  containerTypes?: readonly ContainerSubtype[]
   /** Containers carrying every one of these Tags. A Container-level filter. */
   tagIds?: readonly number[]
   /** Containers stored in this Location or any Location under it. A Container-level filter. */
@@ -38,6 +42,9 @@ export interface SubjectSelectionEntry {
   dates?: readonly SubjectDateFilter[]
 }
 
+/** Where a Specimen comes from: a Subject or a Control batch. */
+export type SpecimenSourceType = 'subject' | 'control'
+
 /** What to select from (ADR 0011). Every id is resolved by the caller; an unknown id matches nothing. */
 export type ContainerSelection =
   | { kind: 'study'; studyId: number; filters?: ContainerSelectionFilters }
@@ -52,7 +59,7 @@ export type ContainerSelection =
   | {
       kind: 'database'
       /** Specimens of Subjects or of Control batches; omitted means both. */
-      sourceType?: 'subject' | 'control'
+      sourceType?: SpecimenSourceType
       filters?: ContainerSelectionFilters
     }
 

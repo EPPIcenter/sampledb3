@@ -1,8 +1,7 @@
 import { subjectDateSelections, type ContainerExportData, type SubjectDateFilter } from '@sampledb/contract'
-import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
-import { study } from '../../db/schema'
 import {
+  containerTypesFilter,
   selectContainers,
   type ContainerSelection,
   type ContainerSelectionFilters,
@@ -13,7 +12,11 @@ import { enrichContainerData } from './enrich'
 import { formatAsCSV, formatAsExcel, formatAsJSON } from './format'
 import { resolveMicronixBarcodesToContainers } from './query'
 import { buildExportSummary, validateStudyCodes } from './validate'
-import { resolveSubjectNamesByStudy, resolveSubjectsByStudyGrouped } from '../identifier-resolution'
+import {
+  resolveStudyRecordByShortCode,
+  resolveSubjectNamesByStudy,
+  resolveSubjectsByStudyGrouped,
+} from '../identifier-resolution'
 import type {
   CSVExportOptions,
   ExportFilters,
@@ -99,13 +102,14 @@ function exportSelectionFilters(filters: Omit<ExportFilters, 'study'>): Containe
     specimenTypeIds: filters.specimen_type_ids,
     collectionDate: { from: filters.date_from, to: filters.date_to },
     containerCreated: { from: filters.created_from, to: filters.created_to },
-    containerTypes: filters.container_types,
+    containerTypes: containerTypesFilter(filters.container_types),
     tagIds: filters.tag_ids,
   }
 }
 
-async function findStudyByShortCode(database: Database, shortCode: string): Promise<StudyRecord | undefined> {
-  return database.select().from(study).where(eq(study.shortCode, shortCode)).get()
+/** Subject names by Subject id, inverting a name to id map. */
+function subjectNamesById(subjectIdsByName: ReadonlyMap<string, number>): Map<number, string> {
+  return new Map([...subjectIdsByName].map(([name, id]) => [id, name]))
 }
 
 async function formatContainerExport(
@@ -149,7 +153,7 @@ export async function runSingleStudyContainerExportGet(
   | { kind: 'json'; json: Awaited<ReturnType<typeof formatAsJSON>>; filename: string }
 > {
   const { filters, format, columns, csvOptions, userId, countOnly } = params
-  const studyRecord = await findStudyByShortCode(database, filters.study)
+  const studyRecord = await resolveStudyRecordByShortCode(database, filters.study)
   if (!studyRecord) {
     throw new ExpectedNotFoundError(`Study with short code '${filters.study}' not found`)
   }
@@ -225,16 +229,13 @@ export async function runSingleStudyContainerExportPost(
     dateTolerance = 0,
   } = params
 
-  const studyRecord = await findStudyByShortCode(database, studyCode)
+  const studyRecord = await resolveStudyRecordByShortCode(database, studyCode)
   if (!studyRecord) {
     throw new ExpectedNotFoundError('Study not found')
   }
 
   const subjectNameToId = await resolveSubjectNamesByStudy(database, subjectNames, studyRecord.id)
-  const subjectIdToName = new Map<number, string>()
-  for (const [name, id] of subjectNameToId.entries()) {
-    subjectIdToName.set(id, name)
-  }
+  const subjectIdToName = subjectNamesById(subjectNameToId)
 
   if (subjectNameToId.size === 0) {
     const summary: ExportSummary = {
@@ -410,7 +411,7 @@ export async function runMultiStudyContainerExportPost(
   for (const [studyId, studyEntries] of entriesByStudy) {
     const studyRecord = validation.studies.get(studyId)!
     const subjectNameToId = subjectsByStudy.get(studyId) ?? new Map<string, number>()
-    const subjectIdToName = new Map([...subjectNameToId].map(([name, id]) => [id, name]))
+    const subjectIdToName = subjectNamesById(subjectNameToId)
     const studyData = enrichedData.filter((row) => row.study_id === studyId)
     const studySummary = await buildExportSummary(
       studyData,
@@ -443,7 +444,7 @@ export async function runMultiStudyContainerExportPost(
     enrichedData,
     format,
     { study: 'MULTI' },
-    validation.studies.values().next().value ?? MULTI_STUDY_RECORD,
+    MULTI_STUDY_RECORD,
     columns,
     csvOptions,
     userId

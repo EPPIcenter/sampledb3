@@ -3,7 +3,7 @@
  * selection and its filters match. Every filter is defined once, here. The module selects
  * only; callers enrich with `loadContainerReadViews` (ADR 0009).
  */
-import { and, eq, getTableColumns, inArray, isNotNull, type SQL } from 'drizzle-orm'
+import { and, eq, getTableColumns, inArray, type SQL } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { specimen, storageContainer, studySubject } from '../../db/schema'
 import type { ContainerSubtype } from '../container-placement'
@@ -11,13 +11,15 @@ import {
   containerFilterConditions,
   containerTypeSql,
   dateRangeConditions,
+  sourceTypeCondition,
   specimenFilterConditions,
 } from './conditions'
 import { micronixBarcodeScopes, subjectListScopes, type SelectionScope } from './scopes'
 import type { ContainerSelection, ContainerSelectionResult, SelectedContainer, SelectedSpecimen } from './types'
 
 export * from './types'
-export { containerHasAllTags } from './conditions'
+export { containerHasAllTags, hasContainerLevelFilter } from './conditions'
+export { CONTAINER_TYPES, containerTypesFilter, specimenSourceType } from './filters'
 
 /** Select the Containers and Specimens a selection matches, with each Container's type. */
 export async function selectContainers(
@@ -46,16 +48,9 @@ export async function selectContainers(
         dateTolerance: selection.dateTolerance ?? 0,
       })
       break
-    case 'database': {
-      const source =
-        selection.sourceType === 'subject'
-          ? isNotNull(specimen.studySubjectId)
-          : selection.sourceType === 'control'
-            ? isNotNull(specimen.controlBatchId)
-            : undefined
-      scopes = [{ specimens: and(source, ...collectionDate) }]
+    case 'database':
+      scopes = [{ specimens: and(sourceTypeCondition(selection.sourceType), ...collectionDate) }]
       break
-    }
   }
   const specimenConditions = specimenFilterConditions(filters)
   return runScopes(

@@ -1,4 +1,4 @@
-import { count, gte, inArray, sql, type SQL } from 'drizzle-orm'
+import { count, gte, inArray, isNotNull, sql, type SQL } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
 import {
   bag,
@@ -17,7 +17,7 @@ import {
 } from '../../db/schema'
 import type { ContainerSubtype } from '../container-placement'
 import { dateToUpperBound } from '../sql-helpers'
-import type { ContainerSelectionFilters, DateRange } from './types'
+import type { ContainerSelectionFilters, DateRange, SpecimenSourceType } from './types'
 
 /**
  * A Container's type, from the subtype table holding it, in the precedence
@@ -39,6 +39,16 @@ export function dateRangeConditions(column: SQLiteColumn, range: DateRange | und
   ]
 }
 
+/** Specimens of the given source type; undefined, every Specimen. */
+export function sourceTypeCondition(sourceType: SpecimenSourceType | undefined): SQL | undefined {
+  if (sourceType === undefined) return undefined
+  const sources: Record<SpecimenSourceType, SQL> = {
+    subject: isNotNull(specimen.studySubjectId),
+    control: isNotNull(specimen.controlBatchId),
+  }
+  return sources[sourceType]
+}
+
 /**
  * Conditions on the Specimen row other than its collection date, which depends on the
  * selection: specimen types and Specimen created.
@@ -58,13 +68,23 @@ export function specimenFilterConditions(filters: ContainerSelectionFilters): SQ
  */
 export function containerFilterConditions(filters: ContainerSelectionFilters): SQL[] {
   const conditions = [...dateRangeConditions(storageContainer.created, filters.containerCreated)]
-  if (filters.containerTypes && filters.containerTypes.length > 0) {
-    conditions.push(inArray(containerTypeSql, [...new Set(filters.containerTypes)]))
+  if (filters.containerTypes) {
+    conditions.push(
+      filters.containerTypes.length > 0 ? inArray(containerTypeSql, [...new Set(filters.containerTypes)]) : sql`0`,
+    )
   }
   const tags = containerHasAllTags(filters.tagIds ?? [])
   if (tags) conditions.push(tags)
   if (filters.locationId !== undefined) conditions.push(containerAtLocation(filters.locationId))
   return conditions
+}
+
+/**
+ * Whether any Container-level filter is set: Container created, container types, Tags or
+ * Location. With one set, the selection keeps only Specimens with a matching Container.
+ */
+export function hasContainerLevelFilter(filters: ContainerSelectionFilters): boolean {
+  return containerFilterConditions(filters).length > 0
 }
 
 /**

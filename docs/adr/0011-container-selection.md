@@ -32,7 +32,7 @@ We put **Container selection** (see [CONTEXT.md](../../CONTEXT.md)) behind one m
 
 - **Tags**: a Container matches when it carries every selected Tag. This holds for every caller, `GET /containers` included.
 - **Created**: Specimen created and Container created are separate filters. The routes keep their wire names: export's `created_from`/`created_to` map to Container created, and statistics' to Specimen created.
-- **Container type**: applied once, here. The GET export's "No containers found" 404 now fires on the filtered result, so a Study whose Containers are all of other types returns 404 instead of an empty file.
+- **Container type**: applied once, here. The GET export's "No containers found" 404 now fires on the filtered result, so a Study whose Containers are all of other types returns 404 instead of an empty file. The type `unknown` matches Containers with no subtype row; any other unrecognised type matches nothing.
 - **Location**: the Location and every Location under it.
 - **Collection dates**: a listed Subject with its own dates ignores the global collection-date range. Undated Subjects get the global range. Tolerance widens exact dates only.
 - **Specimens**: with no Container-level filter (container type, Tag, Location, Container created), every matching Specimen is included, with or without Containers. With one, only Specimens that have a matching Container are included. Export ignores Specimens with no Container.

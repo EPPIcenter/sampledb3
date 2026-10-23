@@ -31,7 +31,7 @@ import {
   storageContainer as storageContainerTable,
   storageContainerTag,
 } from '../../../db/schema'
-import { containerHasAllTags, selectContainers, type ContainerSelection, type ContainerSelectionFilters } from '..'
+import { containerHasAllTags, containerTypesFilter, selectContainers, type ContainerSelection, type ContainerSelectionFilters } from '..'
 
 describe('selectContainers', () => {
   let db: Database
@@ -236,7 +236,7 @@ describe('selectContainers', () => {
       const untypedOnly = await seedSpecimen({ studySubjectId: subject.id })
       const untyped = await seedContainer(untypedOnly.id, { kind: 'untyped' })
 
-      const vials = await selectContainers(db, select(study.id, subject.id, { containerTypes: ['cryovial_tube', 'not_a_type'] }))
+      const vials = await selectContainers(db, select(study.id, subject.id, { containerTypes: containerTypesFilter(['cryovial_tube', 'not_a_type']) }))
       const unknown = await selectContainers(db, select(study.id, subject.id, { containerTypes: ['unknown'] }))
 
       expect(ids(vials.containers)).toEqual([vial.id])
@@ -246,12 +246,12 @@ describe('selectContainers', () => {
       expect(ids(unknown.specimens)).toEqual([untypedOnly.id])
     })
 
-    it('matches nothing when every listed container type is unknown', async () => {
+    it('matches nothing when every listed container type is unrecognised', async () => {
       const study = await createTestStudy(db, { title: 'Study', shortCode: 'S1' })
       const subject = await seedSubject(study.id, 'P1')
       await seedContainer((await seedSpecimen({ studySubjectId: subject.id })).id)
 
-      const result = await selectContainers(db, select(study.id, subject.id, { containerTypes: ['not_a_type'] }))
+      const result = await selectContainers(db, select(study.id, subject.id, { containerTypes: containerTypesFilter(['not_a_type']) }))
 
       expect(result).toEqual({ containers: [], specimens: [], containerTypes: new Map() })
     })
