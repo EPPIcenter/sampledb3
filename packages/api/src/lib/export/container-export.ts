@@ -1,7 +1,7 @@
 import { subjectDateSelections, type ContainerExportData, type SubjectDateFilter } from '@sampledb/contract'
-import { eq, inArray } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
-import { study, studySubject } from '../../db/schema'
+import { study } from '../../db/schema'
 import {
   selectContainers,
   type ContainerSelection,
@@ -14,7 +14,6 @@ import { formatAsCSV, formatAsExcel, formatAsJSON } from './format'
 import { resolveMicronixBarcodesToContainers } from './query'
 import { buildExportSummary, validateStudyCodes } from './validate'
 import { resolveSubjectNamesByStudy, resolveSubjectsByStudyGrouped } from '../identifier-resolution'
-import { chunkArray, SQL_IN_CHUNK_SIZE } from '../sql-helpers'
 import type {
   CSVExportOptions,
   ExportFilters,
@@ -178,7 +177,7 @@ export async function runSingleStudyContainerExportGet(
     throw new RouteError(400, { error: 'Invalid format. Use csv, xlsx, or json.' })
   }
 
-  const enrichedData = await enrichContainerData(database, result.containers, result.specimens, studyRecord)
+  const enrichedData = await enrichContainerData(database, result.containers)
 
   const timestamp = formatExportTimestamp()
   const filenameBase = `study_${studyRecord.shortCode}_export_${timestamp}`
@@ -287,7 +286,7 @@ export async function runSingleStudyContainerExportPost(
     return { count: result.containers.length, summary }
   }
 
-  const enrichedData = await enrichContainerData(database, result.containers, result.specimens, studyRecord)
+  const enrichedData = await enrichContainerData(database, result.containers)
 
   const summary = await buildExportSummary(
     enrichedData,
@@ -386,14 +385,12 @@ export async function runMultiStudyContainerExportPost(
   // The whole upload is one subject-list selection. A Subject listed without a date matches
   // every collection date.
   const subjects: SubjectSelectionEntry[] = []
-  const subjectToStudyMap = new Map<number, StudyRecord>()
   for (const [studyId, studyEntries] of entriesByStudy) {
     const subjectIds = subjectsByStudy.get(studyId) ?? new Map<string, number>()
     for (const [subjectName, selection] of subjectDateSelections(studyEntries)) {
       const subjectId = subjectIds.get(subjectName)
       if (subjectId === undefined) continue
       subjects.push({ studyId, subjectId, dates: selection.kind === 'dates' ? selection.filters : undefined })
-      subjectToStudyMap.set(subjectId, validation.studies.get(studyId)!)
     }
   }
 
@@ -405,15 +402,8 @@ export async function runMultiStudyContainerExportPost(
           dateTolerance,
           filters: exportSelectionFilters(filters),
         })
-      : { containers: [], specimens: [] }
-  const enrichedData = await enrichContainerData(
-    database,
-    selected.containers,
-    selected.specimens,
-    MULTI_STUDY_RECORD,
-    undefined,
-    subjectToStudyMap
-  )
+      : { containers: [] }
+  const enrichedData = await enrichContainerData(database, selected.containers)
 
   // The Export summary groups the one selection by Study.
   const studySummaries: MultiStudyExportSummary['studies'] = []
@@ -462,23 +452,6 @@ export async function runMultiStudyContainerExportPost(
   return buildPostExportEnvelope({ format, filenameBase, summary, ...formatted })
 }
 
-/** Each Subject's Study, by Subject id. */
-async function loadStudiesBySubject(
-  database: Database,
-  subjectIds: number[]
-): Promise<Map<number, StudyRecord>> {
-  const studiesBySubject = new Map<number, StudyRecord>()
-  for (const chunk of chunkArray([...new Set(subjectIds)], SQL_IN_CHUNK_SIZE)) {
-    const rows = await database
-      .select({ subjectId: studySubject.id, study })
-      .from(studySubject)
-      .innerJoin(study, eq(studySubject.studyId, study.id))
-      .where(inArray(studySubject.id, chunk))
-    for (const row of rows) studiesBySubject.set(row.subjectId, row.study)
-  }
-  return studiesBySubject
-}
-
 export async function runBarcodeContainerExportPost(
   database: Database,
   params: {
@@ -495,25 +468,14 @@ export async function runBarcodeContainerExportPost(
   const foundBarcodes = Array.from(barcodeToContainerId.keys())
 
   const selected = await selectContainers(database, { kind: 'micronixBarcodes', barcodes: foundBarcodes })
-  const studiesBySubject = await loadStudiesBySubject(
-    database,
-    selected.specimens.flatMap((row) => (row.studySubjectId == null ? [] : [row.studySubjectId]))
-  )
-  const enrichedData = await enrichContainerData(
-    database,
-    selected.containers,
-    selected.specimens,
-    MULTI_STUDY_RECORD,
-    undefined,
-    studiesBySubject
-  )
+  const enrichedData = await enrichContainerData(database, selected.containers)
 
   const formatted = await formatContainerExport(
     database,
     enrichedData,
     format,
     { study: 'MULTI' },
-    studiesBySubject.values().next().value ?? MULTI_STUDY_RECORD,
+    MULTI_STUDY_RECORD,
     columns,
     csvOptions,
     userId
