@@ -144,6 +144,7 @@ describe('selectContainers', () => {
     ['study', (studyId, _subjectId, filters) => ({ kind: 'study', studyId, filters })],
     ['subject-list', (studyId, subjectId, filters) => ({ kind: 'subjects', subjects: [{ studyId, subjectId }], filters })],
     ['whole-database', (_studyId, _subjectId, filters) => ({ kind: 'database', filters })],
+    ['Subject-only whole-database', (_studyId, _subjectId, filters) => ({ kind: 'database', sourceType: 'subject', filters })],
   ]
 
   describe.each(selectionKinds)('filters on a %s selection', (_kind, select) => {
@@ -357,6 +358,26 @@ describe('selectContainers', () => {
       })
 
       expect(ids(result.specimens)).toEqual([visitOne.id, visitTwo.id, inRange.id])
+    })
+
+    it("applies the other filters to a Subject's own dates", async () => {
+      const study = await createTestStudy(db, { title: 'Study', shortCode: 'S1' })
+      const subject = await seedSubject(study.id, 'P1')
+      const plasmaTypeId = (await createTestSpecimenType(db, { name: 'Plasma' })).id
+      const blood = await seedSpecimen({ studySubjectId: subject.id }, { collectionDate: '2024-03-01' })
+      const bloodVial = await seedContainer(blood.id, { kind: 'cryovial_tube' })
+      await seedContainer(blood.id, { kind: 'micronix_tube' })
+      const plasma = await seedSpecimen({ studySubjectId: subject.id }, { collectionDate: '2024-03-01', specimenTypeId: plasmaTypeId })
+      await seedContainer(plasma.id, { kind: 'cryovial_tube' })
+
+      const result = await selectContainers(db, {
+        kind: 'subjects',
+        subjects: [{ studyId: study.id, subjectId: subject.id, dates: [{ exact: '2024-03-01' }] }],
+        filters: { specimenTypeIds: [specimenTypeId], containerTypes: ['cryovial_tube'] },
+      })
+
+      expect(ids(result.specimens)).toEqual([blood.id])
+      expect(ids(result.containers)).toEqual([bloodVial.id])
     })
 
     it('widens exact per-Subject dates by the tolerance, but not date ranges', async () => {
