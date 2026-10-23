@@ -31,6 +31,7 @@ Paths are relative to `packages/api/`.
 - Return the full `SpecimenSource` shape to every caller, not a per-endpoint subset (ADR 0007).
 - Load a container read payload (placement, Tags, Specimen, Source) with `loadContainerReadViews` or `loadContainerReadViewsByIds` from `src/lib/container-read-view.ts` (ADR 0009).
 - Project the loaded view to its read path's type: `EnrichedContainerApi` for list, derivations and PATCH, `EnrichedStorageContainer` for collection detail, and CSV row fields for Container export (ADR 0009).
+- To choose which Containers an export or statistic covers, call `selectContainers` from `src/lib/container-selection/`, and filter a paginated Container query by Tags with `containerHasAllTags` (ADR 0011).
 
 ### Routes
 
