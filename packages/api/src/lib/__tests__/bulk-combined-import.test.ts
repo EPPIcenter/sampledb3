@@ -20,6 +20,7 @@ import { specimenTypeContainerType, containerTypeUnit, studySubject, specimen } 
 import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { utcNow } from '../datetime'
+import { withWriteTransaction } from '../../db/write-transaction'
 
 describe('bulk-combined-import', () => {
   let testDb: Database
@@ -146,6 +147,30 @@ describe('bulk-combined-import', () => {
       expect(result.errors![0].error).toMatch(/NonExistentType|not found/i)
       expect(result.summary.subjectsCreated).toBe(2)
       expect(result.summary.specimensCreated).toBe(2)
+    })
+
+    it('per_subject mode inside an open transaction rolls back only the failed subject', async () => {
+      const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+
+      const result = await withWriteTransaction(testDb, (tx) =>
+        runBulkCombinedImport(
+          tx,
+          {
+            studyShortCode: study.shortCode,
+            atomicMode: 'per_subject',
+            subjects: [
+              { subjectName: 'GoodSubj', specimens: [{ specimenTypeName: specimenType.name, collectionDate: '2024-01-15' }] },
+              { subjectName: 'BadSubj', specimens: [{ specimenTypeName: 'NonExistentType', collectionDate: '2024-01-15' }] },
+            ],
+          },
+          undefined
+        )
+      )
+
+      expect(result.errors).toHaveLength(1)
+      const subjects = await testDb.select().from(studySubject).all()
+      expect(subjects.map((s) => s.name)).toEqual(['GoodSubj'])
     })
 
     for (const atomicMode of ['full_file', 'per_subject'] as const) {
@@ -326,6 +351,47 @@ describe('bulk-combined-import', () => {
       { name: 'an occupied well', valid: false, subjects: () => [subject('A', tube('T1', { barcode: 'P1-BC', position: 'A1' }))] },
       { name: 'a missing study on one subject', valid: false, subjects: () => [subject('A'), subject('B', undefined, 'NOPE')] },
     ]
+
+    // per_subject commits each subject that passes, so the property is weaker: validate passes
+    // exactly when every subject imports, and each subject validate flags is one the import rejects.
+    for (const fixture of fixtures) {
+      it(`${fixture.name} (per_subject)`, async () => {
+        const payload = { studyShortCode: 'ST1', subjects: fixture.subjects() }
+
+        const validation = await validateBulkCombinedPayload(testDb, payload)
+        const imported = await runBulkCombinedImport(testDb, { ...payload, atomicMode: 'per_subject' }, undefined)
+
+        const flagged = new Set(validation.errors.map((e) => e.subjectIndex))
+        const rejected = new Set((imported.errors ?? []).map((e) => e.index))
+        expect(validation.valid).toBe(fixture.valid)
+        expect(rejected.size === 0).toBe(validation.valid)
+        expect([...flagged].every((index) => rejected.has(index))).toBe(true)
+      })
+    }
+
+    it('per_subject also rejects a subject that needed a collection from a subject that failed', async () => {
+      // B finds the new plate only because A, which fails, would create it. Validate checks the
+      // file as one import, so it flags A alone; per_subject drops A's plate and B fails too.
+      const subjects = () => [
+        subject('A', tube('TAKEN', { name: 'NEW', locationId, position: 'A01' })),
+        subject('B', tube('T2', { name: 'NEW', position: 'A02' })),
+      ]
+
+      const validation = await validateBulkCombinedPayload(testDb, { studyShortCode: 'ST1', subjects: subjects() })
+      const imported = await runBulkCombinedImport(testDb, { studyShortCode: 'ST1', subjects: subjects(), atomicMode: 'per_subject' }, undefined)
+
+      expect(validation.errors.map((e) => e.subjectIndex)).toEqual([0])
+      expect((imported.errors ?? []).map((e) => e.index)).toEqual([0, 1])
+    })
+
+    it('says a sublabel repeats in the file', async () => {
+      const validation = await validateBulkCombinedPayload(testDb, {
+        studyShortCode: 'ST1',
+        subjects: [subject('A', paperOn('Sheet-1', 's1')), subject('B', paperOn('Sheet-1', 's1'))],
+      })
+
+      expect(validation.errors.map((e) => e.message)).toEqual(["Sublabel 's1' is used more than once on this sheet in your file."])
+    })
 
     for (const fixture of fixtures) {
       it(fixture.name, async () => {

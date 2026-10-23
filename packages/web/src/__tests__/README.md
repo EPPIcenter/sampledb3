@@ -1,6 +1,6 @@
 # Frontend testing guide
 
-Web tests run on Vitest with jsdom and React Testing Library. `src/__tests__/setup.ts` runs before every file. It stubs `IntersectionObserver` and `localStorage` and mocks the `auth` and `settings` domain modules; override those per file as needed.
+Web tests run on Vitest with jsdom and React Testing Library. `src/__tests__/setup.ts` runs before every file. It stubs `IntersectionObserver`, `scrollIntoView` and `localStorage` and mocks the `auth` and `settings` domain modules; override those per file as needed.
 
 This guide covers the helpers. The rules are under Web tests in `CODING_STANDARDS.md`.
 
@@ -23,7 +23,7 @@ it('handles a click', async () => {
 
 ## Mocking the API
 
-Code calls the API through domain modules under `src/lib/api/`, so a test mocks the module the code imports. `createMockedDomainModule(domain, overrides)` in `helpers/mock-api.ts` loads the real module and swaps in the `*Api` objects you pass:
+`createMockedDomainModule(domain, overrides)` in `helpers/mock-api.ts` loads the real module with `vi.importActual` and replaces each export named in `overrides`. What to pass is under Web tests in `CODING_STANDARDS.md`:
 
 ```typescript
 import { studiesApi } from '../../lib/api/studies'

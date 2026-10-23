@@ -16,6 +16,7 @@ import {
   verifyPasswordConstantTime,
   createUserSession,
   registerApprovedUser,
+  BCRYPT_COST,
 } from '../lib/auth/auth-service'
 
 function publicUserResponse(user: ReturnType<typeof toPublicUser>) {
@@ -155,7 +156,7 @@ auth.post('/self-register', rateLimit(5, 60 * 1000), async (c) => {
       }
     }
 
-    const passwordHash = await bcrypt.hash(data.password, 10)
+    const passwordHash = await bcrypt.hash(data.password, BCRYPT_COST)
     const createdAt = utcNow()
 
     const [user] = await database
@@ -374,7 +375,7 @@ auth.patch('/me/password', authMiddleware, async (c) => {
     }
 
     // Hash new password
-    const passwordHash = await bcrypt.hash(newPassword, 10)
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST)
 
     await database
       .update(users)
@@ -715,7 +716,7 @@ auth.patch('/users/:id/password', adminMiddleware, async (c) => {
     }
 
     // Hash new password
-    const passwordHash = await bcrypt.hash(password, 10)
+    const passwordHash = await bcrypt.hash(password, BCRYPT_COST)
 
     await database
       .update(users)

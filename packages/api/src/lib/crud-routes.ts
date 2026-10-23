@@ -8,6 +8,7 @@ import { handleRouteError, NotFoundError, ConflictError, ValidationError } from 
 import { listResponse, successResponse, createdResponse } from './response-helpers'
 import { requireParam } from './common-validators'
 import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
+import { insertedRow } from './inserted-row'
 
 export interface CrudRouteConfig<
   TTable extends SQLiteTable,
@@ -230,11 +231,7 @@ export function createCrudRoutes<
         .values(insertData as any)
         .returning()
 
-      const row = result[0]
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
-      if (!row) {
-        throw new Error('Insert did not return row')
-      }
+      const row = insertedRow(result, entityName)
       const transformed = transformDetail ? transformDetail(row as TSelect) : row
       return createdResponse(c, transformed)
     } catch (error) {

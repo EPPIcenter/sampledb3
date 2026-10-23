@@ -64,6 +64,8 @@ All persistence funnels through `createContainerForSpecimen` (accepting `Contain
 
 Placement resolution (sheet find-or-create within box/bag, plate/box resolve) lives in one module — not duplicated across registration, control batch, and derivation CSV.
 
+> **Amended by [ADR 0010](./0010-specimen-registration.md):** that module is `lib/specimen-registration/collections.ts`, and `createContainerForSpecimen` now wraps `registerSpecimens`. It replaced `container-write-placement.ts`, whose lookup fell back from a missing collection barcode to the name; that file is deleted. The derivation CSV and control batch validators still look collections up themselves until their ADR 0010 slices replace them.
+
 ## CSV
 
 One contract mapper — `csvRowToContainerWriteInput` — maps flat CSV rows to `ContainerWriteInput`, then Zod validates.

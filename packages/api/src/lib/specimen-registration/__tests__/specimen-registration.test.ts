@@ -184,6 +184,18 @@ describe('Specimen registration', () => {
       expect(error.errors[0].message).toContain("point to different micronix plates: 'P1' and 'P2'")
     })
 
+    it('names the id when the plate it finds has another name', async () => {
+      const error = await rejection([entry([tube('T1', { id: plate.id, name: 'OTHER', position: 'A01' })])])
+
+      expect(error.errors[0].message).toBe(`Micronix plate id ${plate.id} is named 'P1', not 'OTHER'.`)
+    })
+
+    it('names the barcode when the plate it finds has another name', async () => {
+      const error = await rejection([entry([tube('T1', { barcode: 'P1-BC', name: 'OTHER', position: 'A01' })])])
+
+      expect(error.errors[0].message).toBe("Micronix plate with barcode 'P1-BC' is named 'P1', not 'OTHER'.")
+    })
+
     it('treats a plate named by name and by barcode as one plate for position clashes', async () => {
       const error = await rejection([
         entry([tube('T1', { name: 'P1', position: 'A01' })]),
@@ -191,7 +203,7 @@ describe('Specimen registration', () => {
       ])
 
       expect(error.errors).toEqual([
-        expect.objectContaining({ entryIndex: 1, field: 'position', message: expect.stringContaining('more than once in your file') }),
+        expect.objectContaining({ entryIndex: 1, field: 'position', message: expect.stringContaining('more than once in this request') }),
       ])
     })
 
@@ -225,6 +237,39 @@ describe('Specimen registration', () => {
     })
   })
 
+  describe('Collection location', () => {
+    let other: number
+
+    beforeEach(async () => {
+      const storageType = await createTestStorageType(db, { name: 'Fridge' })
+      other = (await createTestLocation(db, { name: 'Other', storageTypeId: String(storageType.id), canContainCollections: true })).id
+    })
+
+    it('rejects a new plate given another location by a later call', async () => {
+      await registerSpecimens(db, [entry([tube('T1', { name: 'NEW', locationId, position: 'A01' })])])
+
+      const error = await rejection([entry([tube('T2', { name: 'NEW', locationId: other, position: 'A02' })])])
+
+      expect(error.errors[0]).toMatchObject({ field: 'collection', message: "Micronix plate 'NEW' is stored at a different location from the one given." })
+    })
+
+    it('rejects a box given another location than the one it is stored at', async () => {
+      await registerSpecimens(db, [entry([paperOn('Sheet-1')])])
+
+      const error = await rejection([
+        entry([{ containerType: 'paper', collection: { type: 'sheet', name: 'Sheet-2', parent: { type: 'box', name: 'PaperBox', locationId: other } } }]),
+      ])
+
+      expect(error.errors[0].message).toBe("Box 'PaperBox' is stored at a different location from the one given.")
+    })
+
+    it('accepts an existing plate given its own location or none', async () => {
+      await expect(
+        registerSpecimens(db, [entry([tube('T1', { name: 'P1', locationId, position: 'A02' }), tube('T2', { name: 'P1', position: 'A03' })])]),
+      ).resolves.toBeDefined()
+    })
+  })
+
   describe('Paper on Sheets', () => {
     it('puts several papers on one new sheet', async () => {
       const result = await registerSpecimens(db, [
@@ -244,9 +289,27 @@ describe('Specimen registration', () => {
 
       expect(error.errors.map((e) => [e.containerIndex, e.message])).toEqual([
         [0, "Sublabel 's1' is already used on this sheet."],
-        [2, "Sublabel 's2' is used more than once on this sheet in your file."],
+        [2, "Sublabel 's2' is used more than once on this sheet in this request."],
       ])
     })
+  })
+
+  it('names the input a value repeats in as the caller asks', async () => {
+    const entries = [entry([tube('T1', { name: 'P1', position: 'A02' }), tube('T1', { name: 'P1', position: 'A03' })])]
+
+    const error = await registerSpecimens(db, entries, { inputName: 'your file' }).catch((e: unknown) => e)
+
+    expect((error as SpecimenRegistrationError).errors[0].message).toBe(
+      "Barcode 'T1' is used more than once in your file. Each barcode must be unique.",
+    )
+  })
+
+  it('keys a missing position to the position field', async () => {
+    const error = await rejection([entry([tube('T1', { name: 'P1' })])])
+
+    expect(error.errors).toEqual([
+      { entryIndex: 0, containerIndex: 0, field: 'position', message: 'Position is required for micronix tubes (e.g. A01).' },
+    ])
   })
 
   it('rejects a unit not allowed for the container type', async () => {
@@ -258,28 +321,18 @@ describe('Specimen registration', () => {
   })
 
   describe('checkSpecimenRegistration', () => {
-    it('writes nothing and lists the collections the registration would create', async () => {
+    it('writes nothing and reports no errors for a registration that would succeed', async () => {
       const entries = [entry([tube('T1', { name: 'NEW', locationId, position: 'A01' }), paperOn('Sheet-1')])]
 
-      const check = await checkSpecimenRegistration(db, entries)
-
-      expect(check).toEqual({
-        errors: [],
-        collectionsToCreate: [
-          { type: 'micronix_plate', name: 'NEW' },
-          { type: 'box', name: 'PaperBox' },
-          { type: 'sheet', name: 'Sheet-1' },
-        ],
-      })
+      expect(await checkSpecimenRegistration(db, entries)).toEqual([])
       expect([await count(specimen), await count(micronixPlate), await count(sheet)]).toEqual([0, 1, 0])
       await expect(registerSpecimens(db, entries)).resolves.toBeDefined()
     })
 
     it('returns the errors registerSpecimens would throw', async () => {
-      const check = await checkSpecimenRegistration(db, [entry([tube('T1', { name: 'P1', barcode: 'UNKNOWN', position: 'A01' })])])
+      const errors = await checkSpecimenRegistration(db, [entry([tube('T1', { name: 'P1', barcode: 'UNKNOWN', position: 'A01' })])])
 
-      expect(check.errors).toHaveLength(1)
-      expect(check.collectionsToCreate).toEqual([])
+      expect(errors).toHaveLength(1)
     })
 
     it('rolls back to a savepoint inside an open transaction', async () => {
@@ -305,5 +358,28 @@ describe('Specimen registration', () => {
 
     expect(error).toBeInstanceOf(SpecimenRegistrationError)
     expect(error).toMatchObject({ status: 409, errors: [{ entryIndex: 0, containerIndex: 0 }] })
+  })
+
+  it('blames a constraint hit on a new collection on the row that asked for it', async () => {
+    // Rows 0 and 1 use the existing plate; row 2 creates P2. Another write creates P2 first.
+    const entries = [
+      entry([tube('T1', { name: 'P1', position: 'A01' })]),
+      entry([paperOn('Sheet-1'), tube('T2', { name: 'P2', locationId, position: 'A01' })], '2024-02-01'),
+    ]
+    const { plan, errors } = await planRegistration(db, entries)
+    expect(errors).toEqual([])
+    await createTestMicronixPlate(db, { name: 'P2', barcode: 'P2-BC', locationId })
+    sqlite.exec('CREATE UNIQUE INDEX test_plate_name ON micronix_plate(name)')
+
+    const error = await writeRegistration(db, plan, undefined).then(
+      () => null,
+      (e: unknown) => e,
+    )
+
+    expect(error).toBeInstanceOf(SpecimenRegistrationError)
+    expect(error).toMatchObject({ status: 409 })
+    expect((error as SpecimenRegistrationError).errors).toEqual([
+      { entryIndex: 1, containerIndex: 1, message: 'A record with this name already exists.' },
+    ])
   })
 })

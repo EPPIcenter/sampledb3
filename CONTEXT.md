@@ -137,6 +137,10 @@ _Avoid_: Well (as the domain term); treating a missing position as occupying a s
 
 ### Export
 
+**Container selection**:
+The set of **Containers**, with their **Specimens**, that a set of filters matches: a **Study**, a subject list, or a micronix barcode list, narrowed by specimen type, collection date, container type, **Tags**, **Location**, and when the Specimen or the Container was created. Selecting several Tags matches Containers carrying every one of them. A barcode list selects exactly those tubes and takes no other filters. **Container export** and the statistics dashboard both count and list what the selection matches.
+_Avoid_: Query (implementation term); treating Tag selection as "any of these Tags"; an unqualified "created" date (say Specimen created or Container created)
+
 **Container export**:
 Server-side export of operational **Container** records with specimen, source, and placement context, formatted using an **Export configuration**. Entry points include **Multi-Study Export** (page heading **Export Containers (Multi-Study)**), the Study export modal, and **Micronix Barcode Export**.
 _Avoid_: Using "bulk export" as the umbrella for all container exports; collection table snapshot export; using "sample" in export column headers
@@ -170,8 +174,9 @@ Server-side flat export of inventory summary data (command palette or inventory.
 _Avoid_: Container export; bulk export; collection table snapshot export
 
 **CSV download**:
-A comma-separated values file generated or downloaded from SampleDB — container/specimen/inventory exports, collection table snapshots, import templates, and other CSV outputs. All share the same wire conventions (UTF-8 with BOM, CRLF line endings, plain cell values per RFC 4180) so files behave consistently in Excel and in R/Python. **Container export** workflows additionally let lab staff override delimiter, BOM, and line ending before download.
-_Avoid_: Excel formula cell wrappers (`="..."`); using CSV as the Excel text-preservation format (use **XLSX download** for that); different wire conventions for templates vs exports
+A comma-separated values file generated or downloaded from SampleDB — container/specimen/inventory exports, collection table snapshots, import templates, and other CSV outputs. All share the same wire conventions (UTF-8 with BOM, CRLF line endings, cell values quoted per RFC 4180) so files behave consistently in Excel and in R/Python. **Container export** workflows additionally let lab staff override delimiter, BOM, and line ending before download.
+Server-side data exports (**Container export**, **Specimen export**, **Inventory export**) apply **formula neutralization**: a text cell that a spreadsheet would run as a formula (starting with `=`, `+`, `@`, tab, carriage return, or `-` unless the whole cell is a number) gets a leading `'`, so stored text such as `=HYPERLINK(...)` cannot execute when the file is opened. Numbers, including negative ones like `-131`, are unchanged. Import templates and other files meant to be re-imported are not neutralized, since the `'` would become part of the imported value.
+_Avoid_: Excel formula cell wrappers (`="..."`); using CSV as the Excel text-preservation format (use **XLSX download** for that); different wire conventions for templates vs exports; neutralizing import templates
 
 **XLSX download**:
 Excel workbook export from **Container export** workflows. Preserves identifier and code columns as text cells (leading zeros, long barcodes) without CSV workarounds.

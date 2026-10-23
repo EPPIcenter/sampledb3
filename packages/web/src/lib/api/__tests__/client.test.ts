@@ -126,6 +126,22 @@ describe('session expiry', () => {
 
     await expect(axiosApi.post('/auth/login', {})).rejects.toThrow()
     await expect(axiosApi.get('/auth/me')).rejects.toThrow()
+    await expect(axiosApi.get('/auth/current')).rejects.toThrow()
+    await expect(axiosApi.post('/auth/switch', {})).rejects.toThrow()
+    await expect(axiosApi.patch('/auth/me/password', {})).rejects.toThrow()
+    await expect(axiosApi.post('/auth/logout')).rejects.toThrow()
     expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('calls the handler for user and session admin requests under /auth', async () => {
+    const handler = vi.fn()
+    setSessionExpiredHandler(handler)
+    respond401()
+
+    await expect(axiosApi.get('/auth/users')).rejects.toThrow()
+    await expect(axiosApi.get('/auth/users/7/sessions')).rejects.toThrow()
+    await expect(axiosApi.delete('/auth/sessions/3')).rejects.toThrow()
+    await expect(axiosApi.patch('/auth/me', {})).rejects.toThrow()
+    expect(handler).toHaveBeenCalledTimes(4)
   })
 })

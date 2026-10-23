@@ -7,13 +7,15 @@ import type { DatabaseOrTransaction } from './db-types'
  * Resolve study short code to study ID
  */
 export async function resolveStudyByShortCode(database: Database, shortCode: string): Promise<number | null> {
-  const studyRecord = await database
-    .select({ id: study.id })
-    .from(study)
-    .where(eq(study.shortCode, shortCode))
-    .get()
-  
-  return studyRecord?.id ?? null
+  return (await resolveStudyRecordByShortCode(database, shortCode))?.id ?? null
+}
+
+/** Resolve a study short code to the Study record, or undefined when no Study has it. */
+export async function resolveStudyRecordByShortCode(
+  database: Database,
+  shortCode: string,
+): Promise<typeof study.$inferSelect | undefined> {
+  return database.select().from(study).where(eq(study.shortCode, shortCode)).get()
 }
 
 /**

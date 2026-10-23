@@ -1,18 +1,6 @@
-import { gte, lt, lte } from 'drizzle-orm'
+import { lt, lte } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
-import { shiftCalendarDate } from '../datetime'
-
-/** Build date filter conditions for specimen date columns. */
-export function buildDateFilter(column: SQLiteColumn, dateFrom?: string, dateTo?: string) {
-  const conditions: ReturnType<typeof gte>[] = []
-  if (dateFrom) {
-    conditions.push(gte(column, dateFrom))
-  }
-  if (dateTo) {
-    conditions.push(dateToUpperBound(column, dateTo))
-  }
-  return conditions
-}
+import { shiftCalendarDate } from './datetime'
 
 /**
  * Upper bound for a "to" date filter. A bare YYYY-MM-DD includes that whole day, so a
@@ -22,6 +10,13 @@ export function dateToUpperBound(column: SQLiteColumn, dateTo: string) {
   const next = /^\d{4}-\d{2}-\d{2}$/.test(dateTo) ? shiftCalendarDate(dateTo, 1) : null
   return next ? lt(column, next) : lte(column, dateTo)
 }
+
+/**
+ * Ids per `IN (...)` list when a list is chunked. SQLite caps bound parameters per statement
+ * (32766 today, 999 before 3.32); 500 stays far under either cap, leaving room for the
+ * query's other parameters, while keeping the number of round trips low.
+ */
+export const SQL_IN_CHUNK_SIZE = 500
 
 /** Batch an array into chunks for SQLite variable limits. */
 export function chunkArray<T>(array: T[], chunkSize: number): T[][] {

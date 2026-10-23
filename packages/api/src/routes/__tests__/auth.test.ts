@@ -8,6 +8,7 @@ import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/
 import { users, sessions } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
+import { BCRYPT_COST } from '../../lib/auth/auth-service'
 import type { Database } from '../../db/client'
 import {
   createTestUser,
@@ -139,7 +140,7 @@ describe('Auth API', () => {
     beforeEach(async () => {
       // Create a test user (approved so they can log in)
       const createdAt = utcNow()
-      const passwordHash = await bcrypt.hash('password123', 10)
+      const passwordHash = await bcrypt.hash('password123', BCRYPT_COST)
       await testDb.insert(users).values({
         email: 'login@example.com',
         name: 'Login Test User',
@@ -393,7 +394,7 @@ describe('Auth API', () => {
         email: 'squatter@example.com',
         name: 'Squatter',
         username: 'victim@example.com',
-        passwordHash: await bcrypt.hash('squatter123', 10),
+        passwordHash: await bcrypt.hash('squatter123', BCRYPT_COST),
         role: 'member',
         createdAt: utcNow(),
         approvedAt: utcNow(),

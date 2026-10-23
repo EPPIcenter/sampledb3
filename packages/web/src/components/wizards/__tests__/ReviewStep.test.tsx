@@ -259,6 +259,32 @@ describe('ReviewStep multi-batch CSV errors', () => {
 
     expect(await screen.findByText(/No control batches were created/)).toBeInTheDocument()
   })
+
+  it('says "control batches" when the failure carries no message', async () => {
+    vi.clearAllMocks()
+    mockSuggestBatchName.mockResolvedValue({ name: 'Suggested Batch' })
+    mockCreateBatchesWithSpecimens.mockRejectedValue({})
+    const def5000: ControlDefinition = {
+      id: 10, name: 'Def 5000', controlType: 'blood', created: '', lastUpdated: '', targetDensity: 5000, unitSymbol: 'µL',
+    }
+    render(
+      <ReviewStep
+        batchInfo={makeBatchInfo()}
+        compositionStrains={[{ id: 1, percentage: 100 }]}
+        compositionDefinitions={[def5000]}
+        specimenTypes={[]}
+        csvFiles={[makeCsvFile({ rows: [{ specimen_type_name: 'Whole Blood', density: 5000 }] })]}
+        onBack={() => {}}
+        onCancel={() => {}}
+        onSuccess={() => {}}
+        isAddMode={false}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Create Batch/i }))
+
+    expect(await screen.findByText('Failed to create control batches')).toBeInTheDocument()
+  })
 })
 
 describe('ReviewStep multi-batch CSV nested collection placement', () => {

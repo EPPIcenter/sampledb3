@@ -187,3 +187,12 @@ export async function generateUniqueControlDefinitionName(
   return `${baseName}_${maxIncrement + 1}`
 }
 
+/** Whether a control definition already uses this exact name. */
+export async function isControlDefinitionNameTaken(database: Database, name: string): Promise<boolean> {
+  const existing = await database
+    .select({ id: controlDefinition.id })
+    .from(controlDefinition)
+    .where(eq(controlDefinition.name, name))
+    .get()
+  return existing != null
+}

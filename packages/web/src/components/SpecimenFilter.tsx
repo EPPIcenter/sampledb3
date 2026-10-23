@@ -17,10 +17,28 @@ export interface SpecimenFilters {
 }
 
 interface SpecimenFilterProps {
+  /** The applied filters. */
   filters: SpecimenFilters
-  onChange: (filters: SpecimenFilters) => void
+  /** Search text applies as it is typed; other filter edits wait for Apply. */
+  onSearchChange: (search: string | undefined) => void
+  /** Apply the edited filters (Apply, Enter in search, or Clear). */
   onSubmit: (filters: SpecimenFilters) => void
   isLoading?: boolean
+}
+
+const FILTER_KEYS: Array<keyof SpecimenFilters> = [
+  'study',
+  'sourceType',
+  'specimenTypeId',
+  'collectionDateFrom',
+  'collectionDateTo',
+  'createdFrom',
+  'createdTo',
+  'search',
+]
+
+function sameFilters(a: SpecimenFilters, b: SpecimenFilters, ignore?: keyof SpecimenFilters): boolean {
+  return FILTER_KEYS.every((key) => key === ignore || (a[key] || undefined) === (b[key] || undefined))
 }
 
 const SOURCE_TYPES = [
@@ -29,7 +47,7 @@ const SOURCE_TYPES = [
   { value: 'control', label: 'Control' },
 ]
 
-export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading = false }: SpecimenFilterProps) {
+export default function SpecimenFilter({ filters, onSearchChange, onSubmit, isLoading = false }: SpecimenFilterProps) {
   const [localFilters, setLocalFilters] = useState<SpecimenFilters>(filters)
   const prevFiltersRef = useRef<SpecimenFilters>(filters)
   const [studies, setStudies] = useState<Study[]>([])
@@ -39,10 +57,12 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
   const [studySearch, setStudySearch] = useState('')
   const [studyLoading, setStudyLoading] = useState(false)
 
-  // Sync local filters when external filters change (during render to avoid extra pass)
+  // Sync local filters when the applied filters change (during render to avoid extra pass).
+  // A live search edit changes only `search`, so unapplied edits to the other filters survive it.
   if (filters !== prevFiltersRef.current) {
+    const searchOnly = sameFilters(filters, prevFiltersRef.current, 'search')
     prevFiltersRef.current = filters
-    setLocalFilters(filters)
+    setLocalFilters(searchOnly ? { ...localFilters, search: filters.search } : filters)
   }
 
   useEffect(() => {
@@ -111,7 +131,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
       newFilters[key] = value
     }
     setLocalFilters(newFilters)
-    onChange(newFilters)
+    if (key === 'search') onSearchChange(newFilters.search)
   }
 
   const handleSubmit = () => {
@@ -121,13 +141,12 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
   const clearFilters = () => {
     const emptyFilters: SpecimenFilters = {}
     setLocalFilters(emptyFilters)
-    onChange(emptyFilters)
     onSubmit(emptyFilters)
   }
 
   const activeFilterCount = Object.entries(localFilters).filter(([k, v]) => k !== 'search' && v !== undefined && v !== null && v !== '').length
   const hasActiveFilters = activeFilterCount > 0
-  const hasChanges = JSON.stringify(localFilters) !== JSON.stringify(filters)
+  const hasChanges = !sameFilters(localFilters, filters)
 
   return (
     <div className="bg-app-card rounded-xl shadow-sm border border-app-border mb-6 overflow-hidden">

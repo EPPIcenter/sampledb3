@@ -20,6 +20,7 @@ import {
 } from '../db/schema'
 import { sql, eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
+import { BCRYPT_COST } from './auth/auth-service'
 import {
   setContainerDefaults,
   setPaginationSettings,
@@ -33,6 +34,7 @@ import { createBatchWithSpecimens } from './controls/batch-with-specimens'
 import { createDerivation } from './derivations'
 import { utcNow } from './datetime'
 import { controlDefinition, box, sheet, micronixPlate, strain } from '../db/schema'
+import { insertedRow } from './inserted-row'
 
 // Demo defaults (aligned with packages/web setup-defaults, inlined to avoid cross-package deps)
 const DEMO_SPECIMEN_TYPES = [
@@ -87,7 +89,7 @@ export async function runDemoSeed(
   }
 
   // 1. Create admin user
-  const passwordHash = await bcrypt.hash(adminPassword, 10)
+  const passwordHash = await bcrypt.hash(adminPassword, BCRYPT_COST)
   await database.insert(users).values({
     id: 1,
     name: 'Demo Admin',
@@ -107,9 +109,7 @@ export async function runDemoSeed(
       .insert(storageType)
       .values({ id: i + 1, name: s.name, description: s.description })
       .returning()
-    const row = Array.isArray(result) ? result[0] : result
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
-    if (!row) throw new Error('Insert did not return storage type row')
+    const row = insertedRow(result, 'storage type')
     storageTypeMap.set(s.name, row.id)
   }
 
@@ -265,9 +265,7 @@ export async function runDemoSeed(
     createdBy: 1,
     updatedBy: 1,
   }).returning()
-  const negDef = Array.isArray(negResult) ? negResult[0] : negResult
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
-  if (!negDef) throw new Error('Insert did not return control definition row')
+  const negDef = insertedRow(negResult, 'control definition')
   const negDefId = negDef.id
 
   const plasmaPosResult = await database.insert(controlDefinition).values({
@@ -278,9 +276,7 @@ export async function runDemoSeed(
     createdBy: 1,
     updatedBy: 1,
   }).returning()
-  const plasmaPosDef = Array.isArray(plasmaPosResult) ? plasmaPosResult[0] : plasmaPosResult
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
-  if (!plasmaPosDef) throw new Error('Insert did not return control definition row')
+  const plasmaPosDef = insertedRow(plasmaPosResult, 'control definition')
   const plasmaPosDefId = plasmaPosDef.id
 
   const bloodResult = await database.insert(controlDefinition).values({
@@ -300,9 +296,7 @@ export async function runDemoSeed(
     createdBy: 1,
     updatedBy: 1,
   }).returning()
-  const bloodDef = Array.isArray(bloodResult) ? bloodResult[0] : bloodResult
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
-  if (!bloodDef) throw new Error('Insert did not return control definition row')
+  const bloodDef = insertedRow(bloodResult, 'control definition')
   const bloodDefId = bloodDef.id
 
   const controlBatchResult1 = await createBatchWithSpecimens(database, {
@@ -381,9 +375,7 @@ export async function runDemoSeed(
     created: now,
     lastUpdated: now,
   }).returning()
-  const dbsBox = Array.isArray(dbsBoxResult) ? dbsBoxResult[0] : dbsBoxResult
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
-  if (!dbsBox) throw new Error('Insert did not return box row')
+  const dbsBox = insertedRow(dbsBoxResult, 'box')
   const dbsBoxId = dbsBox.id
 
   const dbsSheetResult = await database.insert(sheet).values({
@@ -393,9 +385,7 @@ export async function runDemoSeed(
     created: now,
     lastUpdated: now,
   }).returning()
-  const dbsSheet = Array.isArray(dbsSheetResult) ? dbsSheetResult[0] : dbsSheetResult
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
-  if (!dbsSheet) throw new Error('Insert did not return sheet row')
+  const dbsSheet = insertedRow(dbsSheetResult, 'sheet')
   const dbsSheetId = dbsSheet.id
 
   const bloodDnaPlateResult = await database.insert(micronixPlate).values({
@@ -405,9 +395,7 @@ export async function runDemoSeed(
     created: now,
     lastUpdated: now,
   }).returning()
-  const bloodDnaPlate = Array.isArray(bloodDnaPlateResult) ? bloodDnaPlateResult[0] : bloodDnaPlateResult
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
-  if (!bloodDnaPlate) throw new Error('Insert did not return plate row')
+  const bloodDnaPlate = insertedRow(bloodDnaPlateResult, 'plate')
   const bloodDnaPlateId = bloodDnaPlate.id
 
   const bloodContainerIds = controlBatchResult3.specimens.flatMap((s) => s.containerIds)

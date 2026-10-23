@@ -16,8 +16,12 @@ import {
   createTestLocation,
   createTestUnit,
   createTestStorageType,
+  createTestCryovialBox,
+  createTestCryovialTube,
+  createTestStorageContainer,
+  createTestTag,
 } from '../../__tests__/helpers/factories'
-import { cryovialBox, cryovialTube, specimen, storageContainer, micronixPlate, micronixTube, box, sheet, paper, staticWell } from '../../db/schema'
+import { cryovialBox, cryovialTube, specimen, storageContainer, micronixPlate, micronixTube, box, sheet, paper, staticWell, storageContainerTag } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 
 describe('Containers API', () => {
@@ -68,6 +72,73 @@ describe('Containers API', () => {
       expect(data.error).toBe('Failed to fetch containers')
       expect(data.details).toBe('enrichment failed')
       vi.restoreAllMocks()
+    })
+
+    describe('tag_ids filter', () => {
+      type ListResponse = {
+        containers: Array<{ id: number }>
+        pagination: { page: number; limit: number; total: number; totalPages: number }
+      }
+
+      async function containerTagged(unitId: number, specimenId: number, tagIds: number[]) {
+        const container = await createTestStorageContainer(ctx.db, { unitId, specimenId })
+        if (tagIds.length > 0) {
+          await ctx.db
+            .insert(storageContainerTag)
+            .values(tagIds.map((tagId) => ({ storageContainerId: container.id, tagId })))
+        }
+        return container.id
+      }
+
+      async function list(query: string): Promise<ListResponse> {
+        const res = await ctx.request(`/api/containers?${query}`)
+        expect(res.status).toBe(200)
+        return (await res.json()) as ListResponse
+      }
+
+      let red: number
+      let blue: number
+      let unused: number
+      let redAndBlue: number[]
+      let redOnly: number
+
+      beforeEach(async () => {
+        red = (await createTestTag(ctx.db, { name: 'red' })).id
+        blue = (await createTestTag(ctx.db, { name: 'blue' })).id
+        unused = (await createTestTag(ctx.db, { name: 'unused' })).id
+        const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+        const specimenType = await createTestSpecimenType(ctx.db, { name: 'Blood' })
+        const testSpecimen = await createTestSpecimen(ctx.db, specimenType.id)
+        redAndBlue = [
+          await containerTagged(unit.id, testSpecimen.id, [red, blue]),
+          await containerTagged(unit.id, testSpecimen.id, [red, blue]),
+          await containerTagged(unit.id, testSpecimen.id, [red, blue]),
+        ]
+        redOnly = await containerTagged(unit.id, testSpecimen.id, [red])
+        await containerTagged(unit.id, testSpecimen.id, [blue])
+        await containerTagged(unit.id, testSpecimen.id, [])
+      })
+
+      it('lists Containers carrying the one selected Tag', async () => {
+        const data = await list(`tag_ids=${red}&limit=10`)
+        expect(data.containers.map((c) => c.id).sort((a, b) => a - b)).toEqual([...redAndBlue, redOnly])
+        expect(data.pagination.total).toBe(4)
+      })
+
+      it('excludes Containers with only some of the selected Tags from the page and the total', async () => {
+        const first = await list(`tag_ids=${red}&tag_ids=${blue}&limit=2&page=1`)
+        const second = await list(`tag_ids=${red}&tag_ids=${blue}&limit=2&page=2`)
+        expect([...first.containers, ...second.containers].map((c) => c.id)).toEqual(redAndBlue)
+        expect(first.containers).toHaveLength(2)
+        expect(first.pagination).toEqual({ page: 1, limit: 2, total: 3, totalPages: 2 })
+        expect(second.pagination).toEqual({ page: 2, limit: 2, total: 3, totalPages: 2 })
+      })
+
+      it('returns an empty page when no Container carries every selected Tag', async () => {
+        const data = await list(`tag_ids=${red}&tag_ids=${unused}&limit=2`)
+        expect(data.containers).toEqual([])
+        expect(data.pagination).toEqual({ page: 1, limit: 2, total: 0, totalPages: 0 })
+      })
     })
   })
 
@@ -203,10 +274,7 @@ describe('Containers API', () => {
 
     it('clears the comment when it is emptied', async () => {
       const now = utcNow()
-      const [boxRecord] = await ctx.db
-        .insert(cryovialBox)
-        .values({ name: `BOX-CMT-${Date.now()}`, locationId: testLocation.id, created: now, lastUpdated: now })
-        .returning()
+      const boxRecord = await createTestCryovialBox(ctx.db, { name: `BOX-CMT-${Date.now()}`, locationId: testLocation.id })
       const testStudy = await createTestStudy(ctx.db, { title: 'C Study', shortCode: 'CST' + Date.now() })
       const subj = await createTestStudySubject(ctx.db, { studyId: testStudy.id, name: 'S1' })
       const [spec] = await ctx.db
@@ -217,7 +285,7 @@ describe('Containers API', () => {
         .insert(storageContainer)
         .values({ specimenId: spec.id, unitId: testUnit.id, totalQuantity: 1, remainingQuantity: 1, comment: 'hemolyzed', created: now, lastUpdated: now })
         .returning()
-      await ctx.db.insert(cryovialTube).values({ id: container.id, collectionId: boxRecord.id, barcode: 'CMT-1', position: 'A01' })
+      await createTestCryovialTube(ctx.db, { containerId: container.id, collectionId: boxRecord.id, barcode: 'CMT-1', position: 'A01' })
 
       const res = await ctx.request(`/api/containers/${container.id}`, { method: 'PATCH', json: { comment: '' } })
 

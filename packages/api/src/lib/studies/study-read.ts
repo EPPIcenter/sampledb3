@@ -2,6 +2,7 @@ import type { Database } from '../../db/client'
 import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { study, studySubject } from '../../db/schema'
 import { eq, inArray, sql } from 'drizzle-orm'
+import { SQL_IN_CHUNK_SIZE } from '../sql-helpers'
 
 export type ListStudiesParams = {
   search?: string
@@ -30,8 +31,6 @@ export type StudySummary = {
 export type GetStudySummariesResult = {
   summaries: StudySummary[]
 }
-
-const SQLITE_MAX_VARS = 500
 
 /** List studies with optional search and pagination. */
 export async function listStudies(database: Database, params: ListStudiesParams): Promise<ListStudiesResult> {
@@ -111,8 +110,8 @@ export async function getStudySummaries(
     collectionDate: string | null
   }> = []
 
-  for (let i = 0; i < allSubjectIds.length; i += SQLITE_MAX_VARS) {
-    const batch = allSubjectIds.slice(i, i + SQLITE_MAX_VARS)
+  for (let i = 0; i < allSubjectIds.length; i += SQL_IN_CHUNK_SIZE) {
+    const batch = allSubjectIds.slice(i, i + SQL_IN_CHUNK_SIZE)
     const placeholders = batch.map(() => '?').join(',')
     const specimensQuery = `
       SELECT 
@@ -158,8 +157,8 @@ export async function getStudySummaries(
       }
     })
 
-    for (let i = 0; i < specimenIds.length; i += SQLITE_MAX_VARS) {
-      const batch = specimenIds.slice(i, i + SQLITE_MAX_VARS)
+    for (let i = 0; i < specimenIds.length; i += SQL_IN_CHUNK_SIZE) {
+      const batch = specimenIds.slice(i, i + SQL_IN_CHUNK_SIZE)
       const containerPlaceholders = batch.map(() => '?').join(',')
       const containersQuery = `
         SELECT specimen_id, COUNT(*) as count

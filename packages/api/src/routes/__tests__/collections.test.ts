@@ -22,6 +22,11 @@ import {
   storageContainer,
   micronixTube,
   box,
+  bag,
+  sheet,
+  paper,
+  cryovialBox,
+  cryovialTube,
   micronixPlate,
   specimen,
   qpcrExperiment,
@@ -335,6 +340,69 @@ describe('Collections API', () => {
       })
       expect(res.status).toBe(404)
     })
+
+    it.each(['micronix_plate', 'cryovial_box', 'box', 'bag'] as const)(
+      'returns 404 when the %s does not exist',
+      async (collectionType) => {
+        const res = await ctx.request('/api/collections/delete-with-contents', {
+          method: 'POST',
+          json: { collectionType, id: 999_999, removeEmptySubjects: false },
+        })
+        expect(res.status).toBe(404)
+      },
+    )
+
+    it.each(['cryovial_box', 'box', 'bag'] as const)(
+      'deletes a %s with its container, specimen and sheets',
+      async (collectionType) => {
+        const storageType = await createTestStorageType(ctx.db, { name: `St-${collectionType}` })
+        const loc = await createTestLocation(ctx.db, {
+          name: `Loc-${collectionType}`,
+          storageTypeId: String(storageType.id),
+          canContainCollections: true,
+        })
+        const st = await createTestSpecimenType(ctx.db, { name: `ST-${collectionType}` })
+        const sp = await createTestSpecimen(ctx.db, st.id)
+        const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+        const now = utcNow()
+        const [c] = await ctx.db
+          .insert(storageContainer)
+          .values({ specimenId: sp.id, unitId: unit.id, totalQuantity: 1, remainingQuantity: 1, created: now, lastUpdated: now })
+          .returning()
+        if (!c) throw new Error('no container')
+        const collection = { name: `Coll-${collectionType}`, locationId: loc.id, created: now, lastUpdated: now }
+
+        let id: number
+        if (collectionType === 'cryovial_box') {
+          const [row] = await ctx.db.insert(cryovialBox).values(collection).returning()
+          id = row!.id
+          await ctx.db.insert(cryovialTube).values({ id: c.id, collectionId: id, barcode: 'CRYO1', position: 'A1' })
+        } else {
+          const table = collectionType === 'box' ? box : bag
+          const [row] = await ctx.db.insert(table).values(collection).returning()
+          id = row!.id
+          const [sh] = await ctx.db
+            .insert(sheet)
+            .values({ name: 'S1', boxId: collectionType === 'box' ? id : null, bagId: collectionType === 'bag' ? id : null, created: now, lastUpdated: now })
+            .returning()
+          await ctx.db.insert(paper).values({ id: c.id, sheetId: sh!.id })
+        }
+
+        const res = await ctx.request('/api/collections/delete-with-contents', {
+          method: 'POST',
+          json: { collectionType, id, removeEmptySubjects: false },
+        })
+        expect(res.status).toBe(200)
+        expect(await res.json()).toMatchObject({
+          containersDeleted: 1,
+          specimensDeleted: 1,
+          sheetsDeleted: collectionType === 'cryovial_box' ? 0 : 1,
+          collectionDeleted: true,
+        })
+        expect(await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, c.id)).get()).toBeUndefined()
+        expect(await ctx.db.select().from(sheet).all()).toEqual([])
+      },
+    )
 
     it('deletes a micronix plate, its tubes, and fully-contained specimens', async () => {
       const storageType = await createTestStorageType(ctx.db, { name: 'StDel' })

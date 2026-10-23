@@ -293,6 +293,53 @@ describe('schema evolution', () => {
     sqlite.close()
   })
 
+  /** The CREATE TABLE text SQLite stored for qpcr_well_result. */
+  function qpcrWellResultDdl(sqlite: Database): string {
+    const row = sqlite.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='qpcr_well_result'").get() as
+      | { sql: string }
+      | null
+    return row?.sql ?? ''
+  }
+
+  it('names the qPCR well result unique constraint as the Drizzle schema does, fresh or migrated', () => {
+    const fresh = new Database(testDbPath)
+    evolveOperationalSchema(fresh)
+    expect(qpcrWellResultDdl(fresh)).toContain('CONSTRAINT qpcr_well_result_run_well_target_unique UNIQUE')
+    fresh.close()
+    unlinkSync(testDbPath)
+
+    const migrated = new Database(testDbPath)
+    migrated.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    migrated.exec('INSERT INTO schema_version (version) VALUES (6)')
+    evolveOperationalSchema(migrated)
+    expect(getRecordedSchemaVersion(migrated)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(qpcrWellResultDdl(migrated)).toContain('CONSTRAINT qpcr_well_result_run_well_target_unique UNIQUE')
+    migrated.close()
+  })
+
+  it('migration 007 leaves an existing qpcr_well_result table and its unnamed UNIQUE as they are', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (6)')
+    const existing = `CREATE TABLE qpcr_well_result (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      qpcr_run_id INTEGER NOT NULL,
+      well_position TEXT NOT NULL,
+      target_name TEXT,
+      UNIQUE (qpcr_run_id, well_position, target_name)
+    )`
+    sqlite.exec(existing)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(qpcrWellResultDdl(sqlite)).toBe(existing)
+    sqlite.exec(`INSERT INTO qpcr_well_result (qpcr_run_id, well_position, target_name) VALUES (1, 'A01', 'T')`)
+    expect(() =>
+      sqlite.exec(`INSERT INTO qpcr_well_result (qpcr_run_id, well_position, target_name) VALUES (1, 'A01', 'T')`),
+    ).toThrow(/UNIQUE/)
+    sqlite.close()
+  })
+
   it('fail-hard: invalid migration leaves schema_version unchanged', () => {
     const sqlite = new Database(testDbPath)
     sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')

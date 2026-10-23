@@ -38,7 +38,7 @@ export default defineConfig({
         'src/lib/api/**',
         'dist/**',
       ],
-      // Baseline; raise in steps toward 90% as coverage improves.
+      // A floor, not the target. Targets: Coverage in the root README.md.
       thresholds: {
         statements: 35,
         branches: 26,

@@ -9,7 +9,7 @@ declare module 'bun:sqlite' {
     run(sql: string, ...params: any[]): void
     serialize(): Uint8Array
     loadExtension(path: string): void
-    inTransaction(): boolean
+    readonly inTransaction: boolean
     transaction<T>(fn: () => T): T
   }
 

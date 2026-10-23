@@ -1,19 +1,21 @@
+# Agent guide
+
 ## Agent skills
 
 - **Issue tracker**: GitHub Issues on `eppicenter/sampledb3`. "Publish to the issue tracker" is `gh issue create`; "fetch the relevant ticket" is `gh issue view <number> --comments`.
-- **Triage labels**: each triage role is a GitHub label with the role's name.
+- **Triage labels**: each of the five triage roles is a GitHub label with the role's name: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`.
 - **Domain docs**: `CONTEXT.md` is the glossary, `docs/adr/` holds the decisions, and `packages/docs/` is the user guide.
 
-## Checks
+## Running tests and checks
 
 - Web tests: `cd packages/web && bun run test -- <files>`. Bun's own runner (`bun test`) hangs on React component tests; Vitest exits on its own, so piping it to `tail` or `grep` is safe.
 - API tests: `cd packages/api && bun test src/...`.
 - Lint is clean, so any lint error is yours.
-- The pre-commit hook only typechecks and lints. Run `bun run ci:verify`, which CI runs on every PR, before pushing.
+- Run `bun run ci:verify` before pushing. The end of Build in `README.md` says what it and the pre-commit hook check.
 
 ## Where to look
 
-- Writing code, tests, issues, or proposals, or reviewing a change: `CODING_STANDARDS.md`.
+- Rules for naming domain concepts, contradicting an ADR, failing tests, database access, calling the API from the web, and writing API and web tests: `CODING_STANDARDS.md`. The `code-review` skill checks changes against it.
 - Writing an API test: `packages/api/src/__tests__/README.md`.
 - Writing a web test: `packages/web/src/__tests__/README.md`.
 - Changing the schema or adding a migration: `packages/api/src/db/README.md`.

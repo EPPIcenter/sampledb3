@@ -71,9 +71,8 @@ export default function Specimens() {
     isEmpty: specimensQuery.isSuccess && specimens.length === 0,
   })
 
+  /** Write filters to the URL: a new history entry (so Back undoes it), or a replaced one. */
   const handleFilterChange = (newFilters: SpecimenFilters, options?: { replace?: boolean }) => {
-    setPage(1)
-
     const params: Record<string, string> = {}
     if (newFilters.study) params.study = newFilters.study
     if (newFilters.sourceType) params.source_type = newFilters.sourceType
@@ -84,6 +83,8 @@ export default function Specimens() {
     if (newFilters.createdTo) params.created_to = newFilters.createdTo
     if (newFilters.search) params.search = newFilters.search
 
+    // Applying unchanged filters must not add a history entry that Back would have to skip.
+    if (new URLSearchParams(params).toString() === searchParams.toString()) return
     setSearchParams(params, { replace: options?.replace })
   }
 
@@ -177,9 +178,9 @@ export default function Specimens() {
         <div className="subject-specimen-reveal subject-specimen-reveal-3">
           <SpecimenFilter
             filters={filters}
-            // Live edits replace the history entry instead of adding one per keystroke.
-            onChange={(next) => handleFilterChange(next, { replace: true })}
-            onSubmit={handleFilterChange}
+            // Search typing replaces the history entry instead of adding one per keystroke.
+            onSearchChange={(search) => handleFilterChange({ ...filters, search }, { replace: true })}
+            onSubmit={(next) => handleFilterChange(next)}
             isLoading={specimensQuery.isPending}
           />
         </div>
