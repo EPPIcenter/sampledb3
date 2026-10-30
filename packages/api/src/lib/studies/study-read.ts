@@ -1,8 +1,9 @@
 import type { Database } from '../../db/client'
 import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { study, studySubject } from '../../db/schema'
-import { eq, inArray, sql } from 'drizzle-orm'
+import { eq, inArray, or, sql } from 'drizzle-orm'
 import { SQL_IN_CHUNK_SIZE } from '../sql-helpers'
+import { likeContains } from '../sql-like'
 
 export type ListStudiesParams = {
   search?: string
@@ -41,8 +42,7 @@ export async function listStudies(database: Database, params: ListStudiesParams)
   let countQuery = database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(study)
 
   if (search) {
-    const searchPattern = `%${search}%`
-    const whereClause = sql`${study.title} LIKE ${searchPattern} OR ${study.shortCode} LIKE ${searchPattern}`
+    const whereClause = or(likeContains(study.title, search), likeContains(study.shortCode, search))
     query = query.where(whereClause) as any
     countQuery = countQuery.where(whereClause) as any
   }

@@ -6,7 +6,7 @@ import type { Derivation } from '../lib/api/derivations'
 import { containerDisplayIdentifier } from '../lib/container-display'
 import { formatDerivationType } from '../lib/derivation-types'
 import { getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
-import { parseDisplayDate } from '../lib/date-utils'
+import { formatDate } from '../lib/date-utils'
 
 interface DerivationChainViewProps {
   containerId: number
@@ -191,7 +191,7 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
                     {renderContainerIdentifier(item.container)}
                     {item.derivation.derivationDate && (
                       <div className="text-xs text-app-text-muted">
-                        {parseDisplayDate(item.derivation.derivationDate).toLocaleDateString()}
+                        {formatDate(item.derivation.derivationDate, 'numeric')}
                       </div>
                     )}
                   </div>

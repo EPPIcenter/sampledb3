@@ -107,8 +107,9 @@ export default function CollectionSpecimenEntry({
     setSubmitting(true)
     setWorkflowError(null)
 
+    // Complete entries in submit order; a 400's row index points into this list.
+    const validEntries: Array<SpecimenEntry & { position: string }> = []
     try {
-      const validEntries: Array<SpecimenEntry & { position: string }> = []
       const incompletePositions: string[] = []
 
       for (const [position, entry] of entries.entries()) {
@@ -160,11 +161,8 @@ export default function CollectionSpecimenEntry({
       const rowErrors = (err as { response?: { data?: { errors?: Array<{ index: number; error: string }> } } })
         .response?.data?.errors
       if (rowErrors && rowErrors.length > 0) {
-        const positionsByIndex = [...entries.entries()]
-          .filter(([, entry]) => entry.studyShortCode && entry.subjectName && entry.specimenTypeName)
-          .map(([position]) => position)
         setWorkflowError(
-          rowErrors.map((e) => `${positionsByIndex[e.index] ?? `Row ${e.index + 1}`}: ${e.error}`).join('; '),
+          rowErrors.map((e) => `${validEntries[e.index]?.position ?? `Row ${e.index + 1}`}: ${e.error}`).join('; '),
         )
       } else {
         setWorkflowError(getQueryErrorMessage(err, 'Failed to create specimens'))
@@ -238,13 +236,8 @@ export default function CollectionSpecimenEntry({
                     <td className="px-3 py-2 border-b">
                       <select
                         value={entry.studyShortCode}
-                        onChange={(e) => {
-                          const study = studies.find(s => s.shortCode === e.target.value)
-                          updateEntry(position, 'studyShortCode', e.target.value)
-                          if (study) {
-                            updateEntry(position, 'studyId', study.id)
-                          }
-                        }}
+                        // updateEntry sets studyId from the short code too.
+                        onChange={(e) => updateEntry(position, 'studyShortCode', e.target.value)}
                         className="w-full px-2 py-1 border border-app-border rounded text-sm"
                       >
                         <option value="">Select study</option>

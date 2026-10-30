@@ -85,13 +85,23 @@ function attachRequestIdInterceptor(instance: AxiosInstance): void {
       if (axios.isAxiosError(error)) {
         const id = readRequestIdHeader(error.response?.headers)
         if (id) lastResponseRequestId = id
-        if (error.response?.status === 401 && !reportsOwn401(error.config?.method, error.config?.url)) {
-          sessionExpiredHandler?.()
-        }
       }
       return Promise.reject(error)
     },
   )
+}
+
+function attachSessionExpiryInterceptor(instance: AxiosInstance): void {
+  instance.interceptors.response.use(undefined, (error: unknown) => {
+    if (
+      axios.isAxiosError(error) &&
+      error.response?.status === 401 &&
+      !reportsOwn401(error.config?.method, error.config?.url)
+    ) {
+      sessionExpiredHandler?.()
+    }
+    return Promise.reject(error)
+  })
 }
 
 /** Shared axios instance (raw). Prefer `api` for typed, unwrapped JSON calls. */
@@ -104,6 +114,7 @@ export const axiosApi: AxiosInstance = axios.create({
 })
 
 attachRequestIdInterceptor(axiosApi)
+attachSessionExpiryInterceptor(axiosApi)
 
 async function unwrap<T>(promise: Promise<AxiosResponse<T>>): Promise<T> {
   const response = await promise

@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { QueryClient } from '@tanstack/react-query'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import Settings from '../Settings'
 import { settingsApi } from '../../lib/api/settings'
@@ -21,6 +23,7 @@ vi.mock('../../lib/api/settings', async () => {
   settingsApi: {
     getAll: vi.fn().mockResolvedValue(mockAllSettings()),
     getContainerTypeUnits: vi.fn().mockResolvedValue({ units: [] }),
+    update: vi.fn().mockResolvedValue({}),
   }
   })
 })
@@ -57,6 +60,26 @@ describe('Settings page', () => {
     const containerDefaults = screen.getAllByText(/Container Defaults/i)
     expect(containerDefaults.length).toBeGreaterThan(0)
     expect(screen.getByText(/Pagination/i)).toBeInTheDocument()
+  })
+
+  it('marks every cached query stale after a settings save', async () => {
+    const user = userEvent.setup()
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    // Another page's cached query that reads settings (e.g. export configurations).
+    queryClient.setQueryData(['export', 'configurations'], { configurations: [] })
+    await render(<Settings />, {
+      queryClient,
+      initialEntries: ['/settings?category=application&section=pagination'],
+    })
+
+    const [, maxPageSize] = await screen.findAllByRole('spinbutton')
+    await user.type(maxPageSize, '0') // 100 -> 1000
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(settingsApi.update).toHaveBeenCalledWith('pagination_settings', expect.anything()))
+    await waitFor(() =>
+      expect(queryClient.getQueryState(['export', 'configurations'])?.isInvalidated).toBe(true),
+    )
   })
 
   it('shows PageError with retry when settings load fails', async () => {
