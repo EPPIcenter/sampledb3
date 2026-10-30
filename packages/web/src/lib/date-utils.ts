@@ -55,20 +55,22 @@ export function formatDateWithRelativeTime(dateString: string | null | undefined
   })
 }
 
+const DATE_FORMATS = {
+  short: { month: 'short', day: 'numeric', year: 'numeric' },
+  long: { month: 'long', day: 'numeric', year: 'numeric' },
+  numeric: { month: 'numeric', day: 'numeric', year: 'numeric' },
+} satisfies Record<string, Intl.DateTimeFormatOptions>
+
 /**
- * Formats a date string as an absolute date
- * @param dateString - ISO date string
- * @returns Formatted date string (e.g., "Jan 15, 2024")
+ * Format a date for display: "Jan 15, 2024" (short), "January 15, 2024" (long), or
+ * "1/15/2024" (numeric). A bare YYYY-MM-DD shows that calendar day (see parseDisplayDate).
  */
-export function formatDate(dateString: string | null | undefined): string {
+export function formatDate(
+  dateString: string | null | undefined,
+  style: keyof typeof DATE_FORMATS = 'short',
+): string {
   if (!dateString) return 'N/A'
-  
-  const date = parseDisplayDate(dateString)
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
+  return parseDisplayDate(dateString).toLocaleDateString('en-US', DATE_FORMATS[style])
 }
 
 /**

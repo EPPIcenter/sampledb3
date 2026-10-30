@@ -13,7 +13,7 @@ import { Modal } from '../ui'
 import { useUser } from '../contexts/UserContext'
 import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/blood-controls.css'
-import { parseDisplayDate } from '../lib/date-utils'
+import { formatDate } from '../lib/date-utils'
 
 export default function ControlBatchDetail() {
   const { id } = useParams<{ id: string }>()
@@ -262,7 +262,7 @@ export default function ControlBatchDetail() {
                   )}
                   {batch.productionDate && (
                     <p className="text-sm mt-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
-                      Production Date: {parseDisplayDate(batch.productionDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                      Production Date: {formatDate(batch.productionDate, 'long')}
                     </p>
                   )}
                 </>
