@@ -14,7 +14,9 @@ const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 const ruleTester = new RuleTester({
   languageOptions: {
     parser,
-    parserOptions: { project: './tsconfig.json', tsconfigRootDir: fixtures },
+    // With CI=true, typescript-eslint builds one program from the files on disk, so every case
+    // would be type-checked as the placeholder fixtures/file.ts instead of its own code.
+    parserOptions: { project: './tsconfig.json', tsconfigRootDir: fixtures, disallowAutomaticSingleRunInference: true },
   },
 })
 
