@@ -17,7 +17,7 @@ Paths are relative to `packages/api/`.
 ### Database
 
 - Run a write of several statements that `await`s inside `withWriteTransaction` from `src/db/write-transaction.ts`. Drizzle's bun-sqlite `db.transaction(async () => …)` commits at the callback's first `await` instead of awaiting the returned Promise, so the rest of the write runs outside the transaction. ESLint rejects any callback passed to `.transaction(...)` that returns a Promise.
-- Change the schema with a numbered migration, following the recipe in `src/db/README.md`. Keep DDL in the migrations and `initial_schema.sql` only.
+- Change the schema with a numbered migration, following the recipe in `src/db/README.md`, and refresh `initial_schema.sql` to match. Keep DDL out of the connection code (`src/db/open.ts`, `src/db/client.ts`), routes, and `src/lib/`. The schema-evolution modules in `src/db/` (`migration-runner.ts`, `migration-preflight.ts`, `legacy-baseline.ts`, `apply-initial-schema.ts`) run DDL as part of evolution, and tests may create tables inline to build a legacy or partial database, as `src/db/__tests__/client.test.ts` and `src/lib/subjects/__tests__/subject-read.test.ts` do.
 - Open a database through `openOperationalDatabase`, which runs schema evolution. Open the file directly only when the code must not migrate it, and say why in a comment. For example, `src/scripts/check-integrity.ts` opens a backup with `new Database(path, { readonly: true })` so that checking it leaves it unchanged, and `src/db/__tests__/initial-schema-snapshot.test.ts` applies `initial_schema.sql` alone so that pending migrations can't hide a stale snapshot.
 
 ### Domain modules
@@ -68,9 +68,8 @@ Paths are relative to `packages/web/`.
 
 ### Web tests
 
-- Render components with `await render(...)` from `src/__tests__/helpers/render`.
 - Mock the domain module the code imports with `createMockedDomainModule`. Make each override replace a whole `*Api` object and resolve to the same body the real module returns.
-- Query elements by role or label (`getByRole`, `getByLabelText`), and drive interactions with `@testing-library/user-event`.
+- In a new or changed test, render with `await render(...)` from `src/__tests__/helpers/render`, query elements by role or label (`getByRole`, `getByLabelText`), and drive interactions with `@testing-library/user-event`. Older tests still render with `@testing-library/react`'s `render`, click with `fireEvent`, and query by text; convert a test when you change it. Tests of a provider itself, such as `src/contexts/__tests__/ThemeContext.test.tsx`, render without the helper because it would wrap them in a second copy of the provider.
 - Wait for async results with `findBy*` queries or `waitFor`.
 - Test a component's loading and error states, not only its loaded state.
 - In a mutation hook's test, assert which queries it invalidates.

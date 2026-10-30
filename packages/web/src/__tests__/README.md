@@ -17,7 +17,7 @@ it('handles a click', async () => {
   const user = userEvent.setup()
   await render(<MyComponent />)
   await user.click(screen.getByRole('button', { name: 'Save' }))
-  expect(screen.getByText('Saved')).toBeInTheDocument()
+  expect(await screen.findByRole('alert')).toHaveTextContent('Saved')
 })
 ```
 
