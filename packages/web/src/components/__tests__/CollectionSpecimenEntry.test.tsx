@@ -31,6 +31,11 @@ async function renderEntry() {
   )
 }
 
+/** One select per position, found by its placeholder option ("Select study", "Select type"). */
+function selectsWith(placeholder: string) {
+  return screen.getAllByRole('combobox').filter((select) => within(select).queryByRole('option', { name: placeholder }))
+}
+
 describe('CollectionSpecimenEntry', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -61,12 +66,27 @@ describe('CollectionSpecimenEntry', () => {
   it('keeps the study picked for a position', async () => {
     const user = userEvent.setup()
     await renderEntry()
-    const [studyA01] = screen
-      .getAllByRole('combobox')
-      .filter((select) => within(select).queryByRole('option', { name: 'Select study' }))
+    const [studyA01] = selectsWith('Select study')
 
     await user.selectOptions(studyA01, 'ST1')
 
     expect(studyA01).toHaveValue('ST1')
+  })
+
+  it("labels a server row error with that row's position", async () => {
+    vi.mocked(specimensApi.createBulk).mockRejectedValue({
+      response: { data: { errors: [{ index: 0, error: 'Subject not found' }] } },
+    })
+    const user = userEvent.setup()
+    await renderEntry()
+    const studyA02 = selectsWith('Select study')[1]
+    const typeA02 = selectsWith('Select type')[1]
+    await user.selectOptions(studyA02, 'ST1')
+    await user.type(screen.getAllByPlaceholderText('Subject name')[1], 'S2')
+    await user.selectOptions(typeA02, 'DNA')
+
+    await user.click(screen.getByRole('button', { name: /create|add|save/i }))
+
+    expect(await screen.findByText('A02: Subject not found')).toBeInTheDocument()
   })
 })
