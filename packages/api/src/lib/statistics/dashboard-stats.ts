@@ -37,23 +37,15 @@ function emptyDashboardStatistics(): DashboardStatistics {
   }
 }
 
-/** Parse an integer id query value; anything else means no filter. */
-function parseId(value: string | undefined): number | undefined {
-  if (!value) return undefined
-  const id = parseInt(value)
-  return isNaN(id) ? undefined : id
-}
-
 /** Map the statistics query to Container selection filters (ADR 0011). */
 function selectionFilters(filters: StatisticsFilters): ContainerSelectionFilters {
-  const specimenTypeId = parseId(filters.specimen_type_id)
   return {
-    specimenTypeIds: specimenTypeId === undefined ? undefined : [specimenTypeId],
+    specimenTypeIds: filters.specimen_type_id === undefined ? undefined : [filters.specimen_type_id],
     collectionDate: { from: filters.collection_date_from, to: filters.collection_date_to },
     specimenCreated: { from: filters.created_from, to: filters.created_to },
     containerTypes: containerTypesFilter(filters.container_type ? [filters.container_type] : undefined),
     tagIds: filters.tag_ids,
-    locationId: parseId(filters.location_id),
+    locationId: filters.location_id,
   }
 }
 

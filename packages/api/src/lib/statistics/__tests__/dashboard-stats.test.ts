@@ -150,7 +150,7 @@ describe('dashboard-stats', () => {
     })
 
     const data = await getDashboardStatistics(testDb, {
-      location_id: String(loc.id),
+      location_id: loc.id,
     })
 
     expect(data.containers.total).toBe(1)
