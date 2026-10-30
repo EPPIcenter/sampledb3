@@ -238,13 +238,8 @@ export default function CollectionSpecimenEntry({
                     <td className="px-3 py-2 border-b">
                       <select
                         value={entry.studyShortCode}
-                        onChange={(e) => {
-                          const study = studies.find(s => s.shortCode === e.target.value)
-                          updateEntry(position, 'studyShortCode', e.target.value)
-                          if (study) {
-                            updateEntry(position, 'studyId', study.id)
-                          }
-                        }}
+                        // updateEntry sets studyId from the short code too.
+                        onChange={(e) => updateEntry(position, 'studyShortCode', e.target.value)}
                         className="w-full px-2 py-1 border border-app-border rounded text-sm"
                       >
                         <option value="">Select study</option>

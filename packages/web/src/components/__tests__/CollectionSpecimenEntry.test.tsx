@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { render, screen } from '../../__tests__/helpers/render'
+import { render, screen, within } from '../../__tests__/helpers/render'
 import CollectionSpecimenEntry from '../CollectionSpecimenEntry'
 import { specimensApi } from '../../lib/api/specimens'
 
@@ -56,5 +56,17 @@ describe('CollectionSpecimenEntry', () => {
 
     expect(await screen.findByText(/Complete or clear these positions.*A02/)).toBeInTheDocument()
     expect(specimensApi.createBulk).not.toHaveBeenCalled()
+  })
+
+  it('keeps the study picked for a position', async () => {
+    const user = userEvent.setup()
+    await renderEntry()
+    const [studyA01] = screen
+      .getAllByRole('combobox')
+      .filter((select) => within(select).queryByRole('option', { name: 'Select study' }))
+
+    await user.selectOptions(studyA01, 'ST1')
+
+    expect(studyA01).toHaveValue('ST1')
   })
 })
