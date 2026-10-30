@@ -547,20 +547,12 @@ export async function validateDerivationsCsv(
             collectionId: collectionInfo.id,
             position,
           })
-          if (containerType === 'micronix_tube') {
-            if (occupancy.occupied) {
-              validationRow.error = 'That position is already used in that plate. Each position in a plate can only be used once. Use a different position or a different plate.'
-              validationRows.push(validationRow)
-              invalidCount++
-              continue
-            }
-          } else {
-            if (occupancy.occupied) {
-              validationRow.error = 'That position is already used in that box. Each position in a box can only be used once. Use a different position or a different box.'
-              validationRows.push(validationRow)
-              invalidCount++
-              continue
-            }
+          if (occupancy.occupied) {
+            const kind = containerType === 'micronix_tube' ? 'plate' : 'box'
+            validationRow.error = `That position is already used in that ${kind}. Each position in a ${kind} can only be used once. Use a different position or a different ${kind}.`
+            validationRows.push(validationRow)
+            invalidCount++
+            continue
           }
         }
 

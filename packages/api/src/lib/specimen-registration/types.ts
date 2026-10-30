@@ -1,5 +1,6 @@
 import type { ContainerWriteInput } from '@sampledb/contract'
 import type { Specimen } from '../../db/schema'
+import type { GridCollectionType, ParentCollectionType } from './tables'
 
 /** A container to register: the unified write shape plus optional unit and quantity overrides. */
 export type RegistrationContainer = ContainerWriteInput & {
@@ -52,10 +53,8 @@ export type RegisteredEntry = {
   containerIds: number[]
 }
 
-export type RegisteredCollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet'
-
 export type CreatedCollection = {
-  type: RegisteredCollectionType
+  type: GridCollectionType | ParentCollectionType | 'sheet'
   id: number
   name: string
 }

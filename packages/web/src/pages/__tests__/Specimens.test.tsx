@@ -144,7 +144,10 @@ describe('Specimens page URL filters', () => {
     const page = await renderAt('/specimens?source_type=subject')
     expect(page.sourceType()).toHaveValue('subject')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Clear All' }))
+    // Clear All is disabled while the list loads.
+    const clearAll = screen.getByRole('button', { name: 'Clear All' })
+    await waitFor(() => expect(clearAll).toBeEnabled())
+    fireEvent.click(clearAll)
 
     await waitFor(() => expect(page.url()).toBe('/specimens'))
     expect(page.sourceType()).toHaveValue('')

@@ -8,6 +8,14 @@ function hasGridCollection(collection: { id?: number; name?: string; barcode?: s
 /** The input field a missing or misplaced value belongs to. */
 export type ContainerWriteField = 'barcode' | 'sublabel' | 'collection' | 'position'
 
+function hasPosition(collection: { position?: string } | undefined): boolean {
+  return Boolean(collection?.position?.trim())
+}
+
+function positionRequired(containers: string) {
+  return { valid: false, field: 'position', error: `Position is required for ${containers} (e.g. A01).` } as const
+}
+
 /**
  * Required ContainerWriteInput fields by type (no DB uniqueness checks).
  */
@@ -21,21 +29,13 @@ export function validateContainerWriteFields(
     if (!hasGridCollection(input.collection)) {
       return { valid: false, field: 'collection', error: 'Collection name or barcode is required' }
     }
-    if (!input.collection?.position || String(input.collection.position).trim() === '') {
-      return { valid: false, field: 'position', error: 'Position is required for micronix tubes (e.g. A01).' }
-    }
+    if (!hasPosition(input.collection)) return positionRequired('micronix tubes')
   } else if (input.containerType === 'cryovial_tube') {
     if (!hasGridCollection(input.collection)) {
       return { valid: false, field: 'collection', error: 'Collection name or barcode is required' }
     }
-    if (!input.collection?.position || String(input.collection.position).trim() === '') {
-      return { valid: false, field: 'position', error: 'Position is required for cryovial tubes (e.g. A01).' }
-    }
+    if (!hasPosition(input.collection)) return positionRequired('cryovial tubes')
   } else if (input.containerType === 'paper') {
-    const barcode = Reflect.get(input, 'barcode')
-    if (typeof barcode === 'string' && barcode !== '') {
-      return { valid: false, field: 'sublabel', error: 'Paper containers use sublabel for spot identifiers, not barcode' }
-    }
     const collection = input.collection
     if (!collection) {
       return { valid: false, field: 'collection', error: 'Collection is required for paper containers' }
@@ -52,9 +52,7 @@ export function validateContainerWriteFields(
     if (!hasGridCollection(input.collection)) {
       return { valid: false, field: 'collection', error: 'Collection name or barcode is required' }
     }
-    if (!input.collection?.position || String(input.collection.position).trim() === '') {
-      return { valid: false, field: 'position', error: 'Position is required for static wells (e.g. A01).' }
-    }
+    if (!hasPosition(input.collection)) return positionRequired('static wells')
   }
 
   return { valid: true }

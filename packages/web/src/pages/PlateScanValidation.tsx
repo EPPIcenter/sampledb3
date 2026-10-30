@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { collectionsApi } from '../lib/api/collections';
 import type { ValidatePlateScanResult, InferenceReport } from '../lib/api/collections';
 import type { ScannerConfiguration } from '../lib/api/settings';
+import { defaultScannerConfiguration } from '../lib/scanner-configurations'
 import { usePlateScanBootstrap } from '../hooks/useExportWorkflow'
 import { PageError } from '../ui'
 import { extractPlateStemFromFilename, findPlateCandidatesFromStem } from '../lib/plate-filename-match'
@@ -205,9 +206,9 @@ export default function PlateScanValidation() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (selectedConfigId != null || scannerConfigurations.length === 0) return
-    const defaultConfig = scannerConfigurations.find((c) => c.isDefault === true)
-    setSelectedConfigId((defaultConfig ?? scannerConfigurations[0]).id)
+    if (selectedConfigId != null) return
+    const defaultConfig = defaultScannerConfiguration(scannerConfigurations)
+    if (defaultConfig) setSelectedConfigId(defaultConfig.id)
   }, [scannerConfigurations, selectedConfigId])
 
   useEffect(() => {

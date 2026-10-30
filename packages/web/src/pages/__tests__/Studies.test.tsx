@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useNavigate } from 'react-router-dom'
-import { render, screen, waitFor, fireEvent } from '../../__tests__/helpers/render'
+import userEvent from '@testing-library/user-event'
+import { render, screen, waitFor } from '../../__tests__/helpers/render'
 
 vi.mock('../../lib/api/studies', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
@@ -53,6 +54,7 @@ describe('Studies', () => {
   })
 
   it('reads search and filters from the URL and clears them', async () => {
+    const user = userEvent.setup()
     const { default: Studies } = await import('../Studies')
     await render(<Studies />, { initialEntries: ['/studies?q=malaria&type=longitudinal'] })
 
@@ -60,12 +62,13 @@ describe('Studies', () => {
     expect(searchBox).toHaveValue('malaria')
     expect(screen.getByDisplayValue(/longitudinal/i)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /clear filters/i }))
+    await user.click(screen.getByRole('button', { name: /clear filters/i }))
 
     await waitFor(() => expect(searchBox).toHaveValue(''))
   })
 
   it('undoes a filter change with Back', async () => {
+    const user = userEvent.setup()
     const { default: Studies } = await import('../Studies')
     await render(
       <>
@@ -76,10 +79,10 @@ describe('Studies', () => {
     )
     const typeFilter = await screen.findByDisplayValue(/all types/i)
 
-    fireEvent.change(typeFilter, { target: { value: 'longitudinal' } })
+    await user.selectOptions(typeFilter, 'longitudinal')
     await waitFor(() => expect(typeFilter).toHaveValue('longitudinal'))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
     await waitFor(() => expect(typeFilter).toHaveValue('all'))
   })
 })

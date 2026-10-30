@@ -12,12 +12,12 @@
 - API tests: `cd packages/api && NODE_ENV=test bun test src/...`. The package's `test` script sets `NODE_ENV=test`, and `src/db/legacy-baseline.ts` branches on it.
 - Contract tests: `cd packages/contract && bun run test`. `bun run test` at the repo root runs the contract, API, and web suites.
 - The `Checks` workflow lints every PR, so a lint error comes from your change.
-- Run `bun run setup:hooks` once per clone to install the pre-commit hook, and `bun run ci:verify` before pushing. The end of Build in `README.md` says what each checks.
+- Run `bun run setup:hooks` once per clone to install the pre-commit hook (it typechecks and lints staged files, and refuses a source file that also has unstaged edits), and `bun run ci:verify` before pushing. The end of Build in `README.md` says what each checks.
 
 ## Where to look
 
 - Rules for naming domain concepts, contradicting an ADR, failing tests, database access, calling the API from the web, and writing API and web tests: `CODING_STANDARDS.md`. The `code-review` skill checks changes against it.
 - Writing an API test: `packages/api/src/__tests__/README.md`.
 - Writing a web test: `packages/web/src/__tests__/README.md`.
-- Changing the schema or adding a migration: `packages/api/src/db/README.md`.
+- Changing the schema, adding a migration, or writing in a transaction: `packages/api/src/db/README.md`.
 - Tracing a UI label to code: `packages/web/src/components/Sidebar.tsx` maps the label to a path and `packages/web/src/App.tsx` maps the path to a page. From there follow the page's hooks and `lib/api/<domain>` into `packages/api/src/routes` and `packages/api/src/lib`.
