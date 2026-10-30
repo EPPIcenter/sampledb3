@@ -35,8 +35,10 @@ const PAGE_LIMIT = 50
 
 const SORT_OPTIONS: SortOption[] = ['title', 'date', 'subjects', 'specimens', 'containers', 'lead']
 
+type SortDirection = 'asc' | 'desc'
+
 /** Names sort A-Z by default; dates and counts sort largest first. */
-function defaultSortDirection(sortBy: SortOption): 'asc' | 'desc' {
+function defaultSortDirection(sortBy: SortOption): SortDirection {
   return sortBy === 'title' || sortBy === 'lead' ? 'asc' : 'desc'
 }
 
@@ -49,10 +51,8 @@ export default function Studies() {
   const search = searchParams.get('q') ?? ''
   const sortParam = searchParams.get('sort')
   const sortBy: SortOption = SORT_OPTIONS.includes(sortParam as SortOption) ? (sortParam as SortOption) : 'date'
-  const sortDirection: 'asc' | 'desc' =
-    searchParams.get('dir') === 'asc' || searchParams.get('dir') === 'desc'
-      ? (searchParams.get('dir') as 'asc' | 'desc')
-      : defaultSortDirection(sortBy)
+  const dirParam = searchParams.get('dir')
+  const sortDirection: SortDirection = dirParam === 'asc' || dirParam === 'desc' ? dirParam : defaultSortDirection(sortBy)
   const typeParam = searchParams.get('type')
   const filterType: FilterType = typeParam === 'longitudinal' || typeParam === 'cross-sectional' ? typeParam : 'all'
   const filterLead = searchParams.get('lead') ?? ''

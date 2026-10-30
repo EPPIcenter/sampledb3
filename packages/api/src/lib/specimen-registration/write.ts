@@ -85,9 +85,9 @@ export async function writeRegistration(
 
     const specimenRows: Array<Specimen | undefined> = []
     const entries: RegisteredEntry[] = []
-    for (let entryIndex = 0; entryIndex < plan.entrySpecimen.length; entryIndex++) {
+    for (let entryIndex = 0; entryIndex < plan.specimenIndexOfEntry.length; entryIndex++) {
       current = { entryIndex }
-      const index = plan.entrySpecimen[entryIndex]
+      const index = plan.specimenIndexOfEntry[entryIndex]
       if (index === undefined) throw new Error('Registration plan has an entry without a specimen')
       const planned = plan.specimens[index]
       let row = specimenRows[index]
@@ -96,8 +96,14 @@ export async function writeRegistration(
         if (planned.existing) {
           row = planned.existing
         } else {
-          const { existing: _existing, ...values } = planned
-          row = insertedRow(await database.insert(specimen).values({ ...values, ...audit }).returning(), 'specimen')
+          const values = {
+            studySubjectId: 'subjectId' in planned.source ? planned.source.subjectId : null,
+            controlBatchId: 'controlBatchId' in planned.source ? planned.source.controlBatchId : null,
+            specimenTypeId: planned.specimenTypeId,
+            collectionDate: planned.collectionDate,
+            ...audit,
+          }
+          row = insertedRow(await database.insert(specimen).values(values).returning(), 'specimen')
           reused = false
         }
         specimenRows[index] = row

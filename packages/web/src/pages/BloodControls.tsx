@@ -11,7 +11,7 @@ import { getContainerTypeIcon } from '../lib/icons'
 import { getCompositionKey } from '../lib/composition-key'
 import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/blood-controls.css'
-import { parseDisplayDate } from '../lib/date-utils'
+import { formatDate } from '../lib/date-utils'
 import { EMPTY_LIST } from '../lib/empty-list'
 
 export interface CompositionGroup {
@@ -448,7 +448,7 @@ export default function BloodControls() {
       label: 'Production Date',
       sortable: true,
       render: (value) => value ? (
-        <span className="dashboard-stat-value">{parseDisplayDate(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+        <span className="dashboard-stat-value">{formatDate(value)}</span>
       ) : <span className="text-app-text-muted italic">Not set</span>,
     },
   ]

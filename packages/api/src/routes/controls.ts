@@ -14,7 +14,7 @@ import {
   generateUniqueControlDefinitionName,
   isControlDefinitionNameTaken,
 } from '../lib/control-name-generation'
-import { handleRouteError } from '../lib/error-handler'
+import { ConflictError, handleRouteError, ValidationError } from '../lib/error-handler'
 import type { BloodControlProperties } from '../types/properties'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
@@ -47,6 +47,7 @@ import {
   strainCompositionEntrySchema,
   resolveStrainComposition,
   findBloodControlDefinitionByComposition,
+  DuplicateControlCompositionError,
   findMatchingDefinitionInList,
   buildBloodControlPropertiesPayload,
 } from '../lib/controls/strain-composition'
@@ -468,10 +469,7 @@ controls.post('/', memberMiddleware, async (c) => {
       targetDensityUnitId,
     })
     if (duplicate) {
-      return c.json({
-        error: 'A control definition with this combination of density and strains already exists',
-        existingDefinition: duplicate,
-      }, 409)
+      throw new DuplicateControlCompositionError(duplicate)
     }
 
     const props: Record<string, unknown> = { ...(properties || {}) }
@@ -498,7 +496,7 @@ controls.post('/', memberMiddleware, async (c) => {
       })
     } else {
       if (await isControlDefinitionNameTaken(dbInstance, finalName)) {
-        return c.json({ error: 'A control definition with this name already exists' }, 409)
+        throw new ConflictError('A control definition with this name already exists')
       }
     }
 
@@ -542,9 +540,9 @@ controls.patch('/:id', memberMiddleware, async (c) => {
     }
 
     const body = await c.req.json()
-    // controlType is fixed at creation: these routes only serve blood definitions.
     const schema = z.object({
       name: z.string().min(1).optional(),
+      controlType: z.string().optional(),
       targetDensity: z.number().optional(),
       targetDensityUnitId: z.number().int().optional(),
       strains: z.array(strainCompositionEntrySchema).optional(),
@@ -552,7 +550,12 @@ controls.patch('/:id', memberMiddleware, async (c) => {
     })
 
     const data = schema.parse(body)
-    const { strains, targetDensity, targetDensityUnitId, properties, ...baseData } = data
+    const { strains, targetDensity, targetDensityUnitId, properties, controlType, ...baseData } = data
+    // controlType is fixed at creation: these routes only serve blood definitions.
+    // The edit form sends the current type back, so only a change is an error.
+    if (controlType !== undefined && controlType !== existing.controlType) {
+      throw new ValidationError('controlType cannot be changed after a control definition is created')
+    }
 
     const existingProps = (existing.properties as Record<string, unknown> | null) ?? {}
     const newProps: Record<string, unknown> = { ...existingProps, ...(properties || {}) }
@@ -581,7 +584,7 @@ controls.patch('/:id', memberMiddleware, async (c) => {
 
     if (baseData.name !== undefined && baseData.name !== existing.name) {
       if (await isControlDefinitionNameTaken(dbInstance, baseData.name)) {
-        return c.json({ error: 'A control definition with this name already exists' }, 409)
+        throw new ConflictError('A control definition with this name already exists')
       }
     }
 
@@ -598,10 +601,7 @@ controls.patch('/:id', memberMiddleware, async (c) => {
         { excludeId: id },
       )
       if (duplicate) {
-        return c.json({
-          error: 'A control definition with this combination of density and strains already exists',
-          existingDefinition: duplicate,
-        }, 409)
+        throw new DuplicateControlCompositionError(duplicate)
       }
     }
 

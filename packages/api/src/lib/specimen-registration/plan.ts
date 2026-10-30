@@ -29,8 +29,7 @@ export type PlannedSpecimen =
   | { existing: Specimen }
   | {
       existing: null
-      studySubjectId: number | null
-      controlBatchId: number | null
+      source: RegistrationSource
       specimenTypeId: number
       collectionDate: string | null
     }
@@ -49,8 +48,8 @@ export type PlannedContainer = {
 
 export type RegistrationPlan = {
   specimens: PlannedSpecimen[]
-  /** entries[i] registers specimens[entrySpecimen[i]]; undefined when the entry has errors. */
-  entrySpecimen: Array<number | undefined>
+  /** entries[i] registers specimens[specimenIndexOfEntry[i]]; undefined when the entry has errors. */
+  specimenIndexOfEntry: Array<number | undefined>
   containers: PlannedContainer[]
   collections: PlannedCollection[]
 }
@@ -73,6 +72,18 @@ function findSpecimen(
       .where(and(sourceCondition, eq(specimen.specimenTypeId, specimenTypeId), dateCondition))
       .get() ?? null
   )
+}
+
+/** What makes two entries the same Specimen (ADR 0010, Specimen identity). */
+type SpecimenIdentity =
+  | { kind: 'existing'; specimenId: number }
+  | { kind: 'new'; source: RegistrationSource; specimenTypeId: number; collectionDate: string | null }
+
+function specimenIdentityKey(identity: SpecimenIdentity): string {
+  if (identity.kind === 'existing') return `id:${identity.specimenId}`
+  const { source, specimenTypeId, collectionDate } = identity
+  const sourceKey = 'subjectId' in source ? `subject:${source.subjectId}` : `control:${source.controlBatchId}`
+  return `${sourceKey}:${specimenTypeId}:${collectionDate ?? ''}`
 }
 
 /** Something a request may use only once. */
@@ -118,10 +129,12 @@ export async function planRegistration(
   const claims = new RequestClaims(inputName)
   const specimens: PlannedSpecimen[] = []
   const specimenIndexByKey = new Map<string, number>()
-  const entrySpecimen: Array<number | undefined> = []
+  const specimenIndexOfEntry: Array<number | undefined> = []
   const containers: PlannedContainer[] = []
 
-  const useSpecimen = (key: string, make: () => PlannedSpecimen): number => {
+  /** The index in `specimens` of the Specimen with this identity, planning it on first sight. */
+  const specimenIndexFor = (identity: SpecimenIdentity, make: () => PlannedSpecimen): number => {
+    const key = specimenIdentityKey(identity)
     const known = specimenIndexByKey.get(key)
     if (known !== undefined) return known
     specimens.push(make())
@@ -138,11 +151,11 @@ export async function planRegistration(
       const existing = database.select().from(specimen).where(eq(specimen.id, entry.specimenId)).get()
       if (!existing) {
         entryError('specimenId', 'Specimen not found')
-        entrySpecimen.push(undefined)
+        specimenIndexOfEntry.push(undefined)
         continue
       }
       specimenTypeId = existing.specimenTypeId
-      entrySpecimen.push(useSpecimen(`id:${existing.id}`, () => ({ existing })))
+      specimenIndexOfEntry.push(specimenIndexFor({ kind: 'existing', specimenId: existing.id }, () => ({ existing })))
     } else {
       let sourceOk = true
       if ('subjectId' in entry.source) {
@@ -170,27 +183,21 @@ export async function planRegistration(
       if (!date.valid) entryError('collectionDate', date.error)
 
       if (sourceOk && specimenTypeId !== null && date.valid) {
-        const typeId = specimenTypeId
-        const collectionDate = date.normalized ?? null
-        const source = entry.source
-        const studySubjectId = 'subjectId' in source ? source.subjectId : null
-        const controlBatchId = 'controlBatchId' in source ? source.controlBatchId : null
-        const key = `${studySubjectId !== null ? `s${studySubjectId}` : `c${controlBatchId}`}:${typeId}:${collectionDate ?? ''}`
-        entrySpecimen.push(
-          useSpecimen(key, () => {
+        const identity = {
+          kind: 'new' as const,
+          source: entry.source,
+          specimenTypeId,
+          collectionDate: date.normalized ?? null,
+        }
+        specimenIndexOfEntry.push(
+          specimenIndexFor(identity, () => {
+            const { source, specimenTypeId: typeId, collectionDate } = identity
             const existing = findSpecimen(database, source, typeId, collectionDate)
-            if (existing) return { existing }
-            return {
-              existing: null,
-              studySubjectId,
-              controlBatchId,
-              specimenTypeId: typeId,
-              collectionDate,
-            }
+            return existing ? { existing } : { existing: null, source, specimenTypeId: typeId, collectionDate }
           }),
         )
       } else {
-        entrySpecimen.push(undefined)
+        specimenIndexOfEntry.push(undefined)
       }
     }
 
@@ -204,7 +211,7 @@ export async function planRegistration(
     }
   }
 
-  return { plan: { specimens, entrySpecimen, containers, collections: planner.planned }, errors }
+  return { plan: { specimens, specimenIndexOfEntry, containers, collections: planner.planned }, errors }
 }
 
 type ContainerProblem = { field: string; message: string }

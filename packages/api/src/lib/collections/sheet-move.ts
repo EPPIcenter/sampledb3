@@ -2,6 +2,7 @@ import { eq, inArray, sql } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { box, bag, sheet } from '../../db/schema'
 import { withWriteTransaction } from '../../db/write-transaction'
+import { ConflictError } from '../error-handler'
 
 export class SheetMoveTargetNotFoundError extends Error {
   constructor(targetType: 'box' | 'bag') {
@@ -17,7 +18,7 @@ export class SheetNotFoundError extends Error {
   }
 }
 
-export class SheetNameConflictError extends Error {
+export class SheetNameConflictError extends ConflictError {
   constructor(name: string) {
     super(`The target box already has a sheet named '${name}'. Rename one of them first.`)
     this.name = 'SheetNameConflictError'

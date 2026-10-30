@@ -57,7 +57,11 @@ Affected routes include specimen container create, bulk combined import, control
 
 ## Single API write executor
 
-All persistence funnels through `createContainerForSpecimen` (accepting `ContainerWriteInput`) after `resolveContainerPlacement`. Delete parallel implementations:
+All persistence funnels through `createContainerForSpecimen` (accepting `ContainerWriteInput`) after `resolveContainerPlacement`.
+
+> **Amended by [ADR 0010](./0010-specimen-registration.md):** persistence funnels through `registerSpecimens` in `lib/specimen-registration/`. `createContainerForSpecimen` is a one-container wrapper around it for callers not yet migrated, and `resolveContainerPlacement` is gone.
+
+Delete parallel implementations:
 
 - `batch-with-specimens` `prepareContainerData` / `createContainerSync`
 - Inline subtype inserts in `derivations.ts` for child containers
@@ -106,6 +110,7 @@ Run `bun run ci:verify` before merge.
 - [ADR 0005: Wire DTO layer and omit-on-wire JSON](./0005-wire-dto-omit-on-wire.md) — outbound wire shape this mirrors
 - [ADR 0002: HTTP client response unwrap](./0002-http-client-response-unwrap.md) — web imports shared contract types
 - [ADR 0003: SQLite schema evolution](./0003-sqlite-schema-evolution.md) — storage layer unchanged; this is request-shape and routing only
+- [ADR 0010: Specimen registration](./0010-specimen-registration.md) — amends this ADR: the single write executor and placement module are `lib/specimen-registration/`
 
 ## Non-goals
 

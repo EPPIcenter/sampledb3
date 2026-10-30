@@ -9,19 +9,18 @@ import {
   createTestStudy,
   createTestStudySubject,
   createTestUnit,
+  createTestSpecimenTypeContainerType,
+  createTestContainerTypeUnit,
 } from '../../../__tests__/helpers/factories'
 import type { Database } from '../../../db/client'
 import {
-  containerTypeUnit,
   micronixPlate,
   micronixTube,
   paper,
   sheet,
   specimen,
-  specimenTypeContainerType,
   storageContainer,
 } from '../../../db/schema'
-import { utcNow } from '../../datetime'
 import { setContainerDefaults } from '../../settings'
 import {
   checkSpecimenRegistration,
@@ -55,10 +54,9 @@ describe('Specimen registration', () => {
     const storageType = await createTestStorageType(db, { name: 'Freezer' })
     locationId = (await createTestLocation(db, { name: 'Shelf', storageTypeId: String(storageType.id), canContainCollections: true })).id
     unitId = (await createTestUnit(db, { symbol: 'uL', name: 'microliter', category: 'volume' })).id
-    const now = utcNow()
     for (const containerType of CONTAINER_TYPES) {
-      await db.insert(specimenTypeContainerType).values({ specimenTypeId, containerType, created: now, lastUpdated: now })
-      await db.insert(containerTypeUnit).values({ containerType, unitId })
+      await createTestSpecimenTypeContainerType(db, { specimenTypeId, containerType })
+      await createTestContainerTypeUnit(db, { containerType, unitId })
     }
     await setContainerDefaults(db, {
       micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
