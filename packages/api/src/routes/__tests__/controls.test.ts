@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { eq } from 'drizzle-orm'
 import { authenticatedRequest } from '../../__tests__/helpers/test-client'
 import {
   setupAuthenticatedRouteTest,
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createControlsRoutes } from '../controls'
+import { controlDefinition } from '../../db/schema'
 import {
   createTestControlDefinition,
   createTestStrain,
@@ -388,14 +390,30 @@ describe('Controls API', () => {
   })
 
   describe(`PATCH ${BASE}/:id`, () => {
-    it('ignores controlType so a definition cannot leave the blood routes', async () => {
+    it('rejects a controlType change so a definition cannot leave the blood routes', async () => {
       const def = await createTestControlDefinition(ctx.db, { name: 'Blood A', controlType: 'blood' })
 
       const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { controlType: 'antibody' } })
 
+      expect(res.status).toBe(400)
+      const body = (await res.json()) as { error: string; errorCode: string }
+      expect(body.errorCode).toBe('VALIDATION_ERROR')
+      expect(body.error).toMatch(/controlType/)
+      const [stored] = await ctx.db.select().from(controlDefinition).where(eq(controlDefinition.id, def.id))
+      expect(stored?.controlType).toBe('blood')
+    })
+
+    it('accepts the unchanged controlType the edit form sends', async () => {
+      const def = await createTestControlDefinition(ctx.db, { name: 'Blood A', controlType: 'blood' })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, {
+        method: 'PATCH',
+        json: { controlType: 'blood', name: 'Blood B' },
+      })
+
       expect(res.status).toBe(200)
-      const data = (await res.json()) as { control: { controlType: string } }
-      expect(data.control.controlType).toBe('blood')
+      const data = (await res.json()) as { control: { name: string; controlType: string } }
+      expect(data.control).toMatchObject({ name: 'Blood B', controlType: 'blood' })
     })
 
     it('returns 409 when renaming to an existing definition name', async () => {

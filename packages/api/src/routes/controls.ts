@@ -14,7 +14,7 @@ import {
   generateUniqueControlDefinitionName,
   isControlDefinitionNameTaken,
 } from '../lib/control-name-generation'
-import { handleRouteError } from '../lib/error-handler'
+import { handleRouteError, ValidationError } from '../lib/error-handler'
 import type { BloodControlProperties } from '../types/properties'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
@@ -544,9 +544,9 @@ controls.patch('/:id', memberMiddleware, async (c) => {
     }
 
     const body = await c.req.json()
-    // controlType is fixed at creation: these routes only serve blood definitions.
     const schema = z.object({
       name: z.string().min(1).optional(),
+      controlType: z.string().optional(),
       targetDensity: z.number().optional(),
       targetDensityUnitId: z.number().int().optional(),
       strains: z.array(strainCompositionEntrySchema).optional(),
@@ -554,7 +554,12 @@ controls.patch('/:id', memberMiddleware, async (c) => {
     })
 
     const data = schema.parse(body)
-    const { strains, targetDensity, targetDensityUnitId, properties, ...baseData } = data
+    const { strains, targetDensity, targetDensityUnitId, properties, controlType, ...baseData } = data
+    // controlType is fixed at creation: these routes only serve blood definitions.
+    // The edit form sends the current type back, so only a change is an error.
+    if (controlType !== undefined && controlType !== existing.controlType) {
+      throw new ValidationError('controlType cannot be changed after a control definition is created')
+    }
 
     const existingProps = (existing.properties as Record<string, unknown>) || {}
     const newProps: Record<string, unknown> = { ...existingProps, ...(properties || {}) }
