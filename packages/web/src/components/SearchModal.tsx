@@ -69,7 +69,7 @@ export default function SearchModal({ isOpen, onClose, initialQuery }: SearchMod
             setLoading(true)
             const response = await searchApi.search(query, 'all')
             if (!ignore) {
-              setResults(response.results || [])
+              setResults(response.results)
             }
           } catch (error) {
             if (!ignore) {

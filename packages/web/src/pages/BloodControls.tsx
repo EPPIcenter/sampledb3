@@ -12,6 +12,7 @@ import { getCompositionKey } from '../lib/composition-key'
 import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/blood-controls.css'
 import { formatDate } from '../lib/date-utils'
+import { EMPTY_LIST } from '../lib/empty-list'
 
 export interface CompositionGroup {
   id: number
@@ -26,8 +27,8 @@ export default function BloodControls() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
   const overviewQuery = useBloodControlsOverview()
-  const definitions = overviewQuery.data?.definitions ?? []
-  const batches = overviewQuery.data?.batches ?? []
+  const definitions = overviewQuery.data?.definitions ?? EMPTY_LIST
+  const batches = overviewQuery.data?.batches ?? EMPTY_LIST
   const strains = overviewQuery.data?.strains ?? []
   const overviewStatus = fromQuery(overviewQuery)
   const [searchParams, setSearchParams] = useSearchParams()

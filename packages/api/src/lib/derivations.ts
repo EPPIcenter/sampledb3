@@ -16,6 +16,7 @@ import { getDefaultUnit } from './defaults'
 import { utcNow } from './datetime'
 import { createContainerForSpecimen, pickContainerQuantity } from './container-creation'
 import { withWriteTransaction } from '../db/write-transaction'
+import { insertedRow } from './inserted-row'
 
 export type DerivationType = string
 
@@ -111,7 +112,7 @@ async function findOrCreateDerivedSpecimen(
     return existing.id
   }
 
-  const [created] = await database
+  const inserted = await database
     .insert(specimen)
     .values({
       studySubjectId: parentSpecimen.studySubjectId,
@@ -122,8 +123,7 @@ async function findOrCreateDerivedSpecimen(
       lastUpdated: utcNow(),
     })
     .returning()
-
-  if (!created) throw new Error('Insert did not return specimen row')
+  const created = insertedRow(inserted, 'specimen')
   return created.id
 }
 

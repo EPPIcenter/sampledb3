@@ -18,6 +18,8 @@ import { useUser } from '../contexts/UserContext'
 import { useToast } from '../contexts/ToastContext'
 import '../styles/qpcr.css'
 import { bytesToBase64 } from '../lib/base64'
+import { defaultScannerConfiguration } from '../lib/scanner-configurations'
+import { EMPTY_LIST } from '../lib/empty-list'
 
 const PLATE_ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const
 const PLATE_COLS = 12
@@ -137,7 +139,7 @@ export default function QpcrExperimentDetail() {
   const experimentQuery = useQpcrExperiment(experimentId)
   const experimentStatus = fromQuery(experimentQuery)
   const scannerConfigsQuery = useQpcrScannerConfigurations()
-  const scannerConfigs = scannerConfigsQuery.data ?? []
+  const scannerConfigs = scannerConfigsQuery.data ?? EMPTY_LIST
   const [data, setData] = useState<QpcrExperimentDetailResponse | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)
@@ -167,11 +169,9 @@ export default function QpcrExperimentDetail() {
   }, [experimentQuery.data])
 
   useEffect(() => {
-    if (scannerConfigs.length === 0) return
-    const defaultConfig = scannerConfigs.find((c) => c.isDefault === true) ?? scannerConfigs[0]
-    if (defaultConfig && selectedConfigId === null) {
-      setSelectedConfigId(defaultConfig.id)
-    }
+    if (selectedConfigId !== null) return
+    const defaultConfig = defaultScannerConfiguration(scannerConfigs)
+    if (defaultConfig) setSelectedConfigId(defaultConfig.id)
   }, [scannerConfigs, selectedConfigId])
 
   // Sync form state from data.experiment when it changes (during render to avoid extra pass)
@@ -708,16 +708,12 @@ export default function QpcrExperimentDetail() {
                       <div className="qpcr-reveal flex flex-col gap-4">
                         <div className="flex gap-3 rounded-lg border border-app-border bg-app-surface/80 p-3">
                           <span className="text-app-text-muted mt-0.5 shrink-0" aria-hidden>
-                            {wellDetails.container.containerType != null
-                              ? getContainerTypeIcon(wellDetails.container.containerType)
-                              : null}
+                            {getContainerTypeIcon(wellDetails.container.containerType)}
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="text-xs font-medium text-app-text-muted">Container</p>
                             <p className="text-sm font-medium text-app-text truncate">
-                              {wellDetails.container.containerType != null
-                                ? getContainerTypeName(wellDetails.container.containerType)
-                                : '—'}
+                              {getContainerTypeName(wellDetails.container.containerType)}
                               {wellDetails.container.collection?.name != null && (
                                 <> · {wellDetails.container.collection.name}</>
                               )}

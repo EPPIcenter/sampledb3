@@ -47,6 +47,11 @@ if (typeof window !== 'undefined' && typeof window.IntersectionObserver === 'und
   window.IntersectionObserver = MockIO
 }
 
+// jsdom does not implement scrollIntoView; production code calls it unguarded.
+if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = () => {}
+}
+
 // Cleanup after each test
 afterEach(() => {
   cleanup()

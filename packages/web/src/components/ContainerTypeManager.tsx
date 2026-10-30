@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useEffectEvent } from 'react'
 import { specimenTypesApi } from '../lib/api/reference-data';
 import { getContainerTypeName } from '../lib/icons'
 import { useHotkey } from '../hooks/useHotkey'
@@ -53,7 +53,7 @@ export default function ContainerTypeManager({
     }
   }, [isOpen, specimenTypeId])
 
-  const loadContainerTypes = async () => {
+  const loadContainerTypes = useEffectEvent(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -67,7 +67,7 @@ export default function ContainerTypeManager({
     } finally {
       setLoading(false)
     }
-  }
+  })
 
   const handleToggle = (containerType: string) => {
     setSelectedContainerTypes((prev) => {

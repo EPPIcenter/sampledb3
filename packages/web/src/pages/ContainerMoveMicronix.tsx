@@ -11,7 +11,9 @@ import ScanMovePageShell from '../components/scan-move/ScanMovePageShell'
 import { MICRONIX_SCAN_MOVE_COPY } from '../components/scan-move/copy'
 import MicronixMoveInstructions from '../components/scan-move/MicronixMoveInstructions'
 import MicronixScannerConfigPanel from '../components/scan-move/MicronixScannerConfigPanel'
+import { defaultScannerConfiguration } from '../lib/scanner-configurations'
 import '../styles/storage.css'
+import { EMPTY_LIST } from '../lib/empty-list'
 
 export default function ContainerMoveMicronix() {
   const { canWrite } = useUser()
@@ -20,7 +22,7 @@ export default function ContainerMoveMicronix() {
   const bootstrapStatus = fromQuery(bootstrapQuery)
   const availablePlates = (bootstrapQuery.data?.plates ?? []) as MicronixPlate[]
   const locations = bootstrapQuery.data?.locations ?? []
-  const scannerConfigurations = bootstrapQuery.data?.scannerConfigurations ?? []
+  const scannerConfigurations = bootstrapQuery.data?.scannerConfigurations ?? EMPTY_LIST
 
   const refreshCollections = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: moveWorkflowKeys.micronixBootstrap() })
@@ -39,9 +41,8 @@ export default function ContainerMoveMicronix() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (scannerConfigurations.length === 0 || selectedConfigId !== null) return
-    const defaultConfig =
-      scannerConfigurations.find((c) => c.isDefault === true) ?? scannerConfigurations[0]
+    if (selectedConfigId !== null) return
+    const defaultConfig = defaultScannerConfiguration(scannerConfigurations)
     if (defaultConfig) setSelectedConfigId(defaultConfig.id)
   }, [scannerConfigurations, selectedConfigId])
 

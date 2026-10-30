@@ -1,7 +1,7 @@
 import { inferDestinationPlateForScan } from '../plate-destination-inference'
 import { parseScannerPlateCsv, validateScannerPlateCsv } from '../scanner-plate-csv'
 import { parseBuiltinMoveCsv } from './ingest'
-import type { ScanMoveIdentifier, ScanMoveInference, ScanMoveVariant } from './types'
+import type { ScanMoveCsvRow, ScanMoveIdentifier, ScanMoveInference, ScanMoveVariant } from './types'
 
 /**
  * Built-in cryovial move CSV spec (ADR 0008): fixed columns, not a
@@ -11,6 +11,12 @@ export const CRYOVIAL_MOVE_CSV_SPEC = {
   requiredColumns: ['source_collection_name', 'source_position', 'target_position'],
   skipRows: 0,
 } as const
+
+/** Trimmed cell value; a column missing from the file reads as ''. */
+function csvCell(row: ScanMoveCsvRow, column: string): string {
+  const value = row[column] as string | undefined
+  return (value ?? '').trim()
+}
 
 function positionKey(sourceCollectionName: string, sourcePosition: string): string {
   return `${sourceCollectionName}:${sourcePosition}`
@@ -54,7 +60,7 @@ export const micronixScanMoveVariant: ScanMoveVariant = {
   },
 
   identifierFromRow(row): ScanMoveIdentifier | null {
-    const barcode = (row.container_barcode ?? '').trim()
+    const barcode = csvCell(row, 'container_barcode')
     if (barcode === '') return null // empty well; no move for this row
     return { type: 'barcode', barcode }
   },
@@ -116,8 +122,8 @@ export const cryovialScanMoveVariant: ScanMoveVariant = {
   identifierFromRow(row): ScanMoveIdentifier {
     return {
       type: 'position',
-      sourceCollectionName: (row.source_collection_name ?? '').trim(),
-      sourcePosition: (row.source_position ?? '').trim(),
+      sourceCollectionName: csvCell(row, 'source_collection_name'),
+      sourcePosition: csvCell(row, 'source_position'),
     }
   },
 

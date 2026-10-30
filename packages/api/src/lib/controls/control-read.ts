@@ -87,7 +87,7 @@ export async function listBloodControlBatches(database: Database) {
 
   const batches = batchesResults.map((row: (typeof batchesResults)[number]) => {
     const props = row.properties as Record<string, unknown> | null
-    const strains = (props?.strains as unknown[]) || []
+    const strains = (props?.strains as unknown[] | undefined) ?? []
     return {
       ...row,
       strains: strains.map((s) => (typeof s === 'number' ? { id: s } : s)),

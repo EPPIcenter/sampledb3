@@ -19,6 +19,7 @@ import { ValidationError } from './error-handler'
 import type { ContainerWriteInput } from '@sampledb/contract'
 import { ensureContainerPlacement, type EnsuredPlacement } from './container-write-placement'
 import { checkGridPositionOccupancy, occupiedGridPositionMessage } from './container-occupancy'
+import { insertedRow } from './inserted-row'
 
 type DatabaseOrTransaction =
   | Database
@@ -138,10 +139,7 @@ async function insertStorageContainer(
     updatedBy: userId,
   }).returning()
 
-  const container = inserted[0]
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
-  if (inserted.length === 0 || container === undefined) throw new Error('Insert did not return container row')
-  return { id: container.id }
+  return { id: insertedRow(inserted, 'container').id }
 }
 
 async function createMicronixTube(

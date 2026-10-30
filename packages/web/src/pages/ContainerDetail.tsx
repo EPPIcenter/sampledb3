@@ -95,7 +95,7 @@ export default function ContainerDetail() {
     )
   }
 
-  if (!data?.container?.id) {
+  if (!data?.container.id) {
     return (
       <div className="storage-page">
         <div className="container mx-auto px-4 py-8 relative z-10">
@@ -137,9 +137,7 @@ export default function ContainerDetail() {
     breadcrumbItems.push({ label: source.name, to: `/blood-controls/batches/${source.id}` })
   } else if (source?.type === 'subject') {
     breadcrumbItems.push({ label: 'Studies', to: '/studies' })
-    if (source.study) {
-      breadcrumbItems.push({ label: source.study.title, to: `/studies/${source.study.id}` })
-    }
+    breadcrumbItems.push({ label: source.study.title, to: `/studies/${source.study.id}` })
     breadcrumbItems.push({ label: source.name, to: `/subjects/${source.id}` })
   }
 
@@ -401,7 +399,7 @@ export default function ContainerDetail() {
                         )}
                       </dd>
                     </div>
-                    {source.type === 'subject' && source.study && (
+                    {source.type === 'subject' && (
                       <div>
                         <dt className="storage-detail-dt text-xs">Study</dt>
                         <dd className="storage-detail-dd mt-0.5">
@@ -470,7 +468,7 @@ export default function ContainerDetail() {
       {/* Derivation Sections */}
       <div className="mt-6 space-y-4">
         {/* Source Derivation Information (if this container is a child via derivation) */}
-        {sourceDerivation && sourceDerivation.type === 'derivation' && sourceDerivation.derivation && (
+        {sourceDerivation?.derivation && (
           <div className="storage-card storage-reveal storage-reveal-3">
             <div className="storage-card-divider px-6 py-4 border-b">
               <div className="flex items-center justify-between">
@@ -582,11 +580,11 @@ export default function ContainerDetail() {
                               )}
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                              {container?.remainingQuantity !== undefined && container?.unit && (
+                              {container?.remainingQuantity !== undefined && container.unit && (
                                 <div className="flex items-start gap-2">
                                   <span className="storage-detail-dt whitespace-nowrap">Quantity:</span>
                                   <span className="storage-detail-dd font-medium">
-                                    {container.remainingQuantity?.toLocaleString() || '0'} {container.unit?.symbol || 'units'}
+                                    {container.remainingQuantity.toLocaleString() || '0'} {container.unit.symbol || 'units'}
                                   </span>
                                 </div>
                               )}
@@ -696,7 +694,7 @@ export default function ContainerDetail() {
       )}
 
       {/* Edit Modal */}
-      {showEditModal && container && (
+      {showEditModal && (
         <ContainerEditModal
           isOpen={showEditModal}
           onClose={() => setShowEditModal(false)}
@@ -718,7 +716,7 @@ export default function ContainerDetail() {
 
       {/* Derivation Chain View - Always show when there's derivation data */}
       {id &&
-        ((sourceDerivation && sourceDerivation.type === 'derivation' && sourceDerivation.derivation) ||
+        (sourceDerivation?.derivation ||
           derivations.length > 0) && (
           <div className="mt-6">
             <DerivationChainView containerId={parseInt(id)} />

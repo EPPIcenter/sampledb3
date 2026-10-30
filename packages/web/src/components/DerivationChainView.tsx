@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useEffectEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { EnrichedContainerWire } from '@sampledb/contract/wire'
 import { derivationsApi } from '../lib/api/derivations'
@@ -29,7 +29,7 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
     loadChain()
   }, [containerId])
 
-  const loadChain = async () => {
+  const loadChain = useEffectEvent(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -41,7 +41,7 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
     } finally {
       setLoading(false)
     }
-  }
+  })
 
   if (loading) {
     return (

@@ -12,6 +12,7 @@ import Pagination from '../components/Pagination'
 import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import ContentCard from '../components/ContentCard'
 import '../styles/storage.css'
+import { EMPTY_LIST } from '../lib/empty-list'
 
 interface LocationContents {
   micronixPlates?: any[]
@@ -47,7 +48,7 @@ export default function LocationDetail() {
   const location = (detailQuery.data?.location as Location | undefined) ?? null
   const contents = (detailQuery.data?.contents as LocationContents | undefined) ?? null
   const hierarchyStats = (detailQuery.data?.hierarchyStats as LocationHierarchyStats | undefined) ?? null
-  const allLocations = (detailQuery.data?.allLocations as Location[] | undefined) ?? []
+  const allLocations = (detailQuery.data?.allLocations as Location[] | undefined) ?? EMPTY_LIST
   const pagination = detailQuery.data?.pagination ?? null
 
   const pathLabel = useMemo(() => {

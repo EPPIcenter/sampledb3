@@ -33,6 +33,7 @@ import {
   type BulkCombinedContainerInput,
 } from './container-write-placement'
 import { withWriteTransaction } from '../db/write-transaction'
+import { insertedRow } from './inserted-row'
 
 export type { BulkCombinedContainerInput }
 
@@ -245,12 +246,8 @@ export async function createSubjectWithSpecimensInTx(
         updatedBy: userId,
       })
       .returning()
-      .get()
-    const insertedSubject = Array.isArray(newSubjectResult) ? newSubjectResult[0] : newSubjectResult
-    if (!insertedSubject) {
-      throw new Error('Insert did not return study subject row')
-    }
-    subject = insertedSubject as typeof studySubject.$inferSelect
+      .all()
+    subject = insertedRow(newSubjectResult, 'study subject')
     subjectId = subject.id
   }
 
@@ -277,8 +274,8 @@ export async function createSubjectWithSpecimensInTx(
           updatedBy: userId,
         })
         .returning()
-        .get()
-      specimenRecord = (Array.isArray(newSpecimenResult) ? newSpecimenResult[0] : newSpecimenResult) as typeof specimen.$inferSelect
+        .all()
+      specimenRecord = insertedRow(newSpecimenResult, 'specimen')
       specimenCreated = true
     }
     const specimenId = specimenRecord.id

@@ -354,6 +354,7 @@ export default function CollectionMoveTreePicker({
     locationChildrenMap,
     effectiveExpandedIds,
     collectionsByLocation,
+    locationsWithCollections,
     selectedKeys,
     leafLocations,
     search,

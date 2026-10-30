@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useEffectEvent } from 'react'
 import { locationsApi } from '../lib/api/locations';
 import type { Location } from '../lib/api/types';
 import { buildLocationTree, filterLocationTree, getLocationLabel, getRootLocations, getLocationChildren, getLocationAncestors, locationParentId } from '../lib/location-tree'
@@ -46,7 +46,7 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
     })
   }
 
-  const loadLocations = async () => {
+  const loadLocations = useEffectEvent(async () => {
     try {
       setLoading(true)
       // Call without pagination params to get all locations
@@ -97,7 +97,7 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
     } finally {
       setLoading(false)
     }
-  }
+  })
 
   const tree = useMemo(() => buildLocationTree(locations), [locations])
   const filteredTree = useMemo(

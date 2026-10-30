@@ -66,7 +66,7 @@ function reportsOwn401(method: string | undefined, url: string | undefined): boo
 
 function attachRequestIdInterceptor(instance: AxiosInstance): void {
   instance.interceptors.request.use((config) => {
-    const headers = config.headers ?? {}
+    const headers = config.headers
     const existing = readRequestIdHeader(headers)
     if (!existing) {
       ;(headers as Record<string, string>)[REQUEST_ID_HEADER] = generateClientRequestId()

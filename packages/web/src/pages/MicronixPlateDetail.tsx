@@ -93,9 +93,7 @@ export default function MicronixPlateDetail() {
     if (!layout || !data?.wells) return []
     const wells = data.wells as Record<string, (CollectionTableEntry & { type?: string }) | undefined>
     const plate = data.plate
-    const context = plate
-      ? { collectionName: plate.name ?? undefined, locationPath: plate.locationPath ?? undefined }
-      : undefined
+    const context = { collectionName: plate.name, locationPath: plate.locationPath ?? undefined }
     const rows: ReturnType<typeof buildCollectionTableRow>[] = []
     layout.rows.forEach((row) => {
       layout.cols.forEach((col) => {

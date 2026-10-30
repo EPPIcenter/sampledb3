@@ -1,12 +1,15 @@
-import type { NavigateFunction, Location } from 'react-router-dom'
+import type { NavigateFunction } from 'react-router-dom'
 import type { Theme } from '../../contexts/ThemeContext'
 
 /**
  * Dependencies injected from the app shell for building command lists.
+ * Keep every field a primitive or a stable function: useCommands rebuilds when any field changes.
  */
 export interface CommandDependencies {
   navigate: NavigateFunction
-  location: Location
+  /** Current route; the only parts of the location commands read. */
+  pathname: string
+  search: string
   canWrite: boolean
   isAdmin: boolean
   canManageReferenceData: boolean

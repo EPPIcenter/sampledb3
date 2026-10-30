@@ -49,18 +49,7 @@ export default function StatChart({
   cardClassName = 'bg-app-card rounded-lg shadow p-6',
 }: StatChartProps) {
   const { theme } = useTheme()
-  const tooltipStyles = useMemo(() => getAppTooltipStyles(), [theme])
-
-  if (data.length === 0) {
-    return (
-      <div className={cardClassName}>
-        {title && <h3 className="stat-chart-title text-lg font-semibold mb-4 text-app-text">{title}</h3>}
-        <div className="stat-chart-empty flex items-center justify-center h-64 text-app-text-muted">
-          No data available
-        </div>
-      </div>
-    )
-  }
+  const tooltipStyles = useMemo(() => getAppTooltipStyles(theme), [theme])
 
   // Calculate total for percentage calculations
   const total = data.reduce((sum, entry) => sum + (entry[dataKey] as number), 0)
@@ -136,6 +125,17 @@ export default function StatChart({
 
     return [min - padding, max + padding]
   }, [data, dateKey])
+
+  if (data.length === 0) {
+    return (
+      <div className={cardClassName}>
+        {title && <h3 className="stat-chart-title text-lg font-semibold mb-4 text-app-text">{title}</h3>}
+        <div className="stat-chart-empty flex items-center justify-center h-64 text-app-text-muted">
+          No data available
+        </div>
+      </div>
+    )
+  }
 
   // Format date ticks for display
   const formatDateTick = (tickItem: number) => {

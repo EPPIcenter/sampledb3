@@ -4,6 +4,7 @@ import { eq, and } from 'drizzle-orm'
 import { validateControlBatchName, generateUniqueBatchName } from '../validation'
 import { NotFoundError, ValidationError } from '../error-handler'
 import type { CreateBloodControlBatchInput } from './batch-schemas'
+import { insertedRow } from '../inserted-row'
 
 function isUniqueConstraintError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
@@ -42,7 +43,7 @@ export async function createBloodControlBatch(
   }
 
   try {
-    const [newBatch] = await database
+    const inserted = await database
       .insert(controlBatch)
       .values({
         controlDefinitionId: definitionId,
@@ -53,10 +54,7 @@ export async function createBloodControlBatch(
         updatedBy: userId,
       })
       .returning()
-
-    if (!newBatch) {
-      throw new Error('Insert did not return control batch row')
-    }
+    const newBatch = insertedRow(inserted, 'control batch')
     return newBatch
   } catch (error) {
     if (isUniqueConstraintError(error)) {

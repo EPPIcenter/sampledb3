@@ -38,7 +38,7 @@ Reference-data list helpers still return `{ data: T[], meta? }` — keep that en
   - `render.tsx`: Custom render function with providers (QueryClient, BrowserRouter, ToastProvider)
   - `mock-api.ts`: `createMockedDomainModule()` — `importActual` per `lib/api/<domain>` + per-test overrides
   - `mock-api-templates.ts`: domain presets (`statisticsPageMock`, `studiesPageMock`, etc.) for common page/hook tests
-  - `setup.ts`: Global test setup (IntersectionObserver, in-memory localStorage; default mocks for `auth` and `settings`)
+  - `setup.ts`: Global test setup (IntersectionObserver and `scrollIntoView` stubs, in-memory localStorage; default mocks for `auth` and `settings`)
 - `__tests__/fixtures/` - Test data fixtures
 - `lib/__tests__/` - Lib unit tests (e.g. commands, constants, plate-filename-match, container-types, localUserHistory, hotkeys, error-logger)
 - `components/__tests__/` - Component tests (e.g. BulkImportFlow, ContainerDerivationModal)

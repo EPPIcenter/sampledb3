@@ -51,6 +51,7 @@ import {
   findMatchingDefinitionInList,
   buildBloodControlPropertiesPayload,
 } from '../lib/controls/strain-composition'
+import { insertedRow } from '../lib/inserted-row'
 
 /**
  * Create controls routes with database injection
@@ -511,10 +512,7 @@ controls.post('/', memberMiddleware, async (c) => {
       })
       .returning()
 
-    const newControl = result[0]
-    if (!newControl) {
-      throw new Error('Insert did not return control definition row')
-    }
+    const newControl = insertedRow(result, 'control definition')
     return c.json({ control: newControl }, 201)
   } catch (error) {
     return handleRouteError(error, c)
@@ -559,7 +557,7 @@ controls.patch('/:id', memberMiddleware, async (c) => {
       throw new ValidationError('controlType cannot be changed after a control definition is created')
     }
 
-    const existingProps = (existing.properties as Record<string, unknown>) || {}
+    const existingProps = (existing.properties as Record<string, unknown> | null) ?? {}
     const newProps: Record<string, unknown> = { ...existingProps, ...(properties || {}) }
 
     if (strains !== undefined) {

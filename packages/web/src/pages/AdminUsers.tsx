@@ -6,6 +6,7 @@ import { adminKeys, useAdminUsers } from '../hooks/useAdmin'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import { AsyncPresentation, Modal, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/admin.css'
+import { EMPTY_LIST } from '../lib/empty-list'
 
 interface CreateUserData {
   email: string
@@ -48,7 +49,7 @@ export default function AdminUsers() {
   const [showPassword, setShowPassword] = useState(false)
 
   const usersQuery = useAdminUsers(showDeleted)
-  const users = usersQuery.data ?? []
+  const users = usersQuery.data ?? EMPTY_LIST
   const listStatus = fromQuery(usersQuery, {
     isEmpty: usersQuery.isSuccess && users.length === 0,
   })

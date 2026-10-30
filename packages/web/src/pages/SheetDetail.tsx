@@ -14,6 +14,7 @@ import {
 import { useTableViewConfigurations } from '../hooks/useTableViewConfigurations'
 import { Link } from 'react-router-dom'
 import '../styles/storage.css'
+import { EMPTY_LIST } from '../lib/empty-list'
 
 export default function SheetDetail() {
   const { id } = useParams<{ id: string }>()
@@ -50,11 +51,11 @@ export default function SheetDetail() {
 
   // Derive once so hooks below can run unconditionally (Rules of Hooks)
   const sheet = data?.sheet ?? null
-  const papers = (data?.papers ?? []) as CollectionTableEntry[]
+  const papers = (data?.papers ?? EMPTY_LIST) as CollectionTableEntry[]
 
   const tableRows = useMemo(() => {
     const context = sheet
-      ? { collectionName: sheet.name ?? undefined, locationPath: sheet.locationPath ?? undefined }
+      ? { collectionName: sheet.name, locationPath: sheet.locationPath ?? undefined }
       : undefined
     return papers.map((p: CollectionTableEntry) =>
       buildCollectionTableRow({
