@@ -1,52 +1,23 @@
+# Agent guide
+
 ## Agent skills
 
-### Issue tracker
+- **Issue tracker**: GitHub Issues on `eppicenter/sampledb3`. "Publish to the issue tracker" is `gh issue create`; "fetch the relevant ticket" is `gh issue view <number> --comments`.
+- **Triage labels**: each of the five triage roles is a GitHub label with the role's name: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`.
+- **Domain docs**: `CONTEXT.md` is the glossary, `docs/adr/` holds the decisions, and `packages/docs/` is the user guide. Before you name or change a domain concept, read its `CONTEXT.md` entry and the ADRs that touch the area.
 
-GitHub Issues on eppicenter/sampledb3 (via `gh` CLI). See `docs/agents/issue-tracker.md`.
+## Running tests and checks
 
-### Triage labels
+- Web tests: `cd packages/web && bun run test -- <files>`. Bun's own runner (`bun test`) hangs on React component tests; Vitest exits on its own, so piping it to `tail` or `grep` is safe.
+- API tests: `cd packages/api && NODE_ENV=test bun test src/...`. The package's `test` script sets `NODE_ENV=test`, and `src/db/legacy-baseline.ts` branches on it.
+- Contract tests: `cd packages/contract && bun run test`. `bun run test` at the repo root runs the contract, API, and web suites.
+- The `Checks` workflow lints every PR, so a lint error comes from your change.
+- Run `bun run setup:hooks` once per clone to install the pre-commit hook (it typechecks and lints staged files, and refuses a source file that also has unstaged edits), and `bun run ci:verify` before pushing. The end of Build in `README.md` says what each checks.
 
-Canonical triage roles mapped to GitHub labels; see `docs/agents/triage-labels.md`.
+## Where to look
 
-### Domain docs
-
-`CONTEXT.md` (glossary) and `docs/adr/` (decisions) at repo root. See `docs/agents/domain.md`.
-
-### Package docs
-
-- Writing an API test (test database, factories, authenticated routes): `packages/api/src/__tests__/README.md`
-- Writing a web test (render helper, API mocks, React Query hooks): `packages/web/src/__tests__/README.md`
-- Changing the schema, a migration, or a transaction: `packages/api/src/db/README.md`
-- Finding the code behind a UI label: `packages/web/src/components/Sidebar.tsx` (label → path) → `packages/web/src/App.tsx` (path → page) → the page's hooks and `lib/` → `packages/api/src/routes` → `packages/api/src/lib`
-
-### Tests
-
-| Package | Command | Runner |
-|---------|---------|--------|
-| `@sampledb/web` | `cd packages/web && bun run test -- <files>` | **Vitest** (jsdom, `vi.mock`) |
-| `@sampledb/api` | `cd packages/api && bun test src/...` | **Bun** (needs `bun:sqlite`) |
-| repo root | `bun run test` | both, via package scripts |
-
-**Run web tests with `bun run test` (Vitest).** It runs `vitest run`, which exits on its own, so piping to `tail` or `grep` is safe. Bun's own runner (`bun test`) hangs on React component tests.
-
-Example (completes in ~1s):
-
-```bash
-cd packages/web && bun run test -- src/components/__tests__/BulkImportFlow.test.tsx
-```
-
-### Pre-commit hooks and CI
-
-The `Checks` workflow runs `bun run ci:verify` on every PR: typecheck, lint, build, unit tests, and the docs stale-claims check. Lint is clean, so any lint error is yours.
-
-Install repo hooks once per clone:
-
-```bash
-bun run setup:hooks
-```
-
-The pre-commit hook runs `typecheck` on `@sampledb/contract`, `@sampledb/api`, and/or `@sampledb/web` when staged files touch those packages (or Docker/build config), and lints the staged API/web source files. It refuses a source file with unstaged edits, since eslint would lint the working-tree copy. To mirror CI fully before pushing:
-
-```bash
-bun run ci:verify
-```
+- Rules for naming domain concepts, contradicting an ADR, failing tests, database access, calling the API from the web, and writing API and web tests: `CODING_STANDARDS.md`. The `code-review` skill checks changes against it.
+- Writing an API test: `packages/api/src/__tests__/README.md`.
+- Writing a web test: `packages/web/src/__tests__/README.md`.
+- Changing the schema, adding a migration, or writing in a transaction: `packages/api/src/db/README.md`.
+- Tracing a UI label to code: `packages/web/src/components/Sidebar.tsx` maps the label to a path and `packages/web/src/App.tsx` maps the path to a page. From there follow the page's hooks and `lib/api/<domain>` into `packages/api/src/routes` and `packages/api/src/lib`.
