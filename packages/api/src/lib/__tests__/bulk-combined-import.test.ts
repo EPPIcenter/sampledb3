@@ -352,41 +352,74 @@ describe('bulk-combined-import', () => {
       { name: 'a missing study on one subject', valid: false, subjects: () => [subject('A'), subject('B', undefined, 'NOPE')] },
     ]
 
-    // per_subject commits each subject that passes, so the property is weaker: validate passes
-    // exactly when every subject imports, and each subject validate flags is one the import rejects.
+    // per_subject validate checks each subject the way the import runs it, so it flags exactly
+    // the subjects the import rejects.
     for (const fixture of fixtures) {
       it(`${fixture.name} (per_subject)`, async () => {
-        const payload = { studyShortCode: 'ST1', subjects: fixture.subjects() }
+        const payload = { studyShortCode: 'ST1', atomicMode: 'per_subject' as const, subjects: fixture.subjects() }
 
         const validation = await validateBulkCombinedPayload(testDb, payload)
-        const imported = await runBulkCombinedImport(testDb, { ...payload, atomicMode: 'per_subject' }, undefined)
+        const imported = await runBulkCombinedImport(testDb, payload, undefined)
 
-        const flagged = new Set(validation.errors.map((e) => e.subjectIndex))
-        const rejected = new Set((imported.errors ?? []).map((e) => e.index))
+        const flagged = [...new Set(validation.errors.map((e) => e.subjectIndex))]
+        const rejected = (imported.errors ?? []).map((e) => e.index)
         expect(validation.valid).toBe(fixture.valid)
-        expect(rejected.size === 0).toBe(validation.valid)
-        expect([...flagged].every((index) => rejected.has(index))).toBe(true)
+        expect(flagged).toEqual(rejected)
       })
     }
 
-    it('per_subject also rejects a subject that needed a collection from a subject that failed', async () => {
-      // B finds the new plate only because A, which fails, would create it. Validate checks the
-      // file as one import, so it flags A alone; per_subject drops A's plate and B fails too.
-      const subjects = () => [
-        subject('A', tube('TAKEN', { name: 'NEW', locationId, position: 'A01' })),
-        subject('B', tube('T2', { name: 'NEW', position: 'A02' })),
-      ]
+    it('per_subject flags a subject that needed a collection from a subject that failed', async () => {
+      // B finds the new plate only because A, which fails, would create it. A's rollback drops
+      // the plate, so B fails too, in validate as in the import.
+      const payload = {
+        studyShortCode: 'ST1',
+        atomicMode: 'per_subject' as const,
+        subjects: [
+          subject('A', tube('TAKEN', { name: 'NEW', locationId, position: 'A01' })),
+          subject('B', tube('T2', { name: 'NEW', position: 'A02' })),
+        ],
+      }
 
-      const validation = await validateBulkCombinedPayload(testDb, { studyShortCode: 'ST1', subjects: subjects() })
-      const imported = await runBulkCombinedImport(testDb, { studyShortCode: 'ST1', subjects: subjects(), atomicMode: 'per_subject' }, undefined)
+      const validation = await validateBulkCombinedPayload(testDb, payload)
+      const imported = await runBulkCombinedImport(testDb, payload, undefined)
 
-      expect(validation.errors.map((e) => e.subjectIndex)).toEqual([0])
+      expect([...new Set(validation.errors.map((e) => e.subjectIndex))]).toEqual([0, 1])
       expect((imported.errors ?? []).map((e) => e.index)).toEqual([0, 1])
+    })
+
+    it('per_subject flags a second subject that gives a new plate another location', async () => {
+      const storageType = await createTestStorageType(testDb, { name: 'Rack' })
+      const otherLocationId = (await createTestLocation(testDb, { name: 'Other shelf', storageTypeId: String(storageType.id), canContainCollections: true })).id
+      const payload = {
+        studyShortCode: 'ST1',
+        atomicMode: 'per_subject' as const,
+        subjects: [
+          subject('A', tube('T1', { name: 'NEW', locationId, position: 'A01' })),
+          subject('B', tube('T2', { name: 'NEW', locationId: otherLocationId, position: 'A02' })),
+        ],
+      }
+
+      const validation = await validateBulkCombinedPayload(testDb, payload)
+      const imported = await runBulkCombinedImport(testDb, payload, undefined)
+
+      expect(validation.errors.map((e) => e.subjectIndex)).toEqual([1])
+      expect((imported.errors ?? []).map((e) => e.index)).toEqual([1])
+    })
+
+    it('per_subject reports a failed subject with its own index and row', async () => {
+      const validation = await validateBulkCombinedPayload(testDb, {
+        studyShortCode: 'ST1',
+        atomicMode: 'per_subject',
+        subjects: [subject('A'), { subjectName: 'B', specimens: [{ specimenTypeName: 'NOPE', rowIndex: 7 }] }],
+      })
+
+      expect(validation.errors).toEqual([{ subjectIndex: 1, specimenIndex: 0, rowIndex: 7, message: "Specimen type 'NOPE' not found" }])
     })
 
     it('says a sublabel repeats in the file', async () => {
       const validation = await validateBulkCombinedPayload(testDb, {
         studyShortCode: 'ST1',
+        atomicMode: 'full_file',
         subjects: [subject('A', paperOn('Sheet-1', 's1')), subject('B', paperOn('Sheet-1', 's1'))],
       })
 
@@ -395,10 +428,10 @@ describe('bulk-combined-import', () => {
 
     for (const fixture of fixtures) {
       it(fixture.name, async () => {
-        const payload = { studyShortCode: 'ST1', subjects: fixture.subjects() }
+        const payload = { studyShortCode: 'ST1', atomicMode: 'full_file' as const, subjects: fixture.subjects() }
 
         const validation = await validateBulkCombinedPayload(testDb, payload)
-        const imported = await runBulkCombinedImport(testDb, { ...payload, atomicMode: 'full_file' }, undefined).then(
+        const imported = await runBulkCombinedImport(testDb, payload, undefined).then(
           () => true,
           () => false
         )
