@@ -82,6 +82,7 @@ Available factories:
 - `createTestControlDefinition`
 - `createTestSpecimen`
 - `createTestUnit`
+- `createTestSpecimenTypeContainerType`, `createTestContainerTypeUnit` (allow a container type for a specimen type, and a unit for a container type)
 - `createTestStudy`
 - `createTestStudySubject`
 - `createTestControlBatch`

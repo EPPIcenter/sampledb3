@@ -203,7 +203,6 @@ export async function createBatchWithSpecimens(
   specimens: CreatedSpecimen[]
   createdCollections: CreatedCollection[]
 }> {
-  const collectionMap = new Map<string, number>()
 
   const definition = await database
     .select()
@@ -260,7 +259,6 @@ export async function createBatchWithSpecimens(
       const containerIds: number[] = []
       for (const prepared of preparedContainers) {
         const containerResult = await createContainerForSpecimen(specimenId, prepared.writeInput, tx, {
-          collectionMap,
           quantity: prepared.quantity,
         })
         if (!containerResult.success || containerResult.containerId == null) {
@@ -314,7 +312,6 @@ export async function addSpecimensToBatch(
     throw new Error(`Batch not found: ${batchId}`)
   }
 
-  const collectionMap = new Map<string, number>()
   const preparedSpecimens = await prepareSpecimensForBatch(database, data.specimens)
 
   return withWriteTransaction(database, async (tx) => {
@@ -348,7 +345,6 @@ export async function addSpecimensToBatch(
       const containerIds: number[] = []
       for (const prepared of preparedContainers) {
         const containerResult = await createContainerForSpecimen(specimenId, prepared.writeInput, tx, {
-          collectionMap,
           quantity: prepared.quantity,
         })
         if (!containerResult.success || containerResult.containerId == null) {

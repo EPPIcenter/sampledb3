@@ -30,6 +30,7 @@ import {
   paper,
 } from '../../db/schema'
 import { eq } from 'drizzle-orm'
+import { failInsertsWithUniqueViolation } from '../../__tests__/helpers/constraint-race'
 
 describe('Specimens API', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -251,6 +252,56 @@ describe('Specimens API', () => {
       const afterSpecimens = await ctx.db.select({ id: specimen.id }).from(specimen)
       expect(afterSpecimens.length).toBe(beforeSpecimens.length)
     })
+
+    it('POST /api/specimens returns 409 when the container write hits a constraint', async () => {
+      failInsertsWithUniqueViolation(ctx.sqlite, 'micronix_tube')
+
+      const res = await ctx.request('/api/specimens', {
+        method: 'POST',
+        json: {
+          sourceType: 'subject',
+          studyShortCode: 'BLK01',
+          subjectName: 'BULK-SUBJ',
+          specimenTypeName: 'Whole Blood',
+          collectionDate: '2024-06-03',
+          container: {
+            containerType: 'micronix_tube',
+            barcode: 'RACE-001',
+            collection: { type: 'micronix_plate', name: 'BULK-PLATE', position: 'C01' },
+          },
+        },
+      })
+
+      expect(res.status).toBe(409)
+      expect(await ctx.db.select().from(specimen).where(eq(specimen.collectionDate, '2024-06-03'))).toEqual([])
+    })
+
+    it('POST /api/specimens/bulk returns 409 when the container write hits a constraint', async () => {
+      failInsertsWithUniqueViolation(ctx.sqlite, 'micronix_tube')
+
+      const res = await ctx.request('/api/specimens/bulk', {
+        method: 'POST',
+        json: {
+          specimens: [
+            {
+              sourceType: 'subject',
+              studyShortCode: 'BLK01',
+              subjectName: 'BULK-SUBJ',
+              specimenTypeName: 'Whole Blood',
+              collectionDate: '2024-06-04',
+              container: {
+                containerType: 'micronix_tube',
+                barcode: 'RACE-002',
+                collection: { type: 'micronix_plate', name: 'BULK-PLATE', position: 'C02' },
+              },
+            },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(409)
+      expect(await ctx.db.select().from(specimen).where(eq(specimen.collectionDate, '2024-06-04'))).toEqual([])
+    })
   })
 
   describe('POST /api/specimens/bulk/validate', () => {
@@ -420,6 +471,38 @@ describe('Specimens API', () => {
       expect(tubes).toHaveLength(1)
       expect(tubes[0].barcode).toBe('ADD-TUBE-001')
       expect(tubes[0].position).toBe('A01')
+    })
+
+    it('returns 409 when the container write hits a constraint', async () => {
+      failInsertsWithUniqueViolation(ctx.sqlite, 'micronix_tube')
+
+      const res = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {
+        method: 'POST',
+        json: {
+          containerType: 'micronix_tube',
+          barcode: 'RACE-TUBE-001',
+          collection: { type: 'micronix_plate', name: 'ADD-PLATE', position: 'A01' },
+        },
+      })
+
+      expect(res.status).toBe(409)
+      expect(await ctx.db.select().from(storageContainer).where(eq(storageContainer.specimenId, testSpecimen.id))).toEqual([])
+    })
+
+    it('rejects a barcode on a paper container at the schema (ADR 0006)', async () => {
+      const res = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {
+        method: 'POST',
+        json: {
+          containerType: 'paper',
+          barcode: 'LEGACY',
+          sublabel: 'Spot-1',
+          collection: { type: 'sheet', name: 'Sheet-1', parent: { type: 'box', name: 'PaperBox', locationId: 1 } },
+        },
+      })
+
+      expect(res.status).toBe(400)
+      expect(JSON.stringify(await res.json())).toContain('not barcode')
+      expect(await ctx.db.select().from(storageContainer).where(eq(storageContainer.specimenId, testSpecimen.id))).toEqual([])
     })
 
     it('accepts unitId and quantities from container defaults (web payload)', async () => {

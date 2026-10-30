@@ -8,16 +8,20 @@ import {
   createTestLocation,
   createTestMicronixPlate,
   createTestUnit,
+  createTestSpecimenTypeContainerType,
+  createTestContainerTypeUnit,
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
 import {
   normalizePosition,
   runBulkCombinedImport,
-  prepareSubjectWithSpecimens,
+  validateBulkCombinedPayload,
+  type BulkCombinedSubjectInput,
 } from '../bulk-combined-import'
-import { specimenTypeContainerType, containerTypeUnit, studySubject, specimen } from '../../db/schema'
+import { studySubject, specimen } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
+import { withWriteTransaction } from '../../db/write-transaction'
 
 describe('bulk-combined-import', () => {
   let testDb: Database
@@ -54,41 +58,6 @@ describe('bulk-combined-import', () => {
 
     it('trims and normalizes', () => {
       expect(normalizePosition('  B12  ')).toBe('B12')
-    })
-  })
-
-  describe('prepareSubjectWithSpecimens', () => {
-    it('throws when study short code is invalid', async () => {
-      await expect(
-        prepareSubjectWithSpecimens(testDb, 'NONEXISTENT', 'Subj1', [
-          { specimenTypeName: 'DNA', collectionDate: '2024-01-01' },
-        ])
-      ).rejects.toThrow(/Invalid study|study/i)
-    })
-
-    it('resolves study and specimen type and returns prepared subject without container', async () => {
-      const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
-      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
-      const prepared = await prepareSubjectWithSpecimens(testDb, study.shortCode, 'NewSubject', [
-        { specimenTypeName: specimenType.name, collectionDate: '2024-01-15' },
-      ])
-      expect(prepared.studyId).toBe(study.id)
-      expect(prepared.trimmedName).toBe('NewSubject')
-      expect(prepared.existingSubjectId).toBeNull()
-      expect(prepared.resolvedSpecimens).toHaveLength(1)
-      expect(prepared.resolvedSpecimens[0].specimenTypeId).toBe(specimenType.id)
-      expect(prepared.resolvedSpecimens[0].collectionDate).toBe('2024-01-15')
-    })
-
-    it('finds existing subject by name and study', async () => {
-      const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
-      const existing = await createTestStudySubject(testDb, { studyId: study.id, name: 'ExistingSubj' })
-      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
-      const prepared = await prepareSubjectWithSpecimens(testDb, study.shortCode, '  ExistingSubj  ', [
-        { specimenTypeName: specimenType.name, collectionDate: '2024-01-15' },
-      ])
-      expect(prepared.existingSubjectId).toBe(existing.id)
-      expect(prepared.trimmedName).toBe('ExistingSubj')
     })
   })
 
@@ -179,6 +148,30 @@ describe('bulk-combined-import', () => {
       expect(result.errors![0].error).toMatch(/NonExistentType|not found/i)
       expect(result.summary.subjectsCreated).toBe(2)
       expect(result.summary.specimensCreated).toBe(2)
+    })
+
+    it('per_subject mode inside an open transaction rolls back only the failed subject', async () => {
+      const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+
+      const result = await withWriteTransaction(testDb, (tx) =>
+        runBulkCombinedImport(
+          tx,
+          {
+            studyShortCode: study.shortCode,
+            atomicMode: 'per_subject',
+            subjects: [
+              { subjectName: 'GoodSubj', specimens: [{ specimenTypeName: specimenType.name, collectionDate: '2024-01-15' }] },
+              { subjectName: 'BadSubj', specimens: [{ specimenTypeName: 'NonExistentType', collectionDate: '2024-01-15' }] },
+            ],
+          },
+          undefined
+        )
+      )
+
+      expect(result.errors).toHaveLength(1)
+      const subjects = await testDb.select().from(studySubject).all()
+      expect(subjects.map((s) => s.name)).toEqual(['GoodSubj'])
     })
 
     for (const atomicMode of ['full_file', 'per_subject'] as const) {
@@ -304,5 +297,148 @@ describe('bulk-combined-import', () => {
       expect(subjects.find((s) => s.name === 'Default')?.studyId).toBe(studyA.id)
       expect(subjects.find((s) => s.name === 'Override')?.studyId).toBe(studyB.id)
     })
+  })
+
+  describe('validate passes exactly when the import succeeds', () => {
+    let locationId: number
+
+    beforeEach(async () => {
+      const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
+      await createTestStudySubject(testDb, { studyId: study.id, name: 'Existing' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      locationId = (await createTestLocation(testDb, { name: 'Shelf', storageTypeId: String(storageType.id), canContainCollections: true })).id
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      for (const containerType of ['micronix_tube', 'paper'] as const) {
+        await createTestSpecimenTypeContainerType(testDb, { specimenTypeId: specimenType.id, containerType })
+        await createTestContainerTypeUnit(testDb, { containerType, unitId: unit.id })
+      }
+      await setContainerDefaults(testDb, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      const plate = await createTestMicronixPlate(testDb, { name: 'P1', barcode: 'P1-BC', locationId })
+      await runBulkCombinedImport(
+        testDb,
+        { studyShortCode: 'ST1', atomicMode: 'full_file', subjects: [subject('Existing', tube('TAKEN', { id: plate.id, position: 'A01' }))] },
+        undefined
+      )
+    })
+
+    function tube(barcode: string, collection: Record<string, unknown>) {
+      return { containerType: 'micronix_tube' as const, barcode, collection: { type: 'micronix_plate' as const, ...collection } }
+    }
+
+    function paperOn(sheetName: string, sublabel: string) {
+      return {
+        containerType: 'paper' as const,
+        sublabel,
+        collection: { type: 'sheet' as const, name: sheetName, parent: { type: 'box' as const, name: 'PaperBox', locationId } },
+      }
+    }
+
+    function subject(name: string, container?: NonNullable<BulkCombinedSubjectInput['specimens'][number]['container']>, studyShortCode?: string): BulkCombinedSubjectInput {
+      return { subjectName: name, studyShortCode, specimens: [{ specimenTypeName: 'DNA', collectionDate: '2024-01-15', container }] }
+    }
+
+    const fixtures: Array<{ name: string; valid: boolean; subjects: () => BulkCombinedSubjectInput[] }> = [
+      { name: 'tubes on an existing and a new plate', valid: true, subjects: () => [subject('A', tube('T1', { name: 'P1', position: 'A02' })), subject('B', tube('T2', { name: 'NEW', locationId, position: 'A01' }))] },
+      { name: 'existing plate name with an unknown barcode', valid: false, subjects: () => [subject('A', tube('T1', { name: 'P1', barcode: 'UNKNOWN', position: 'A01' }))] },
+      { name: 'two subjects with papers on one sheet', valid: true, subjects: () => [subject('A', paperOn('Sheet-1', 's1')), subject('B', paperOn('Sheet-1', 's2'))] },
+      { name: 'one sublabel twice on a sheet across subjects', valid: false, subjects: () => [subject('A', paperOn('Sheet-1', 's1')), subject('B', paperOn('Sheet-1', 's1'))] },
+      { name: 'a barcode already in the database', valid: false, subjects: () => [subject('A', tube('TAKEN', { name: 'P1', position: 'B01' }))] },
+      { name: 'one well named by plate name and by plate barcode', valid: false, subjects: () => [subject('A', tube('T1', { name: 'P1', position: 'C01' })), subject('B', tube('T2', { barcode: 'P1-BC', position: 'C1' }))] },
+      { name: 'an occupied well', valid: false, subjects: () => [subject('A', tube('T1', { barcode: 'P1-BC', position: 'A1' }))] },
+      { name: 'a missing study on one subject', valid: false, subjects: () => [subject('A'), subject('B', undefined, 'NOPE')] },
+    ]
+
+    // per_subject validate checks each subject the way the import runs it, so it flags exactly
+    // the subjects the import rejects.
+    for (const fixture of fixtures) {
+      it(`${fixture.name} (per_subject)`, async () => {
+        const payload = { studyShortCode: 'ST1', atomicMode: 'per_subject' as const, subjects: fixture.subjects() }
+
+        const validation = await validateBulkCombinedPayload(testDb, payload)
+        const imported = await runBulkCombinedImport(testDb, payload, undefined)
+
+        const flagged = [...new Set(validation.errors.map((e) => e.subjectIndex))]
+        const rejected = (imported.errors ?? []).map((e) => e.index)
+        expect(validation.valid).toBe(fixture.valid)
+        expect(flagged).toEqual(rejected)
+      })
+    }
+
+    it('per_subject flags a subject that needed a collection from a subject that failed', async () => {
+      // B finds the new plate only because A, which fails, would create it. A's rollback drops
+      // the plate, so B fails too, in validate as in the import.
+      const payload = {
+        studyShortCode: 'ST1',
+        atomicMode: 'per_subject' as const,
+        subjects: [
+          subject('A', tube('TAKEN', { name: 'NEW', locationId, position: 'A01' })),
+          subject('B', tube('T2', { name: 'NEW', position: 'A02' })),
+        ],
+      }
+
+      const validation = await validateBulkCombinedPayload(testDb, payload)
+      const imported = await runBulkCombinedImport(testDb, payload, undefined)
+
+      expect([...new Set(validation.errors.map((e) => e.subjectIndex))]).toEqual([0, 1])
+      expect((imported.errors ?? []).map((e) => e.index)).toEqual([0, 1])
+    })
+
+    it('per_subject flags a second subject that gives a new plate another location', async () => {
+      const storageType = await createTestStorageType(testDb, { name: 'Rack' })
+      const otherLocationId = (await createTestLocation(testDb, { name: 'Other shelf', storageTypeId: String(storageType.id), canContainCollections: true })).id
+      const payload = {
+        studyShortCode: 'ST1',
+        atomicMode: 'per_subject' as const,
+        subjects: [
+          subject('A', tube('T1', { name: 'NEW', locationId, position: 'A01' })),
+          subject('B', tube('T2', { name: 'NEW', locationId: otherLocationId, position: 'A02' })),
+        ],
+      }
+
+      const validation = await validateBulkCombinedPayload(testDb, payload)
+      const imported = await runBulkCombinedImport(testDb, payload, undefined)
+
+      expect(validation.errors.map((e) => e.subjectIndex)).toEqual([1])
+      expect((imported.errors ?? []).map((e) => e.index)).toEqual([1])
+    })
+
+    it('per_subject reports a failed subject with its own index and row', async () => {
+      const validation = await validateBulkCombinedPayload(testDb, {
+        studyShortCode: 'ST1',
+        atomicMode: 'per_subject',
+        subjects: [subject('A'), { subjectName: 'B', specimens: [{ specimenTypeName: 'NOPE', rowIndex: 7 }] }],
+      })
+
+      expect(validation.errors).toEqual([{ subjectIndex: 1, specimenIndex: 0, rowIndex: 7, message: "Specimen type 'NOPE' not found" }])
+    })
+
+    it('says a sublabel repeats in the file', async () => {
+      const validation = await validateBulkCombinedPayload(testDb, {
+        studyShortCode: 'ST1',
+        atomicMode: 'full_file',
+        subjects: [subject('A', paperOn('Sheet-1', 's1')), subject('B', paperOn('Sheet-1', 's1'))],
+      })
+
+      expect(validation.errors.map((e) => e.message)).toEqual(["Sublabel 's1' is used more than once on this sheet in your file."])
+    })
+
+    for (const fixture of fixtures) {
+      it(fixture.name, async () => {
+        const payload = { studyShortCode: 'ST1', atomicMode: 'full_file' as const, subjects: fixture.subjects() }
+
+        const validation = await validateBulkCombinedPayload(testDb, payload)
+        const imported = await runBulkCombinedImport(testDb, payload, undefined).then(
+          () => true,
+          () => false
+        )
+
+        expect(validation.valid).toBe(fixture.valid)
+        expect(imported).toBe(validation.valid)
+      })
+    }
   })
 })

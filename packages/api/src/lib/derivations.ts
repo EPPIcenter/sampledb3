@@ -235,12 +235,10 @@ async function createDerivationInTx(
     throw new Error(containerTypeValidation.error || 'Container type not allowed for this specimen type')
   }
 
-  const collectionMap = new Map<string, number>()
   const unitId = await resolveUnitIdForChild(database, input.container.containerType, input.unitSymbol)
   const quantity = input.quantity ?? 1.0
 
   const containerResult = await createContainerForSpecimen(derivedSpecimenId, input.container, database, {
-    collectionMap,
     quantity: pickContainerQuantity({ unitId, totalQuantity: quantity, remainingQuantity: quantity }),
   })
 

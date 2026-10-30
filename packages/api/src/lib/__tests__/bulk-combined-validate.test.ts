@@ -9,7 +9,7 @@ import {
   createTestUnit,
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
-import { validateBulkCombinedPayload } from '../bulk-combined-validate'
+import { validateBulkCombinedPayload } from '../bulk-combined-import'
 import { specimenTypeContainerType, containerTypeUnit } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { utcNow } from '../datetime'
@@ -32,6 +32,7 @@ describe('bulk-combined-validate', () => {
   describe('validateBulkCombinedPayload', () => {
     it('returns invalid when study short code does not exist', async () => {
       const result = await validateBulkCombinedPayload(testDb, {
+        atomicMode: 'full_file',
         studyShortCode: 'NONEXISTENT',
         subjects: [
           {
@@ -48,6 +49,7 @@ describe('bulk-combined-validate', () => {
     it('returns invalid when specimen type is not found', async () => {
       const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
       const result = await validateBulkCombinedPayload(testDb, {
+        atomicMode: 'full_file',
         studyShortCode: study.shortCode,
         subjects: [
           {
@@ -64,6 +66,7 @@ describe('bulk-combined-validate', () => {
       const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
       const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
       const result = await validateBulkCombinedPayload(testDb, {
+        atomicMode: 'full_file',
         studyShortCode: study.shortCode,
         subjects: [
           {
@@ -99,6 +102,7 @@ describe('bulk-combined-validate', () => {
       await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
 
       const result = await validateBulkCombinedPayload(testDb, {
+        atomicMode: 'full_file',
         studyShortCode: study.shortCode,
         subjects: [
           {
@@ -130,6 +134,7 @@ describe('bulk-combined-validate', () => {
       const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
       const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
       const result = await validateBulkCombinedPayload(testDb, {
+        atomicMode: 'full_file',
         studyShortCode: study.shortCode,
         subjects: [
           {
@@ -164,6 +169,7 @@ describe('bulk-combined-validate', () => {
       await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
 
       const result = await validateBulkCombinedPayload(testDb, {
+        atomicMode: 'full_file',
         studyShortCode: study.shortCode,
         subjects: [
           {
@@ -220,6 +226,7 @@ describe('bulk-combined-validate', () => {
       await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
 
       const result = await validateBulkCombinedPayload(testDb, {
+        atomicMode: 'full_file',
         studyShortCode: study.shortCode,
         subjects: [
           {
@@ -269,6 +276,7 @@ describe('bulk-combined-validate', () => {
       await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
 
       const result = await validateBulkCombinedPayload(testDb, {
+        atomicMode: 'full_file',
         studyShortCode: study.shortCode,
         subjects: [
           {
@@ -294,6 +302,7 @@ describe('bulk-combined-validate', () => {
     it('includes rowIndex in errors when provided in payload', async () => {
       const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
       const result = await validateBulkCombinedPayload(testDb, {
+        atomicMode: 'full_file',
         studyShortCode: study.shortCode,
         subjects: [
           {
@@ -315,6 +324,7 @@ describe('bulk-combined-validate', () => {
       await createTestStudy(testDb, { title: 'Study B', shortCode: 'STB' })
       await createTestSpecimenType(testDb, { name: 'DNA' })
       const result = await validateBulkCombinedPayload(testDb, {
+        atomicMode: 'full_file',
         subjects: [
           {
             studyShortCode: 'STA',

@@ -1,52 +1,47 @@
 /**
  * Bulk combined import (subjects + specimens + containers) with configurable atomicity.
- * Used by POST /imports/bulk-combined and shares logic with POST /subjects/with-specimens.
+ * Used by POST /imports/bulk-combined (and its validate route) and POST /subjects/with-specimens.
+ * Subjects are found or created here; Specimens and Containers go through Specimen registration.
+ * Validation is the import itself, rolled back (ADR 0010).
  */
 import type { Database } from '../db/client'
-import {
-  studySubject,
-  specimen,
-  specimenType,
-} from '../db/schema'
+import { studySubject, type specimen } from '../db/schema'
 import { and, eq } from 'drizzle-orm'
-import { findExistingStudySpecimen } from './specimen-helpers'
-import {
-  validateStudyShortCode,
-  validateSubjectName,
-  validateCollectionDate,
-  validateContainerTypeForSpecimenType,
-  validateUnitForContainerType,
-} from './validation'
-import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } from './defaults'
+import { validateStudyShortCode, validateSubjectName } from './validation'
 import { utcNow } from './datetime'
-import { resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from './identifier-resolution'
-import { ValidationError } from './error-handler'
-import { collectContainerPlacementErrors } from './container-placement-validation'
+import { resolveSpecimenTypeByName } from './identifier-resolution'
+import { ConflictError, ValidationError } from './error-handler'
+import { withRolledBackTransaction, withWriteTransaction } from '../db/write-transaction'
 import {
-  bulkCombinedCollectionMessages,
-  prepareCombinedSubjectContainerBatch,
-} from './registration-prepare'
-import { createContainerForSpecimen, pickContainerQuantity, validateContainerWriteFields } from './container-creation'
-import {
-  assertWriteInputPlacementResolvable,
-  toContainerWriteInput,
-  type BulkCombinedContainerInput,
-} from './container-write-placement'
-import { withWriteTransaction } from '../db/write-transaction'
-import { insertedRow } from './inserted-row'
-
-export type { BulkCombinedContainerInput }
+  RefusedWithErrors,
+  registerSpecimens,
+  SpecimenRegistrationError,
+  type RegistrationContainer,
+  type RegistrationEntry,
+  type RegistrationResult,
+} from './specimen-registration'
 
 export { normalizePosition } from './normalize-position'
+
+export interface BulkCombinedSpecimenInput {
+  specimenTypeName: string
+  collectionDate?: string
+  container?: RegistrationContainer
+  /** CSV row, echoed back on errors. */
+  rowIndex?: number
+}
+
+export interface BulkCombinedSubjectInput {
+  /** Overrides the payload-level study. */
+  studyShortCode?: string
+  subjectName: string
+  specimens: BulkCombinedSpecimenInput[]
+}
 
 export interface WithSpecimensPayload {
   studyShortCode: string
   subjectName: string
-  specimens: Array<{
-    specimenTypeName: string
-    collectionDate?: string
-    container?: BulkCombinedContainerInput
-  }>
+  specimens: BulkCombinedSpecimenInput[]
 }
 
 export interface OneSubjectResult {
@@ -58,301 +53,25 @@ export interface OneSubjectResult {
     containerId?: number
     specimenCreated: boolean
   }>
-  summary: {
-    subjectsCreated: number
-    subjectsUpdated: number
-    specimensCreated: number
-    containersCreated: number
-  }
+  summary: BulkCombinedSummary
 }
 
-interface PreparedSubject {
-  studyId: number
-  existingSubjectId: number | null
-  trimmedName: string
-  resolvedSpecimens: Array<{
-    specimenTypeId: number
-    collectionDate?: string
-    container?: BulkCombinedContainerInput
-  }>
-  preparedContainers: Array<{ unitId: number; totalQuantity: number; remainingQuantity: number }>
-  collectionMap: Map<string, number>
+interface BulkCombinedSummary {
+  subjectsCreated: number
+  subjectsUpdated: number
+  specimensCreated: number
+  containersCreated: number
 }
 
-async function revalidatePreparedSubjectInTx(
-  tx: Database,
-  prepared: PreparedSubject,
+export interface BulkCombinedError {
   subjectIndex: number
-): Promise<void> {
-  const subjectLabel = `subject ${subjectIndex + 1} ('${prepared.trimmedName}')`
-
-  if (prepared.existingSubjectId) {
-    const existing = tx.select({ id: studySubject.id }).from(studySubject).where(eq(studySubject.id, prepared.existingSubjectId)).get()
-    if (!existing) {
-      throw new ValidationError(`${subjectLabel}: existing subject no longer exists`)
-    }
-  }
-
-  for (let i = 0; i < prepared.resolvedSpecimens.length; i++) {
-    const spec = prepared.resolvedSpecimens[i]
-    const specimenLabel = `${subjectLabel}, specimen ${i + 1}`
-    const typeExists = tx.select({ id: specimenType.id }).from(specimenType).where(eq(specimenType.id, spec.specimenTypeId)).get()
-    if (!typeExists) {
-      throw new ValidationError(`${specimenLabel}: specimen type no longer exists`)
-    }
-
-    if (spec.container?.containerType) {
-      const container = spec.container
-      const containerTypeValidation = await validateContainerTypeForSpecimenType(
-        tx,
-        spec.specimenTypeId,
-        container.containerType
-      )
-      if (!containerTypeValidation.valid) {
-        throw new ValidationError(`${specimenLabel}: ${containerTypeValidation.error ?? 'invalid container type for specimen type'}`)
-      }
-      const unitValidation = await validateUnitForContainerType(
-        tx,
-        container.containerType,
-        prepared.preparedContainers[i].unitId
-      )
-      if (!unitValidation.valid) {
-        throw new ValidationError(`${specimenLabel}: ${unitValidation.error ?? 'invalid unit for container type'}`)
-      }
-
-      const writeInput = toContainerWriteInput(container)
-      const fieldValidation = validateContainerWriteFields(writeInput)
-      if (!fieldValidation.valid) {
-        throw new ValidationError(`${specimenLabel}: ${fieldValidation.error ?? 'Invalid container data'}`)
-      }
-      try {
-        await assertWriteInputPlacementResolvable(tx, writeInput, prepared.collectionMap)
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : 'Invalid container placement'
-        throw new ValidationError(`${specimenLabel}: ${message}`)
-      }
-    }
-  }
+  specimenIndex?: number
+  rowIndex?: number
+  message: string
 }
 
-export async function prepareSubjectWithSpecimens(
-  database: Database,
-  studyShortCode: string,
-  subjectName: string,
-  specimens: WithSpecimensPayload['specimens']
-): Promise<PreparedSubject> {
-  const studyValidation = await validateStudyShortCode(database, studyShortCode)
-  if (!studyValidation.valid || !studyValidation.studyId) {
-    throw new ValidationError(studyValidation.error ?? 'Invalid study')
-  }
-  const studyId = studyValidation.studyId
-  const trimmedName = subjectName.trim()
-  const existingSubjectId = await resolveSubjectByNameAndStudy(database, trimmedName, studyId)
-  if (!existingSubjectId) {
-    const nameValidation = await validateSubjectName(database, studyId, trimmedName)
-    if (!nameValidation.valid) throw new ValidationError(nameValidation.error ?? 'Invalid subject name')
-  }
-
-  const resolvedSpecimens: PreparedSubject['resolvedSpecimens'] = []
-  for (let i = 0; i < specimens.length; i++) {
-    const spec = specimens[i]
-    const specimenTypeId = await resolveSpecimenTypeByName(database, spec.specimenTypeName)
-    if (!specimenTypeId) {
-      throw new ValidationError(`Specimen type '${spec.specimenTypeName}' not found`, { specimenIndex: i })
-    }
-    const dateValidation = validateCollectionDate(spec.collectionDate)
-    if (!dateValidation.valid) {
-      throw new ValidationError(dateValidation.error, { specimenIndex: i })
-    }
-    resolvedSpecimens.push({
-      specimenTypeId,
-      collectionDate: dateValidation.normalized,
-      container: spec.container,
-    })
-  }
-
-  const containerPrep = await prepareCombinedSubjectContainerBatch(database, resolvedSpecimens, {
-    messages: bulkCombinedCollectionMessages,
-  })
-  if (!containerPrep.valid) {
-    throw new ValidationError(containerPrep.message, { specimenIndex: containerPrep.specimenIndex })
-  }
-
-  const { placementRows, collectionMap } = containerPrep.result
-  const placementErrors = await collectContainerPlacementErrors(database, placementRows)
-  if (placementErrors.length > 0) {
-    throw new ValidationError(placementErrors[0].message, { specimenIndex: placementErrors[0].rowIndex })
-  }
-
-  const preparedContainers: PreparedSubject['preparedContainers'] = []
-  for (const spec of resolvedSpecimens) {
-    if (spec.container?.containerType) {
-      const containerType = spec.container.containerType
-      const unitId = spec.container.unitId ?? (await getDefaultUnit(database, containerType))
-      const unitValidation = await validateUnitForContainerType(database, containerType, unitId)
-      if (!unitValidation.valid) throw new ValidationError(unitValidation.error ?? 'Invalid unit for container type')
-      const defaultTotalQty = await getDefaultTotalQuantity(database, containerType)
-      const defaultRemainingQty = await getDefaultRemainingQuantity(database, containerType)
-      preparedContainers.push({
-        unitId,
-        totalQuantity: spec.container.totalQuantity ?? defaultTotalQty,
-        remainingQuantity: spec.container.remainingQuantity ?? spec.container.totalQuantity ?? defaultRemainingQty,
-      })
-    } else {
-      preparedContainers.push({ unitId: 0, totalQuantity: 0, remainingQuantity: 0 })
-    }
-  }
-
-  return {
-    studyId,
-    existingSubjectId,
-    trimmedName,
-    resolvedSpecimens,
-    preparedContainers,
-    collectionMap,
-  }
-}
-
-export async function createSubjectWithSpecimensInTx(
-  tx: Database,
-  prepared: PreparedSubject,
-  userId: number | undefined,
-  now: string
-): Promise<OneSubjectResult> {
-  const { studyId, existingSubjectId, trimmedName, resolvedSpecimens, preparedContainers, collectionMap } = prepared
-
-  let subjectId: number
-  let subject: typeof studySubject.$inferSelect
-  // A subject prepared as new may already exist by now: an earlier entry in the same file
-  // with the same trimmed name, or a concurrent import. Reuse it (names are unique per study).
-  const alreadyInStudy = existingSubjectId
-    ? undefined
-    : tx.select().from(studySubject).where(and(eq(studySubject.studyId, studyId), eq(studySubject.name, trimmedName))).get()
-  const reuseSubjectId = existingSubjectId ?? alreadyInStudy?.id ?? null
-  if (reuseSubjectId) {
-    const existing = alreadyInStudy ?? tx.select().from(studySubject).where(eq(studySubject.id, reuseSubjectId)).get()
-    if (!existing) throw new Error('Subject not found')
-    subject = existing
-    subjectId = existing.id
-  } else {
-    const newSubjectResult = tx
-      .insert(studySubject)
-      .values({
-        studyId,
-        name: trimmedName,
-        created: now,
-        lastUpdated: now,
-        createdBy: userId,
-        updatedBy: userId,
-      })
-      .returning()
-      .all()
-    subject = insertedRow(newSubjectResult, 'study subject')
-    subjectId = subject.id
-  }
-
-  const insertedSpecimens: OneSubjectResult['specimens'] = []
-  for (let i = 0; i < resolvedSpecimens.length; i++) {
-    const spec = resolvedSpecimens[i]
-    const preparedContainer = preparedContainers[i]
-    const existingSpecimen = findExistingStudySpecimen(tx, subjectId, spec.specimenTypeId, spec.collectionDate)
-    let specimenRecord: typeof specimen.$inferSelect
-    let specimenCreated: boolean
-    if (existingSpecimen) {
-      specimenRecord = existingSpecimen
-      specimenCreated = false
-    } else {
-      const newSpecimenResult = tx
-        .insert(specimen)
-        .values({
-          studySubjectId: subjectId,
-          specimenTypeId: spec.specimenTypeId,
-          collectionDate: spec.collectionDate,
-          created: now,
-          lastUpdated: now,
-          createdBy: userId,
-          updatedBy: userId,
-        })
-        .returning()
-        .all()
-      specimenRecord = insertedRow(newSpecimenResult, 'specimen')
-      specimenCreated = true
-    }
-    const specimenId = specimenRecord.id
-    let containerCreated = false
-    let containerId: number | undefined
-
-    if (spec.container?.containerType) {
-      const container = spec.container
-      const writeInput = toContainerWriteInput(container)
-      const containerResult = await createContainerForSpecimen(specimenId, writeInput, tx, {
-        userId,
-        collectionMap,
-        quantity: pickContainerQuantity(preparedContainer),
-      })
-      if (!containerResult.success || !containerResult.containerId) {
-        throw new ValidationError(
-          containerResult.error ?? 'Failed to create container',
-          { specimenIndex: i }
-        )
-      }
-      containerId = containerResult.containerId
-      containerCreated = true
-    }
-
-    insertedSpecimens.push({
-      specimen: specimenRecord,
-      containerCreated,
-      containerId,
-      specimenCreated,
-    })
-  }
-
-  const subjectCreated = !reuseSubjectId
-  return {
-    subject,
-    subjectCreated,
-    specimens: insertedSpecimens,
-    summary: {
-      subjectsCreated: subjectCreated ? 1 : 0,
-      subjectsUpdated: subjectCreated ? 0 : 1,
-      specimensCreated: insertedSpecimens.filter((s) => s.specimenCreated).length,
-      containersCreated: insertedSpecimens.filter((s) => s.containerCreated).length,
-    },
-  }
-}
-
-export async function runOneSubjectWithSpecimens(
-  database: Database,
-  payload: WithSpecimensPayload,
-  userId: number | undefined
-): Promise<OneSubjectResult> {
-  const prepared = await prepareSubjectWithSpecimens(
-    database,
-    payload.studyShortCode,
-    payload.subjectName,
-    payload.specimens
-  )
-  const now = utcNow()
-  return withWriteTransaction(database, async (tx) => {
-    return createSubjectWithSpecimensInTx(tx, prepared, userId, now)
-  })
-}
-
-export interface BulkCombinedPayload {
-  /** Default study for subjects that do not set their own studyShortCode. */
-  studyShortCode?: string
-  atomicMode: 'full_file' | 'per_subject'
-  subjects: Array<{
-    studyShortCode?: string
-    subjectName: string
-    specimens: Array<{
-      specimenTypeName: string
-      collectionDate?: string
-      container?: BulkCombinedContainerInput
-    }>
-  }>
-}
+/** The subjects could not all be registered; nothing was written. */
+class BulkCombinedRejected extends RefusedWithErrors<BulkCombinedError> {}
 
 /** A subject's own study wins over the payload-level default. */
 export function resolveSubjectStudyShortCode(
@@ -362,24 +81,178 @@ export function resolveSubjectStudyShortCode(
   return subject.studyShortCode ?? payloadStudyShortCode
 }
 
-function requireSubjectStudyShortCode(
+/**
+ * Find or create each subject, then register all their specimens in one call. Runs inside the
+ * caller's transaction and throws BulkCombinedRejected with every problem found.
+ */
+async function registerSubjects(
+  database: Database,
   payloadStudyShortCode: string | undefined,
-  subject: { studyShortCode?: string; subjectName: string }
-): string {
-  const studyShortCode = resolveSubjectStudyShortCode(payloadStudyShortCode, subject)
-  if (!studyShortCode) {
-    throw new ValidationError(`Subject '${subject.subjectName}': study short code is required`)
+  subjects: BulkCombinedSubjectInput[],
+  userId: number | undefined,
+  inputName?: string,
+): Promise<OneSubjectResult[]> {
+  const now = utcNow()
+  const errors: BulkCombinedError[] = []
+  const entries: RegistrationEntry[] = []
+  const entryRefs: Array<{ subjectIndex: number; specimenIndex: number; rowIndex?: number }> = []
+  const registered: Array<{ subject: typeof studySubject.$inferSelect; created: boolean } | null> = []
+  const studyIds = new Map<string, Awaited<ReturnType<typeof validateStudyShortCode>>>()
+  const specimenTypeIds = new Map<string, number | null>()
+
+  for (let subjectIndex = 0; subjectIndex < subjects.length; subjectIndex++) {
+    const subj = subjects[subjectIndex]
+    const subjectError = (message: string) =>
+      errors.push({ subjectIndex, specimenIndex: 0, rowIndex: subj.specimens[0]?.rowIndex, message })
+
+    const code = resolveSubjectStudyShortCode(payloadStudyShortCode, subj)
+    if (!code) {
+      subjectError('Study short code is required')
+      registered.push(null)
+      continue
+    }
+    let study = studyIds.get(code)
+    if (!study) {
+      study = await validateStudyShortCode(database, code)
+      studyIds.set(code, study)
+    }
+    if (!study.valid || !study.studyId) {
+      subjectError(study.error ?? 'Invalid study')
+      registered.push(null)
+      continue
+    }
+    const studyId = study.studyId
+
+    // Names are unique per study: a subject named again (in the database or earlier in this
+    // file) is reused.
+    const name = subj.subjectName.trim()
+    const existing = database
+      .select()
+      .from(studySubject)
+      .where(and(eq(studySubject.studyId, studyId), eq(studySubject.name, name)))
+      .get()
+    let subject = existing
+    if (!subject) {
+      const nameValidation = await validateSubjectName(database, studyId, name)
+      if (!nameValidation.valid) {
+        subjectError(nameValidation.error ?? 'Invalid subject name')
+        registered.push(null)
+        continue
+      }
+      subject = database
+        .insert(studySubject)
+        .values({ studyId, name, created: now, lastUpdated: now, createdBy: userId, updatedBy: userId })
+        .returning()
+        .get()
+    }
+    registered.push({ subject, created: !existing })
+
+    for (let specimenIndex = 0; specimenIndex < subj.specimens.length; specimenIndex++) {
+      const spec = subj.specimens[specimenIndex]
+      let specimenTypeId = specimenTypeIds.get(spec.specimenTypeName)
+      if (specimenTypeId === undefined) {
+        specimenTypeId = await resolveSpecimenTypeByName(database, spec.specimenTypeName)
+        specimenTypeIds.set(spec.specimenTypeName, specimenTypeId)
+      }
+      if (!specimenTypeId) {
+        errors.push({
+          subjectIndex,
+          specimenIndex,
+          rowIndex: spec.rowIndex,
+          message: `Specimen type '${spec.specimenTypeName}' not found`,
+        })
+        continue
+      }
+      entries.push({
+        source: { subjectId: subject.id },
+        specimenTypeId,
+        collectionDate: spec.collectionDate,
+        containers: spec.container ? [spec.container] : [],
+      })
+      entryRefs.push({ subjectIndex, specimenIndex, rowIndex: spec.rowIndex })
+    }
   }
-  return studyShortCode
+
+  let registration: RegistrationResult | null = null
+  try {
+    registration = await registerSpecimens(database, entries, { userId, inputName })
+  } catch (error) {
+    if (!(error instanceof SpecimenRegistrationError)) throw error
+    const mapped = error.errors.map((e) => ({ ...entryRefs[e.entryIndex], message: e.message }))
+    if (error.status === 409) throw new BulkCombinedRejected(409, [...errors, ...mapped])
+    errors.push(...mapped)
+  }
+  if (errors.length > 0 || !registration) {
+    errors.sort((a, b) => a.subjectIndex - b.subjectIndex || (a.specimenIndex ?? 0) - (b.specimenIndex ?? 0))
+    throw new BulkCombinedRejected(400, errors)
+  }
+
+  const results: OneSubjectResult[] = registered.map((r) => {
+    if (!r) throw new Error('Subject missing after a registration without errors')
+    return {
+      subject: r.subject,
+      subjectCreated: r.created,
+      specimens: [],
+      summary: { subjectsCreated: r.created ? 1 : 0, subjectsUpdated: r.created ? 0 : 1, specimensCreated: 0, containersCreated: 0 },
+    }
+  })
+  registration.entries.forEach((entry, i) => {
+    const result = results[entryRefs[i].subjectIndex]
+    const containerId = entry.containerIds.at(0)
+    result.specimens.push({
+      specimen: entry.specimen,
+      specimenCreated: !entry.reused,
+      containerCreated: containerId !== undefined,
+      containerId,
+    })
+    if (!entry.reused) result.summary.specimensCreated += 1
+    if (containerId !== undefined) result.summary.containersCreated += 1
+  })
+  return results
+}
+
+function sumSummaries(results: OneSubjectResult[]): BulkCombinedSummary {
+  return results.reduce(
+    (acc, r) => ({
+      subjectsCreated: acc.subjectsCreated + r.summary.subjectsCreated,
+      subjectsUpdated: acc.subjectsUpdated + r.summary.subjectsUpdated,
+      specimensCreated: acc.specimensCreated + r.summary.specimensCreated,
+      containersCreated: acc.containersCreated + r.summary.containersCreated,
+    }),
+    { subjectsCreated: 0, subjectsUpdated: 0, specimensCreated: 0, containersCreated: 0 }
+  )
+}
+
+export async function runOneSubjectWithSpecimens(
+  database: Database,
+  payload: WithSpecimensPayload,
+  userId: number | undefined
+): Promise<OneSubjectResult> {
+  try {
+    const [result] = await withWriteTransaction(database, (tx) =>
+      registerSubjects(tx, payload.studyShortCode, [{ subjectName: payload.subjectName, specimens: payload.specimens }], userId)
+    )
+    return result
+  } catch (error) {
+    if (!(error instanceof BulkCombinedRejected)) throw error
+    const details = { specimenIndex: error.errors[0]?.specimenIndex, errors: error.errors }
+    if (error.status === 409) throw new ConflictError(error.message, details)
+    throw new ValidationError(error.message, details)
+  }
+}
+
+/** The bulk combined routes take a CSV import, so a value repeated in it is "used more than once in your file". */
+const CSV_INPUT_NAME = 'your file'
+
+export interface BulkCombinedPayload {
+  /** Default study for subjects that do not set their own studyShortCode. */
+  studyShortCode?: string
+  atomicMode: 'full_file' | 'per_subject'
+  subjects: BulkCombinedSubjectInput[]
 }
 
 export interface BulkCombinedResult {
-  summary: {
-    subjectsCreated: number
-    subjectsUpdated: number
-    specimensCreated: number
-    containersCreated: number
-  }
+  summary: BulkCombinedSummary
   results: OneSubjectResult[]
   errors?: Array<{ index: number; error: string }>
 }
@@ -390,85 +263,60 @@ export async function runBulkCombinedImport(
   userId: number | undefined
 ): Promise<BulkCombinedResult> {
   const { studyShortCode, atomicMode, subjects } = payload
-  const results: OneSubjectResult[] = []
-  const errors: Array<{ index: number; error: string }> = []
 
   if (atomicMode === 'per_subject') {
+    const results: OneSubjectResult[] = []
+    const errors: Array<{ index: number; error: string }> = []
     for (let i = 0; i < subjects.length; i++) {
       try {
-        const one = await runOneSubjectWithSpecimens(
-          database,
-          {
-            studyShortCode: requireSubjectStudyShortCode(studyShortCode, subjects[i]),
-            subjectName: subjects[i].subjectName,
-            specimens: subjects[i].specimens,
-          },
-          userId
-        )
+        const [one] = await withWriteTransaction(database, (tx) => registerSubjects(tx, studyShortCode, [subjects[i]], userId, CSV_INPUT_NAME))
         results.push(one)
-      } catch (err) {
-        errors.push({
-          index: i,
-          error: `Subject '${subjects[i].subjectName}': ${err instanceof Error ? err.message : 'failed to create subject with specimens'}`,
-        })
+      } catch (error) {
+        if (!(error instanceof BulkCombinedRejected)) throw error
+        errors.push({ index: i, error: `Subject '${subjects[i].subjectName}': ${error.errors.map((e) => e.message).join('; ')}` })
       }
     }
-    const summary = results.reduce(
-      (acc, r) => ({
-        subjectsCreated: acc.subjectsCreated + r.summary.subjectsCreated,
-        subjectsUpdated: acc.subjectsUpdated + r.summary.subjectsUpdated,
-        specimensCreated: acc.specimensCreated + r.summary.specimensCreated,
-        containersCreated: acc.containersCreated + r.summary.containersCreated,
-      }),
-      { subjectsCreated: 0, subjectsUpdated: 0, specimensCreated: 0, containersCreated: 0 }
-    )
-    return { summary, results, errors: errors.length > 0 ? errors : undefined }
+    return { summary: sumSummaries(results), results, errors: errors.length > 0 ? errors : undefined }
   }
 
-  // full_file: one transaction for all subjects
-  const allPrepared: PreparedSubject[] = []
-  const mergedCollectionMap = new Map<string, number>()
-  for (let i = 0; i < subjects.length; i++) {
-    const prepared = await prepareSubjectWithSpecimens(
-      database,
-      requireSubjectStudyShortCode(studyShortCode, subjects[i]),
-      subjects[i].subjectName,
-      subjects[i].specimens
-    )
-    for (const [k, v] of prepared.collectionMap) mergedCollectionMap.set(k, v)
-    allPrepared.push(prepared)
+  try {
+    const results = await withWriteTransaction(database, (tx) => registerSubjects(tx, studyShortCode, subjects, userId, CSV_INPUT_NAME))
+    return { summary: sumSummaries(results), results }
+  } catch (error) {
+    if (!(error instanceof BulkCombinedRejected)) throw error
+    const first = error.errors.at(0)
+    const where = first ? `Subject '${subjects[first.subjectIndex].subjectName.trim()}' (index ${first.subjectIndex + 1}) failed: ` : ''
+    if (error.status === 409) throw new ConflictError(`${where}${error.message}`, { errors: error.errors })
+    throw new ValidationError(`${where}${error.message}`, { errors: error.errors })
   }
+}
 
-  const now = utcNow()
-  const fullResults = await withWriteTransaction(database, async (tx) => {
-    for (let i = 0; i < allPrepared.length; i++) {
-      await revalidatePreparedSubjectInTx(tx, allPrepared[i], i)
-    }
-
-    const out: OneSubjectResult[] = []
-    for (let i = 0; i < allPrepared.length; i++) {
-      const prepared = allPrepared[i]
-      const prepWithMergedMap = { ...prepared, collectionMap: mergedCollectionMap }
+/**
+ * Check a bulk combined import by running it and rolling it back, in the payload's atomicMode,
+ * and report every problem. Validate passes exactly when the import would succeed.
+ *
+ * per_subject runs each subject in its own savepoint, as the import does: a failed subject's
+ * writes are rolled back before the next subject runs, so a subject that relies on a collection
+ * a failed subject would have created is flagged too.
+ */
+export async function validateBulkCombinedPayload(
+  database: Database,
+  payload: BulkCombinedPayload
+): Promise<{ valid: boolean; errors: BulkCombinedError[] }> {
+  const { studyShortCode, atomicMode, subjects } = payload
+  return withRolledBackTransaction(database, async (tx) => {
+    const errors: BulkCombinedError[] = []
+    const batches = atomicMode === 'per_subject' ? subjects.map((subject, i) => ({ first: i, subjects: [subject] })) : [{ first: 0, subjects }]
+    for (const batch of batches) {
       try {
-        out.push(await createSubjectWithSpecimensInTx(tx, prepWithMergedMap, userId, now))
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : 'Failed to create subject with specimens'
-        throw new ValidationError(`Subject '${prepared.trimmedName}' (index ${i + 1}) failed: ${message}`)
+        await withWriteTransaction(tx, (savepoint) => registerSubjects(savepoint, studyShortCode, batch.subjects, undefined, CSV_INPUT_NAME))
+      } catch (error) {
+        if (!(error instanceof BulkCombinedRejected)) throw error
+        errors.push(...error.errors.map((e) => ({ ...e, subjectIndex: batch.first + e.subjectIndex })))
       }
     }
-    return out
+    return { valid: errors.length === 0, errors }
   })
-
-  const summary = fullResults.reduce(
-    (acc, r) => ({
-      subjectsCreated: acc.subjectsCreated + r.summary.subjectsCreated,
-      subjectsUpdated: acc.subjectsUpdated + r.summary.subjectsUpdated,
-      specimensCreated: acc.specimensCreated + r.summary.specimensCreated,
-      containersCreated: acc.containersCreated + r.summary.containersCreated,
-    }),
-    { subjectsCreated: 0, subjectsUpdated: 0, specimensCreated: 0, containersCreated: 0 }
-  )
-  return { summary, results: fullResults }
 }
 
 /** HTTP response shape for POST /subjects/with-specimens */

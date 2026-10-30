@@ -23,7 +23,6 @@ import { requireParam } from '../lib/common-validators'
 import {
   runOneSubjectWithSpecimens,
   formatOneSubjectWithSpecimensResponse,
-  type BulkCombinedContainerInput,
 } from '../lib/bulk-combined-import'
 import { withSpecimensRequestSchema } from '../lib/schemas'
 import { mergeSubjects } from '../lib/subjects/merge'
@@ -335,19 +334,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
     const body = await c.req.json()
     const data = withSpecimensRequestSchema.parse(body)
     const user = c.get('user')
-    const result = await runOneSubjectWithSpecimens(
-      dbInstance,
-      {
-        studyShortCode: data.studyShortCode,
-        subjectName: data.subjectName,
-        specimens: data.specimens.map((sp) => ({
-          specimenTypeName: sp.specimenTypeName,
-          collectionDate: sp.collectionDate,
-          container: sp.container as BulkCombinedContainerInput | undefined,
-        })),
-      },
-      user?.id
-    )
+    const result = await runOneSubjectWithSpecimens(dbInstance, data, user?.id)
     return c.json(formatOneSubjectWithSpecimensResponse(result), 201)
   } catch (error) {
     if (error instanceof z.ZodError) {

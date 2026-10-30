@@ -1,5 +1,4 @@
 import type { Database } from '../db/client'
-import type { DatabaseOrTransaction } from './db-types'
 import {
   containerDerivation,
   cryovialBox,
@@ -26,7 +25,7 @@ import { withWriteTransaction } from '../db/write-transaction'
 import { resolveParentContainerId } from './derivations/parent-container-resolver'
 import { normalizePosition } from './normalize-position'
 import { checkGridPositionOccupancy } from './container-occupancy'
-import { lookupParentCollectionId } from './container-write-placement'
+import { CollectionPlanner } from './specimen-registration/collections'
 
 /**
  * Map technical DB/constraint errors to messages that are clear for non-technical users.
@@ -306,7 +305,7 @@ export function parseCsv(text: string): DerivationCsvRow[] {
 }
 
 async function resolveCollectionId(
-  database: DatabaseOrTransaction,
+  database: Database,
   containerType: DerivationCsvRow['container_type'],
   { name: collectionName, barcode: collectionBarcode, paperParentType = 'box' }: ChildCollectionRef,
 ): Promise<{ id?: number; status: 'existing' | 'will_be_created' }> {
@@ -358,11 +357,13 @@ async function resolveCollectionId(
     // Paper goes on a sheet in the named box or bag; the sheet is created if missing,
     // but the box or bag itself must already exist.
     if (!collectionName) return { status: 'will_be_created' }
-    const parentId = await lookupParentCollectionId(database, {
+    const resolution = await new CollectionPlanner(database).resolveParent({
       type: paperParentType,
       name: collectionName.trim(),
     })
-    return parentId != null ? { id: parentId, status: 'existing' } : { status: 'will_be_created' }
+    return 'target' in resolution && 'existingId' in resolution.target
+      ? { id: resolution.target.existingId, status: 'existing' }
+      : { status: 'will_be_created' }
   }
 
   return { status: 'will_be_created' }
