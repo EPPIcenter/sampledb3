@@ -1,4 +1,10 @@
-import { subjectDateSelections, type ContainerExportData, type SubjectDateFilter } from '@sampledb/contract'
+import {
+  addSubjectDates,
+  subjectDateSelections,
+  type ContainerExportData,
+  type SubjectDateFilter,
+  type SubjectDateSelection,
+} from '@sampledb/contract'
 import type { Database } from '../../db/client'
 import {
   containerTypesFilter,
@@ -105,6 +111,11 @@ function exportSelectionFilters(filters: Omit<ExportFilters, 'study'>): Containe
     containerTypes: containerTypesFilter(filters.container_types),
     tagIds: filters.tag_ids,
   }
+}
+
+/** A Subject's dates for a subject-list selection; undefined when it selects all of them. */
+function subjectDateFilters(selection: SubjectDateSelection): SubjectDateFilter[] | undefined {
+  return selection.kind === 'dates' ? selection.filters : undefined
 }
 
 /** Subject names by Subject id, inverting a name to id map. */
@@ -260,14 +271,11 @@ export async function runSingleStudyContainerExportPost(
     })
   }
 
-  const subjects: SubjectSelectionEntry[] = [...subjectNameToId].map(([name, subjectId]) => {
-    const dates = subjectDates?.[name]
-    return {
-      studyId: studyRecord.id,
-      subjectId,
-      dates: dates == null ? undefined : Array.isArray(dates) ? dates : [dates],
-    }
-  })
+  const subjects: SubjectSelectionEntry[] = [...subjectNameToId].map(([name, subjectId]) => ({
+    studyId: studyRecord.id,
+    subjectId,
+    dates: subjectDateFilters(addSubjectDates(undefined, subjectDates?.[name])),
+  }))
   const result = await selectContainers(database, {
     kind: 'subjects',
     subjects,
@@ -391,7 +399,7 @@ export async function runMultiStudyContainerExportPost(
     for (const [subjectName, selection] of subjectDateSelections(studyEntries)) {
       const subjectId = subjectIds.get(subjectName)
       if (subjectId === undefined) continue
-      subjects.push({ studyId, subjectId, dates: selection.kind === 'dates' ? selection.filters : undefined })
+      subjects.push({ studyId, subjectId, dates: subjectDateFilters(selection) })
     }
   }
 

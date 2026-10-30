@@ -202,24 +202,34 @@ export function parseBarcodeExportFilterCsv(csvText: string): string[] {
 }
 
 /**
- * Fold subject-list filter rows into one collection-date selection per subject name.
- * A subject on several rows keeps every date (one per visit). A row with no date selects
- * all of that subject's dates, and wins over the subject's dated rows.
+ * Add one listing of a Subject's collection dates to the Subject's selection so far. A
+ * listing is one date filter, several (one per visit), or none: null, undefined or an empty
+ * list. Dated listings add up as alternatives. A listing with no dates selects all of the
+ * Subject's dates and wins over its dated listings, in either order.
+ */
+export function addSubjectDates(
+  selection: SubjectDateSelection | undefined,
+  dates: SubjectDateFilter | readonly SubjectDateFilter[] | null | undefined,
+): SubjectDateSelection {
+  if (selection?.kind === 'all') return selection
+  const listed = dates == null ? [] : Array.isArray(dates) ? dates : [dates as SubjectDateFilter]
+  if (listed.length === 0) return { kind: 'all' }
+  return { kind: 'dates', filters: [...(selection?.filters ?? []), ...listed] }
+}
+
+/**
+ * Fold subject-list filter rows into one collection-date selection per subject name, by
+ * `addSubjectDates`. A row with no date selects all of that subject's dates.
  */
 export function subjectDateSelections(rows: SingleStudyExportFilterRow[]): Map<string, SubjectDateSelection> {
   const selections = new Map<string, SubjectDateSelection>()
   for (const row of rows) {
-    const existing = selections.get(row.subject_name)
-    if (existing?.kind === 'all') continue
     const dateFilter: SubjectDateFilter | null = row.collection_date
       ? { exact: row.collection_date }
       : row.date_from || row.date_to
         ? { from: row.date_from, to: row.date_to }
         : null
-    selections.set(
-      row.subject_name,
-      dateFilter ? { kind: 'dates', filters: [...(existing?.filters ?? []), dateFilter] } : { kind: 'all' },
-    )
+    selections.set(row.subject_name, addSubjectDates(selections.get(row.subject_name), dateFilter))
   }
   return selections
 }

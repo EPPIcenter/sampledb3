@@ -1,5 +1,5 @@
 import { and, eq, inArray, or, type SQL } from 'drizzle-orm'
-import type { SubjectDateFilter } from '@sampledb/contract'
+import { addSubjectDates, type SubjectDateFilter, type SubjectDateSelection } from '@sampledb/contract'
 import type { Database } from '../../db/client'
 import { micronixTube, specimen, storageContainer, studySubject } from '../../db/schema'
 import { shiftCalendarDate } from '../datetime'
@@ -39,25 +39,23 @@ export function micronixBarcodeScopes(database: Database, barcodes: readonly str
 /**
  * The listed Subjects, a chunk at a time. A Subject listed under a Study it isn't in matches
  * nothing. A Subject with its own dates ignores the global collection-date range; one listed
- * undated, on any entry, gets the global range.
+ * undated, on any entry, gets the global range (`addSubjectDates`).
  */
 export async function subjectListScopes(
   database: Database,
   entries: readonly SubjectSelectionEntry[],
   options: { collectionDate: SQL[]; dateTolerance: number },
 ): Promise<SelectionScope[]> {
-  const datesBySubject = new Map<number, { studyId: number; dates: SubjectDateFilter[] | 'all' }[]>()
+  const datesBySubject = new Map<number, { studyId: number; dates: SubjectDateSelection | undefined }[]>()
   for (const entry of entries) {
     const listed = datesBySubject.get(entry.subjectId) ?? []
     let forStudy = listed.find((item) => item.studyId === entry.studyId)
     if (!forStudy) {
-      forStudy = { studyId: entry.studyId, dates: [] }
+      forStudy = { studyId: entry.studyId, dates: undefined }
       listed.push(forStudy)
       datesBySubject.set(entry.subjectId, listed)
     }
-    const dateConditions = entry.dates ?? []
-    if (dateConditions.length === 0) forStudy.dates = 'all'
-    else if (forStudy.dates !== 'all') forStudy.dates.push(...dateConditions)
+    forStudy.dates = addSubjectDates(forStudy.dates, entry.dates)
   }
 
   const scopes: SelectionScope[] = []
@@ -73,9 +71,9 @@ export async function subjectListScopes(
       const listed = datesBySubject.get(subject.id)?.find((item) => item.studyId === subject.studyId)
       if (!listed) continue
       const dateConditions =
-        listed.dates === 'all'
+        listed.dates?.kind !== 'dates'
           ? []
-          : listed.dates
+          : listed.dates.filters
               .map((dateFilter) => subjectDateCondition(dateFilter, options.dateTolerance))
               .filter((condition) => condition !== undefined)
       if (dateConditions.length === 0) undated.push(subject.id)
