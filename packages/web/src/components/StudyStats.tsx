@@ -3,7 +3,7 @@ import type { StudySummary, StudyTimelineData } from '../lib/api/studies';
 import StatCard from './StatCard'
 import StatChart from './StatChart'
 import { useDateFilter, defaultMinDate } from '../contexts/DateFilterContext'
-import { parseDisplayDate } from '../lib/date-utils'
+import { formatDate, parseDisplayDate } from '../lib/date-utils'
 
 interface StudyStatsProps {
   summary: StudySummary['summary']
@@ -28,7 +28,7 @@ function getISOWeek(date: Date): { year: number; week: number } {
 
 // Helper function to get bin key for a date based on bin size
 const getBinKey = (dateString: string, size: BinSize): string => {
-  const date = new Date(dateString)
+  const date = parseDisplayDate(dateString)
   const year = date.getFullYear()
   const month = date.getMonth() + 1
   const day = date.getDate()
@@ -58,7 +58,7 @@ const getBinKey = (dateString: string, size: BinSize): string => {
 const formatBinKey = (key: string, size: BinSize): string => {
   switch (size) {
     case 'day': {
-      const date = new Date(key)
+      const date = parseDisplayDate(key)
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     }
     case 'week': {
@@ -88,7 +88,7 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
   const filteredData = useMemo(() => {
     if (!timelineData) return null
 
-    const minTimestamp = minDate ? new Date(minDate).getTime() : 0
+    const minTimestamp = minDate ? parseDisplayDate(minDate).getTime() : 0
     const maxTimestamp = maxDate ? new Date(maxDate + 'T23:59:59').getTime() : Number.MAX_SAFE_INTEGER
 
     const filteredSpecimens: Array<{
@@ -107,7 +107,7 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
           }
           return
         }
-        const timestamp = new Date(specimen.collectionDate).getTime()
+        const timestamp = parseDisplayDate(specimen.collectionDate).getTime()
         if (timestamp >= minTimestamp && timestamp <= maxTimestamp) {
           filteredSpecimens.push(specimen)
         }
@@ -152,8 +152,8 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
 
     const studyDurationDays = collectionDateRange
       ? Math.ceil(
-          (new Date(collectionDateRange.latest).getTime() -
-            new Date(collectionDateRange.earliest).getTime()) /
+          (parseDisplayDate(collectionDateRange.latest).getTime() -
+            parseDisplayDate(collectionDateRange.earliest).getTime()) /
             (1000 * 60 * 60 * 24)
         )
       : null
@@ -182,8 +182,8 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
                 if (!spec.collectionDate) {
                   return minDate === defaultMinDate || !minDate
                 }
-                const timestamp = new Date(spec.collectionDate).getTime()
-                const minTimestamp = minDate ? new Date(minDate).getTime() : 0
+                const timestamp = parseDisplayDate(spec.collectionDate).getTime()
+                const minTimestamp = minDate ? parseDisplayDate(minDate).getTime() : 0
                 const maxTimestamp = maxDate ? new Date(maxDate + 'T23:59:59').getTime() : Number.MAX_SAFE_INTEGER
                 return timestamp >= minTimestamp && timestamp <= maxTimestamp
               })
@@ -234,7 +234,7 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
     switch (size) {
       case 'day': {
         // binKey is in format "YYYY-MM-DD"
-        return new Date(binKey).getTime()
+        return parseDisplayDate(binKey).getTime()
       }
       case 'week': {
         // binKey is in format "YYYY-WW" (ISO week)
@@ -272,7 +272,7 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
         return new Date(parseInt(binKey), 0, 1).getTime()
       }
       default:
-        return new Date(binKey).getTime()
+        return parseDisplayDate(binKey).getTime()
     }
   }
 
@@ -360,17 +360,9 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
               <div>
                 <p className="text-sm dashboard-stat-muted mb-1">Collection Date Range</p>
                 <p className="dashboard-stat-value font-medium">
-                  {parseDisplayDate(displaySummary.collectionDateRange.earliest).toLocaleDateString('en-US', {
-                    month: 'long',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}{' '}
+                  {formatDate(displaySummary.collectionDateRange.earliest, 'long')}{' '}
                   -{' '}
-                  {parseDisplayDate(displaySummary.collectionDateRange.latest).toLocaleDateString('en-US', {
-                    month: 'long',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
+                  {formatDate(displaySummary.collectionDateRange.latest, 'long')}
                 </p>
               </div>
             )}

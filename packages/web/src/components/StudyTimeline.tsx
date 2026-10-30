@@ -13,6 +13,7 @@ import { useDateFilter } from '../contexts/DateFilterContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { getAppAxisColors } from '../lib/chart-colors'
 import DateFilterControls from './DateFilterControls'
+import { formatDate, parseDisplayDate } from '../lib/date-utils'
 
 interface StudyTimelineProps {
   data: StudyTimelineData
@@ -44,16 +45,6 @@ interface ScatterDataPoint {
   collectionDate: string
 }
 
-// Memoized date formatter
-const formatCollectionDate = (dateString: string): string => {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-  })
-}
-
 export default function StudyTimeline({ data }: StudyTimelineProps) {
   const navigate = useNavigate()
   const { theme } = useTheme()
@@ -78,7 +69,7 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
 
   // Pre-calculate timestamp boundaries once
   const timestampBounds = useMemo(() => {
-    const minTimestamp = minDate ? new Date(minDate).getTime() : 0
+    const minTimestamp = minDate ? parseDisplayDate(minDate).getTime() : 0
     const maxTimestamp = maxDate ? new Date(maxDate + 'T23:59:59').getTime() : Number.MAX_SAFE_INTEGER
     return { minTimestamp, maxTimestamp }
   }, [minDate, maxDate])
@@ -93,7 +84,7 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
       subject.specimens.forEach((specimen) => {
         if (!specimen.collectionDate) return
         
-        const timestamp = new Date(specimen.collectionDate).getTime()
+        const timestamp = parseDisplayDate(specimen.collectionDate).getTime()
         if (timestamp >= minTimestamp && timestamp <= maxTimestamp) {
           points.push({
             x: timestamp,
@@ -657,7 +648,7 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
             <p className="font-semibold text-app-text">{tooltip.point.subjectName}</p>
             <p className="text-sm text-app-text-muted">{tooltip.point.specimenTypeName}</p>
             <p className="text-xs text-app-text-muted">
-              {formatCollectionDate(tooltip.point.collectionDate)}
+              {formatDate(tooltip.point.collectionDate)}
             </p>
             <p className="text-xs text-app-text-muted mt-1">Click to view specimen</p>
           </div>

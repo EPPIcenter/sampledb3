@@ -421,6 +421,55 @@ describe('Export API', () => {
     })
   })
 
+  describe('POST /api/export/containers subject_dates', () => {
+    async function seedSubjectWithSpecimen() {
+      const study = await createTestStudy(ctx.db, { title: 'Dates Study', shortCode: 'DATES1' })
+      const subject = await createTestStudySubject(ctx.db, { studyId: study.id, name: 'Subj1' })
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'Blood' })
+      const spec = await createTestSpecimen(ctx.db, specimenType.id, { studySubjectId: subject.id })
+      await ctx.db.update(specimenTable).set({ collectionDate: '2024-01-15' }).where(eq(specimenTable.id, spec.id))
+      await createTestStorageContainer(ctx.db, { specimenId: spec.id })
+    }
+
+    function countFor(subjectDates: unknown) {
+      return ctx.request('/api/export/containers', {
+        method: 'POST',
+        json: { study: 'DATES1', subject_names: ['Subj1'], count_only: true, subject_dates: subjectDates },
+      })
+    }
+
+    it.each([
+      ['an empty entry', { Subj1: {} }],
+      ['a non-object map', 'Subj1'],
+      ['a non-string date', { Subj1: { exact: 20240115 } }],
+    ])('rejects %s with 400', async (_label, subjectDates) => {
+      await seedSubjectWithSpecimen()
+
+      const res = await countFor(subjectDates)
+
+      expect(res.status).toBe(400)
+    })
+
+    it('treats an empty list as every date for that subject', async () => {
+      await seedSubjectWithSpecimen()
+
+      const res = await countFor({ Subj1: [] })
+
+      expect(res.status).toBe(200)
+      expect(((await res.json()) as { count: number }).count).toBe(1)
+    })
+
+    it('filters by the listed dates', async () => {
+      await seedSubjectWithSpecimen()
+
+      const hit = await countFor({ Subj1: [{ exact: '2024-01-15' }] })
+      const miss = await countFor({ Subj1: [{ from: '2024-02-01' }] })
+
+      expect(((await hit.json()) as { count: number }).count).toBe(1)
+      expect(((await miss.json()) as { count: number }).count).toBe(0)
+    })
+  })
+
   describe('POST /api/export/containers/validate-studies', () => {
     it('returns valid and invalid study codes', async () => {
       await createTestStudy(ctx.db, { title: 'Valid', shortCode: 'VALID' })

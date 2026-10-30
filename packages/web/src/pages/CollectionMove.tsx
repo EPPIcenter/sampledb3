@@ -1,11 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { invalidateAfterBulkWrite } from '../lib/query-client'
 import { collectionsApi } from '../lib/api/collections'
 import CollectionMoveTreePicker, { type Collection } from '../components/CollectionMoveTreePicker'
 import LocationTreePicker, { type LocationSelection } from '../components/LocationTreePicker'
-import { useUser } from '../contexts/UserContext'
+import WriteGuard from '../components/WriteGuard'
 import { useAllCollections } from '../hooks/useCollections'
 import { useLocationsList } from '../hooks/useLocations'
 import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
@@ -25,23 +24,13 @@ function fromKey(key: string): { type: CollectionType; id: number } {
 }
 
 export default function CollectionMove() {
-  const navigate = useNavigate()
-  const { canWrite } = useUser()
-
-  // Redirect if user doesn't have write permissions
-  useEffect(() => {
-    if (!canWrite) {
-      navigate('/', { replace: true })
-    }
-  }, [canWrite, navigate])
-
-  if (!canWrite) {
-    return null
-  }
-  return <CollectionMoveContent />
+  return (
+    <WriteGuard redirectTo="/">
+      <CollectionMoveContent />
+    </WriteGuard>
+  )
 }
 
-/** Split out so its hooks run on every render, whatever canWrite is. */
 function CollectionMoveContent() {
   const queryClient = useQueryClient()
   const [currentStep, setCurrentStep] = useState<Step>('select-collections')

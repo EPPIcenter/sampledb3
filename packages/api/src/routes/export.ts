@@ -41,15 +41,19 @@ function parseTagIdsFromBody(body: unknown): number[] | undefined {
   return ids.length > 0 ? ids : undefined
 }
 
-/** One per-Subject collection date: an exact date or a range. */
+/** One per-Subject collection date: an exact date or a range with at least one end. */
 const subjectDateFilterSchema = z.union([
-  z.strictObject({ exact: z.string() }),
-  z.strictObject({ from: z.string().optional(), to: z.string().optional() }),
+  z.strictObject({ exact: z.string().min(1) }),
+  z
+    .strictObject({ from: z.string().min(1).optional(), to: z.string().min(1).optional() })
+    .refine((range) => range.from !== undefined || range.to !== undefined, {
+      message: 'A date range needs from or to',
+    }),
 ])
 
 /**
  * `subject_dates` of a single-study POST export: per subject name, one date filter, several
- * (one per visit), or null for undated.
+ * (one per visit), or null for undated. An empty list also exports every date for that subject.
  */
 const subjectDatesSchema = z
   .record(z.string(), z.union([subjectDateFilterSchema, z.array(subjectDateFilterSchema), z.null()]))

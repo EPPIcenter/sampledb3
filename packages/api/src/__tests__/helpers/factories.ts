@@ -22,7 +22,10 @@ import {
   staticWell,
   paper,
   storageContainerTag,
+  specimenTypeContainerType,
+  containerTypeUnit,
 } from '../../db/schema'
+import type { ContainerType } from '../../lib/container-creation'
 import { utcNow } from '../../lib/datetime'
 
 /**
@@ -94,6 +97,28 @@ export async function createTestUnit(db: Database, data: {
   category: string
 }) {
   const [result] = await db.insert(unit).values(data).returning()
+  return result
+}
+
+/**
+ * Allow a container type for a specimen type (specimen_type_container_type)
+ */
+export async function createTestSpecimenTypeContainerType(db: Database, data: {
+  specimenTypeId: number
+  containerType: ContainerType
+}) {
+  const [result] = await db.insert(specimenTypeContainerType).values(data).returning()
+  return result
+}
+
+/**
+ * Allow a unit for a container type (container_type_unit)
+ */
+export async function createTestContainerTypeUnit(db: Database, data: {
+  containerType: ContainerType
+  unitId: number
+}) {
+  const [result] = await db.insert(containerTypeUnit).values(data).returning()
   return result
 }
 

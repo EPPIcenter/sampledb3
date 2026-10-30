@@ -292,27 +292,30 @@ export async function runBulkCombinedImport(
 }
 
 /**
- * Check a bulk combined import by running it in full_file mode and rolling it back.
- * Reports every problem, whatever atomicMode the import will use.
+ * Check a bulk combined import by running it and rolling it back, in the payload's atomicMode,
+ * and report every problem. Validate passes exactly when the import would succeed.
  *
- * For a full_file import, validate passes exactly when the import succeeds. A per_subject import
- * commits each subject that passes, so there validate passes exactly when every subject imports,
- * and each subject it flags is one the import rejects. The import can reject more: a subject that
- * relies on something an earlier, failing subject would have created (a new plate or sheet) fails
- * too, while validate, checking the file as one import, flags only the earlier subject.
+ * per_subject runs each subject in its own savepoint, as the import does: a failed subject's
+ * writes are rolled back before the next subject runs, so a subject that relies on a collection
+ * a failed subject would have created is flagged too.
  */
 export async function validateBulkCombinedPayload(
   database: Database,
-  payload: Omit<BulkCombinedPayload, 'atomicMode'>
+  payload: BulkCombinedPayload
 ): Promise<{ valid: boolean; errors: BulkCombinedError[] }> {
+  const { studyShortCode, atomicMode, subjects } = payload
   return withRolledBackTransaction(database, async (tx) => {
-    try {
-      await registerSubjects(tx, payload.studyShortCode, payload.subjects, undefined, CSV_INPUT_NAME)
-      return { valid: true, errors: [] }
-    } catch (error) {
-      if (error instanceof BulkCombinedRejected) return { valid: false, errors: error.errors }
-      throw error
+    const errors: BulkCombinedError[] = []
+    const batches = atomicMode === 'per_subject' ? subjects.map((subject, i) => ({ first: i, subjects: [subject] })) : [{ first: 0, subjects }]
+    for (const batch of batches) {
+      try {
+        await withWriteTransaction(tx, (savepoint) => registerSubjects(savepoint, studyShortCode, batch.subjects, undefined, CSV_INPUT_NAME))
+      } catch (error) {
+        if (!(error instanceof BulkCombinedRejected)) throw error
+        errors.push(...error.errors.map((e) => ({ ...e, subjectIndex: batch.first + e.subjectIndex })))
+      }
     }
+    return { valid: errors.length === 0, errors }
   })
 }
 
