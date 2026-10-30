@@ -6,7 +6,7 @@
 import { and, eq, getTableColumns, inArray, type SQL } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { specimen, storageContainer, studySubject } from '../../db/schema'
-import type { ContainerSubtype } from '../container-placement'
+import { CONTAINER_SUBTYPES, type ContainerSubtype } from '../container-placement'
 import {
   containerFilterConditions,
   containerTypeSql,
@@ -15,7 +15,6 @@ import {
   specimenFilterConditions,
 } from './conditions'
 import { micronixBarcodeScopes, subjectListScopes, type SelectionScope } from './scopes'
-import { CONTAINER_TYPES } from './filters'
 import type {
   ContainerSelection,
   ContainerSelectionResult,
@@ -26,7 +25,7 @@ import type {
 
 export * from './types'
 export { containerHasAllTags, hasContainerLevelFilter } from './conditions'
-export { CONTAINER_TYPES, containerTypesFilter, specimenSourceType } from './filters'
+export { containerTypesFilter, specimenSourceType } from './filters'
 
 /** Select the Containers and Specimens a selection matches, with each Container's type. */
 export async function selectContainers(
@@ -69,7 +68,7 @@ export async function selectContainerSelectionTypes(
   }
   return {
     specimenTypeIds: [...specimenTypeIds].sort((a, b) => a - b),
-    containerTypes: CONTAINER_TYPES.filter((type) => containerTypes.has(type)),
+    containerTypes: CONTAINER_SUBTYPES.filter((type) => containerTypes.has(type)),
   }
 }
 

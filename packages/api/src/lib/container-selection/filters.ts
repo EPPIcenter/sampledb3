@@ -1,14 +1,5 @@
-import type { ContainerSubtype } from '../container-placement'
+import { CONTAINER_SUBTYPES, type ContainerSubtype } from '../container-placement'
 import type { SpecimenSourceType } from './types'
-
-/** Every Container type, in display order. `'unknown'` is a Container with no subtype row. */
-export const CONTAINER_TYPES = [
-  'micronix_tube',
-  'cryovial_tube',
-  'paper',
-  'static_well',
-  'unknown',
-] as const satisfies readonly ContainerSubtype[]
 
 /**
  * Narrow wire container types to the Container types filter. No values means every type;
@@ -16,7 +7,7 @@ export const CONTAINER_TYPES = [
  */
 export function containerTypesFilter(values: readonly string[] | undefined): ContainerSubtype[] | undefined {
   if (!values || values.length === 0) return undefined
-  return CONTAINER_TYPES.filter((type) => values.includes(type))
+  return CONTAINER_SUBTYPES.filter((type) => values.includes(type))
 }
 
 /** Narrow a wire source type; anything other than `'subject'` or `'control'` means both. */

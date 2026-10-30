@@ -82,6 +82,6 @@ export interface ContainerSelectionResult {
 export interface ContainerSelectionTypes {
   /** Specimen type ids, ascending. */
   specimenTypeIds: number[]
-  /** Container types, in `CONTAINER_TYPES` order; `'unknown'` when a Container has no subtype row. */
+  /** Container types, in `CONTAINER_SUBTYPES` order; `'unknown'` when a Container has no subtype row. */
   containerTypes: ContainerSubtype[]
 }
