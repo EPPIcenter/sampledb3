@@ -18,6 +18,7 @@ import { useUser } from '../contexts/UserContext'
 import { useToast } from '../contexts/ToastContext'
 import '../styles/qpcr.css'
 import { bytesToBase64 } from '../lib/base64'
+import { defaultScannerConfiguration } from '../lib/scanner-configurations'
 import { EMPTY_LIST } from '../lib/empty-list'
 
 const PLATE_ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const
@@ -168,11 +169,9 @@ export default function QpcrExperimentDetail() {
   }, [experimentQuery.data])
 
   useEffect(() => {
-    if (scannerConfigs.length === 0) return
-    const defaultConfig = scannerConfigs.find((c) => c.isDefault === true) ?? scannerConfigs[0]
-    if (selectedConfigId === null) {
-      setSelectedConfigId(defaultConfig.id)
-    }
+    if (selectedConfigId !== null) return
+    const defaultConfig = defaultScannerConfiguration(scannerConfigs)
+    if (defaultConfig) setSelectedConfigId(defaultConfig.id)
   }, [scannerConfigs, selectedConfigId])
 
   // Sync form state from data.experiment when it changes (during render to avoid extra pass)

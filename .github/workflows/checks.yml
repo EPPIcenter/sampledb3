@@ -9,9 +9,11 @@ on:
 permissions:
   contents: read
 
+# A newer push to a PR supersedes its older run; runs on main each check a different merge, so
+# they all finish.
 concurrency:
   group: checks-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:

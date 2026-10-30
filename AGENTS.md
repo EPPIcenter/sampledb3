@@ -45,7 +45,7 @@ Install repo hooks once per clone:
 bun run setup:hooks
 ```
 
-The pre-commit hook runs `typecheck` on `@sampledb/contract`, `@sampledb/api`, and/or `@sampledb/web` when staged files touch those packages (or Docker/build config), and lints the staged API/web source files. To mirror CI fully before pushing:
+The pre-commit hook runs `typecheck` on `@sampledb/contract`, `@sampledb/api`, and/or `@sampledb/web` when staged files touch those packages (or Docker/build config), and lints the staged API/web source files. It refuses a source file with unstaged edits, since eslint would lint the working-tree copy. To mirror CI fully before pushing:
 
 ```bash
 bun run ci:verify
