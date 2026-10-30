@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate, useParams, useSearchParams, Navigate } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { invalidateAfterBulkWrite } from '../lib/query-client'
 import BatchInfoStep from '../components/wizards/BatchInfoStep'
@@ -14,7 +14,7 @@ import {
   useControlBatchWizardBootstrap,
   useControlDefinitionWizardSeed,
 } from '../hooks/useControls'
-import { useUser } from '../contexts/UserContext'
+import WriteGuard from '../components/WriteGuard'
 import { PageError, fromQuery, getHttpStatus, getQueryErrorMessage } from '../ui'
 import '../styles/blood-controls.css'
 import { localToday } from '../lib/date-utils'
@@ -105,14 +105,13 @@ export function canProceedToReview(
 }
 
 export default function ControlBatchWizard() {
-  const { canWrite } = useUser()
-  if (!canWrite) {
-    return <Navigate to="/blood-controls" replace />
-  }
-  return <ControlBatchWizardContent />
+  return (
+    <WriteGuard redirectTo="/blood-controls">
+      <ControlBatchWizardContent />
+    </WriteGuard>
+  )
 }
 
-/** Split out so its hooks run on every render, whatever canWrite is. */
 function ControlBatchWizardContent() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
