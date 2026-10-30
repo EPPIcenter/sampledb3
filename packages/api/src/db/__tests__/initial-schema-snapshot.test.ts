@@ -92,6 +92,8 @@ function describeSchema(sqlite: Database) {
  * what the numbered migrations build on top of an older install.
  */
 describe('initial_schema.sql snapshot', () => {
+  // Not openOperationalDatabase: it evolves the schema, which would run migrations over a snapshot
+  // that lags them. This database holds what initial_schema.sql alone creates.
   const sqlite = new Database(':memory:')
   applyInitialSchema(sqlite)
   afterAll(() => sqlite.close())
