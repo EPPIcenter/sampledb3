@@ -37,6 +37,15 @@ function isTutorialShortCode(shortCode: string): boolean {
  * @param database - Database instance (required)
  * @param sqliteDatabase - Raw SQLite database instance (required for raw queries)
  */
+/**
+ * Ids of every specimen in a study, as a subquery rather than an id list, so large
+ * studies stay under SQLite's parameter limit.
+ */
+function studySpecimenIdsQuery(database: Database, studyId: number) {
+  const studySubjectIds = database.select({ id: studySubject.id }).from(studySubject).where(eq(studySubject.studyId, studyId))
+  return database.select({ id: specimen.id }).from(specimen).where(inArray(specimen.studySubjectId, studySubjectIds))
+}
+
 export function createStudiesRoutes(database: Database, sqliteDatabase: SQLiteDatabase): Hono {
   const studies = new Hono()
   const authMiddleware = createAuthMiddleware(database)
@@ -318,10 +327,7 @@ studies.get('/:id/summary', authMiddleware, async (c) => {
     const specimenTypeMap = new Map(specimenTypes.map(st => [st.id, st.name]))
 
     // Get all containers for these specimens
-    const studySpecimenIds = database
-      .select({ id: specimen.id })
-      .from(specimen)
-      .where(inArray(specimen.studySubjectId, database.select({ id: studySubject.id }).from(studySubject).where(eq(studySubject.studyId, id))))
+    const studySpecimenIds = studySpecimenIdsQuery(database, id)
     const containers = await database
       .select()
       .from(storageContainer)
@@ -720,9 +726,7 @@ studies.delete('/:id', memberMiddleware, async (c) => {
       .where(eq(studySubject.studyId, id))
 
     const subjectIds = subjects.map((s) => s.id)
-    // Subqueries, not id lists, so large studies stay under SQLite's parameter limit.
-    const studySubjectIds = database.select({ id: studySubject.id }).from(studySubject).where(eq(studySubject.studyId, id))
-    const studySpecimenIds = database.select({ id: specimen.id }).from(specimen).where(inArray(specimen.studySubjectId, studySubjectIds))
+    const studySpecimenIds = studySpecimenIdsQuery(database, id)
     const specimenIds = (await studySpecimenIds).map((s) => s.id)
     const containerIds = (
       await database
