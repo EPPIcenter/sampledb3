@@ -7,7 +7,9 @@ import {
   resolveContainerByBarcode,
   resolveStudiesByShortCodes,
   resolveSpecimenTypesByNames,
+  resolveSubjectNamesByStudy,
 } from '../identifier-resolution'
+import { SQL_IN_CHUNK_SIZE } from '../sql-helpers'
 import { createTestStudy, createTestStudySubject, createTestSpecimenType, createTestStorageContainer, createTestStorageType, createTestLocation } from '../../__tests__/helpers/factories'
 import { box, sheet, paper } from '../../db/schema'
 import { utcNow } from '../datetime'
@@ -130,6 +132,30 @@ describe('identifier-resolution lib', () => {
       const st = await createTestSpecimenType(testDb, { name: 'Serum' })
       const map = await resolveSpecimenTypesByNames(testDb, ['Serum'])
       expect(map.get('Serum')).toBe(st.id)
+    })
+  })
+
+  describe('resolveSubjectNamesByStudy', () => {
+    it("resolves the Study's Subjects by name, and not another Study's", async () => {
+      const study = await createTestStudy(testDb, { title: 'S', shortCode: 'S1' })
+      const other = await createTestStudy(testDb, { title: 'O', shortCode: 'O1' })
+      const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'P1' })
+      await createTestStudySubject(testDb, { studyId: other.id, name: 'P2' })
+
+      const map = await resolveSubjectNamesByStudy(testDb, ['P1', 'P2', 'P1'], study.id)
+
+      expect(map).toEqual(new Map([['P1', subject.id]]))
+    })
+
+    it('resolves every listed name when the list has more names than SQLite allows as bound parameters', async () => {
+      const study = await createTestStudy(testDb, { title: 'S', shortCode: 'S1' })
+      const first = await createTestStudySubject(testDb, { studyId: study.id, name: 'FIRST' })
+      const last = await createTestStudySubject(testDb, { studyId: study.id, name: 'LAST' })
+      const unknown = Array.from({ length: SQL_IN_CHUNK_SIZE * 140 }, (_, i) => `UNKNOWN${i}`)
+
+      const map = await resolveSubjectNamesByStudy(testDb, ['FIRST', ...unknown, 'LAST'], study.id)
+
+      expect(map).toEqual(new Map([['FIRST', first.id], ['LAST', last.id]]))
     })
   })
 })

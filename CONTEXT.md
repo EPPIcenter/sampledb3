@@ -137,6 +137,10 @@ _Avoid_: Well (as the domain term); treating a missing position as occupying a s
 
 ### Export
 
+**Container selection**:
+The set of **Containers**, with their **Specimens**, that a set of filters matches: a **Study**, a subject list, or a micronix barcode list, narrowed by specimen type, collection date, container type, **Tags**, **Location**, and when the Specimen or the Container was created. Selecting several Tags matches Containers carrying every one of them. A barcode list selects exactly those tubes and takes no other filters. **Container export** and the statistics dashboard both count and list what the selection matches.
+_Avoid_: Query (implementation term); treating Tag selection as "any of these Tags"; an unqualified "created" date (say Specimen created or Container created)
+
 **Container export**:
 Server-side export of operational **Container** records with specimen, source, and placement context, formatted using an **Export configuration**. Entry points include **Multi-Study Export** (page heading **Export Containers (Multi-Study)**), the Study export modal, and **Micronix Barcode Export**.
 _Avoid_: Using "bulk export" as the umbrella for all container exports; collection table snapshot export; using "sample" in export column headers

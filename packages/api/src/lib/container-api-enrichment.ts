@@ -5,12 +5,13 @@ import type {
   MicronixSubtypeDetails,
   PaperSubtypeDetails,
   StaticWellSubtypeDetails,
+  ContainerSubtype,
 } from './container-placement'
 import { loadContainerReadViews, type ContainerReadView } from './container-read-view'
 import type { CollectionInfo } from '../types/collections'
 
 export type EnrichedContainerApi = StorageContainer & {
-  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well' | 'unknown'
+  containerType: ContainerSubtype
   tags: Array<{ id: number; name: string }>
   unit: Unit | undefined
   location: Location | null

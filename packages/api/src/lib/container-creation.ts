@@ -3,8 +3,10 @@ import type { ContainerWriteInput } from '@sampledb/contract'
 import type { DatabaseOrTransaction } from './db-types'
 import { registerSpecimens, SpecimenRegistrationError } from './specimen-registration'
 import { ConflictError } from './error-handler'
+import type { ContainerSubtype } from './container-placement'
 
-export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+/** A Container subtype a write can name; `unknown` is only read back. */
+export type ContainerType = Exclude<ContainerSubtype, 'unknown'>
 
 export type ContainerQuantity = {
   unitId?: number

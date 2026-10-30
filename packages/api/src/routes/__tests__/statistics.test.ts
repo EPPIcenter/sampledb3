@@ -5,6 +5,7 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createStatisticsRoutes } from '../statistics'
+import { createTestSpecimenType, createTestStorageContainer } from '../../__tests__/helpers/factories'
 
 describe('Statistics API', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -17,8 +18,8 @@ describe('Statistics API', () => {
         password: 'password123',
         role: 'admin',
       },
-      mount: (app, { db, sqlite }) => {
-        app.route('/api/statistics', createStatisticsRoutes(db, sqlite))
+      mount: (app, { db }) => {
+        app.route('/api/statistics', createStatisticsRoutes(db))
       },
     })
   })
@@ -45,6 +46,20 @@ describe('Statistics API', () => {
       expect(res.status).toBe(200)
       const data = (await res.json()) as Record<string, unknown>
       expect(data).toBeDefined()
+    })
+
+    it('filters by a numeric specimen_type_id and ignores a non-numeric one or location_id', async () => {
+      await createTestStorageContainer(ctx.db)
+      const otherType = await createTestSpecimenType(ctx.db, { name: 'Other type' })
+      const total = async (query: string) => {
+        const res = await ctx.request(`/api/statistics${query}`, { method: 'GET' })
+        expect(res.status).toBe(200)
+        return ((await res.json()) as { specimens: { total: number } }).specimens.total
+      }
+
+      expect(await total('')).toBe(1)
+      expect(await total(`?specimen_type_id=${otherType.id}`)).toBe(0)
+      expect(await total('?specimen_type_id=abc&location_id=abc')).toBe(1)
     })
 
     it('returns 401 without auth', async () => {
