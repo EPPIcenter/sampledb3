@@ -36,3 +36,8 @@ We put **Specimen registration** (see [CONTEXT.md](../../CONTEXT.md)) behind one
 - Validate endpoints keep their wire shapes; each route maps module errors to its existing response.
 - Bulk combined validate runs the import in its `atomicMode` and rolls it back. For `per_subject` it runs each subject in its own savepoint inside the rolled-back transaction, rolling back a subject that fails and keeping the ones that pass until the end, as the import does. So validate flags exactly the subjects the import rejects, including a subject that relies on a collection a failed subject would have created.
 - Migration is in slices, each deleting the code it replaces: bulk combined import, `/subjects/with-specimens`, and `/specimens/bulk`; `POST /specimens` and add-container; derivations and the derivation CSV; control batches. `/subjects/with-specimens` and `/specimens/bulk` moved into the first slice: the first shares bulk combined's code, and the second's validator was the last user of the old placement resolver (ADR 0006).
+
+## Related ADRs
+
+- [ADR 0006: Unified container inbound write](./0006-unified-container-inbound-write.md) — amended by this ADR. Its single write executor is now `registerSpecimens`, with `createContainerForSpecimen` a wrapper for callers not yet migrated, and its one placement module is `lib/specimen-registration/collections.ts`, which replaced `container-write-placement.ts`. `ContainerWriteInput` stays the container shape registration takes.
+- [ADR 0007: Specimen source resolution](./0007-specimen-source-resolution.md) — the read side of **Source**; registration takes a Source already resolved to a record id.
