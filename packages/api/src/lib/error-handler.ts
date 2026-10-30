@@ -123,6 +123,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
       // Log error asynchronously (non-blocking)
       logBackendError(database, error, errorContext).catch(logPersistFailure)
       return c.json({
+        ...error.fields,
         error: error.message,
         errorCode: 'CONFLICT',
         ...(error.details !== undefined && { details: error.details }),
@@ -204,7 +205,12 @@ export class NotFoundError extends Error {
 }
 
 export class ConflictError extends Error {
-  constructor(message: string, public details?: unknown) {
+  /** `details` goes in the 409 body as `details`; `fields` are added next to `error` (e.g. the record that conflicts). */
+  constructor(
+    message: string,
+    public readonly details?: unknown,
+    public readonly fields: Record<string, unknown> = {}
+  ) {
     super(message)
     this.name = 'ConflictError'
   }

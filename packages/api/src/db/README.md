@@ -10,6 +10,8 @@ Use `openOperationalDatabase(optionalPath?)` from the client module. It resolves
 
 Tests should use the same entry point (e.g. `openOperationalDatabase(':memory:')` via `setupTestDatabase()`), except a test that checks the snapshot itself: `__tests__/initial-schema-snapshot.test.ts` applies `initial_schema.sql` alone, because the entry point would run pending migrations on top and hide a stale snapshot.
 
+**Exception: read-only inspection.** `scripts/check-integrity.ts` opens the file with `new Database(path, { readonly: true })` instead. It is often pointed at a backup, and `openOperationalDatabase` would migrate it and enable WAL (both are writes). Resolve the path with `resolveOperationalDatabasePath` so it finds the same file. Any other tool that only reads, and must leave the file as it found it, should do the same.
+
 ## Transactions
 
 The API shares one `bun:sqlite` connection across all requests, so a transaction that stays open across `await` is visible to every request that runs while it is open. Use the helpers in `write-transaction.ts`:

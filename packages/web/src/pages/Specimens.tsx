@@ -15,7 +15,7 @@ import {
   getQueryErrorMessage,
 } from '../ui'
 import '../styles/subject-specimen.css'
-import { parseDisplayDate } from '../lib/date-utils'
+import { formatDate } from '../lib/date-utils'
 
 type SpecimenListRow = Specimen & {
   study?: { shortCode?: string }
@@ -88,10 +88,7 @@ export default function Specimens() {
     setSearchParams(params, { replace: options?.replace })
   }
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return '—'
-    return parseDisplayDate(dateString).toLocaleDateString()
-  }
+  const formatTableDate = (dateString?: string) => (dateString ? formatDate(dateString, 'numeric') : '—')
 
   const columns: Column<SpecimenListRow>[] = [
     {
@@ -117,13 +114,13 @@ export default function Specimens() {
       key: 'collectionDate',
       label: 'Collected',
       sortable: true,
-      render: (value) => formatDate(value as string),
+      render: (value) => formatTableDate(value as string),
     },
     {
       key: 'created',
       label: 'Created',
       sortable: true,
-      render: (value) => formatDate(value as string),
+      render: (value) => formatTableDate(value as string),
     },
   ]
 

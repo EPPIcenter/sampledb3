@@ -87,6 +87,25 @@ describe('QpcrExperimentDetail', () => {
     })
   })
 
+  it('refetches the cached experiment after a well edit', async () => {
+    const emptyWell = {
+      id: 1, qpcrExperimentId: 1, wellPosition: 'A01', barcode: null, storageContainerId: null, specimenId: null,
+      contentType: 'unknown', standardDensity: null, cq: null, startingQuantity: null, cqMean: null, rawSampleName: null,
+    }
+    vi.mocked(qpcrExperimentsApi.get).mockResolvedValue({ ...mockDetail, wells: [emptyWell] } as never)
+    vi.mocked(qpcrExperimentsApi.updateWells).mockResolvedValue({
+      wells: [{ ...emptyWell, contentType: 'negative' }],
+    } as never)
+    const user = userEvent.setup()
+    await render(<QpcrExperimentDetail />)
+
+    await user.click(await screen.findByRole('button', { name: 'Set all empty to NTC' }))
+
+    await waitFor(() => expect(qpcrExperimentsApi.updateWells).toHaveBeenCalled())
+    // The page's experiment query is refetched, so a later visit does not show the old wells.
+    await waitFor(() => expect(qpcrExperimentsApi.get).toHaveBeenCalledTimes(2))
+  })
+
   it("keeps the selected well's container when an earlier well's reply arrives late", async () => {
     const well = (id: number, wellPosition: string, storageContainerId: number) => ({
       id, qpcrExperimentId: 1, wellPosition, barcode: `MT-${wellPosition}`, storageContainerId, specimenId: null,
