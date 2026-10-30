@@ -14,7 +14,7 @@ import {
   generateUniqueControlDefinitionName,
   isControlDefinitionNameTaken,
 } from '../lib/control-name-generation'
-import { handleRouteError, ValidationError } from '../lib/error-handler'
+import { ConflictError, handleRouteError, ValidationError } from '../lib/error-handler'
 import type { BloodControlProperties } from '../types/properties'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
@@ -47,6 +47,7 @@ import {
   strainCompositionEntrySchema,
   resolveStrainComposition,
   findBloodControlDefinitionByComposition,
+  DuplicateControlCompositionError,
   findMatchingDefinitionInList,
   buildBloodControlPropertiesPayload,
 } from '../lib/controls/strain-composition'
@@ -467,10 +468,7 @@ controls.post('/', memberMiddleware, async (c) => {
       targetDensityUnitId,
     })
     if (duplicate) {
-      return c.json({
-        error: 'A control definition with this combination of density and strains already exists',
-        existingDefinition: duplicate,
-      }, 409)
+      throw new DuplicateControlCompositionError(duplicate)
     }
 
     const props: Record<string, unknown> = { ...(properties || {}) }
@@ -497,7 +495,7 @@ controls.post('/', memberMiddleware, async (c) => {
       })
     } else {
       if (await isControlDefinitionNameTaken(dbInstance, finalName)) {
-        return c.json({ error: 'A control definition with this name already exists' }, 409)
+        throw new ConflictError('A control definition with this name already exists')
       }
     }
 
@@ -588,7 +586,7 @@ controls.patch('/:id', memberMiddleware, async (c) => {
 
     if (baseData.name !== undefined && baseData.name !== existing.name) {
       if (await isControlDefinitionNameTaken(dbInstance, baseData.name)) {
-        return c.json({ error: 'A control definition with this name already exists' }, 409)
+        throw new ConflictError('A control definition with this name already exists')
       }
     }
 
@@ -605,10 +603,7 @@ controls.patch('/:id', memberMiddleware, async (c) => {
         { excludeId: id },
       )
       if (duplicate) {
-        return c.json({
-          error: 'A control definition with this combination of density and strains already exists',
-          existingDefinition: duplicate,
-        }, 409)
+        throw new DuplicateControlCompositionError(duplicate)
       }
     }
 

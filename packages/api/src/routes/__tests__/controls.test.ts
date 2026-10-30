@@ -434,6 +434,11 @@ describe('Controls API', () => {
       const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { targetDensity: 100 } })
 
       expect(res.status).toBe(409)
+      expect(await res.json()).toMatchObject({
+        error: 'A control definition with this combination of density and strains already exists',
+        errorCode: 'CONFLICT',
+        existingDefinition: { name: 'D100' },
+      })
     })
 
     it('does not count the definition being edited as a duplicate', async () => {
