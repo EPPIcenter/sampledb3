@@ -123,28 +123,71 @@ function subjectNamesById(subjectIdsByName: ReadonlyMap<string, number>): Map<nu
   return new Map([...subjectIdsByName].map(([name, id]) => [id, name]))
 }
 
+/** Placeholder study for export metadata when an export spans Studies or has none (ADR 0011). */
+const MULTI_STUDY_RECORD: StudyRecord = {
+  id: 0,
+  shortCode: 'MULTI',
+  title: 'Multi-Study Export',
+  description: null,
+  leadPerson: '',
+  isLongitudinal: false,
+  created: '',
+  lastUpdated: '',
+  createdBy: null,
+  updatedBy: null,
+}
+
+/** The filters and Study a JSON export records in its metadata. */
+interface JsonExportMetadata {
+  filters: ExportFilters
+  study: StudyRecord
+}
+
+/** JSON export metadata for an export that spans Studies or has none. */
+const MULTI_STUDY_METADATA: JsonExportMetadata = { filters: { study: 'MULTI' }, study: MULTI_STUDY_RECORD }
+
+type FormattedContainerExport =
+  | { kind: 'json'; json: Awaited<ReturnType<typeof formatAsJSON>> }
+  | { kind: 'csv'; csv: string }
+  | { kind: 'xlsx'; xlsx: Buffer }
+
 async function formatContainerExport(
   database: Database,
   data: ContainerExportData[],
-  format: ContainerExportFormat,
-  filters: ExportFilters,
-  study: StudyRecord,
-  columns: string[] | undefined,
-  csvOptions: CSVExportOptions | undefined,
-  userId: number | null | undefined
-): Promise<{ csv?: string; xlsx?: Buffer; jsonData?: ContainerExportData[] }> {
+  params: {
+    format: ContainerExportFormat
+    columns: string[] | undefined
+    csvOptions: CSVExportOptions | undefined
+    userId: number | null | undefined
+    /** Defaults to the multi-study placeholder. */
+    metadata?: JsonExportMetadata
+  }
+): Promise<FormattedContainerExport> {
+  const { format, columns, csvOptions, userId, metadata = MULTI_STUDY_METADATA } = params
   if (format === 'json') {
-    const json = await formatAsJSON(database, data, filters, study, columns, userId)
-    return { jsonData: json.containers }
+    const json = await formatAsJSON(database, data, metadata.filters, metadata.study, columns, userId)
+    return { kind: 'json', json }
   }
 
   if (format === 'csv') {
-    const csv = await formatAsCSV(database, data, columns, csvOptions, userId)
-    return { csv }
+    return { kind: 'csv', csv: await formatAsCSV(database, data, columns, csvOptions, userId) }
   }
 
-  const xlsx = await formatAsExcel(database, data, columns, userId)
-  return { xlsx }
+  return { kind: 'xlsx', xlsx: await formatAsExcel(database, data, columns, userId) }
+}
+
+/** A formatted export's data, as `buildPostExportEnvelope` takes it. */
+function postEnvelopeData(
+  formatted: FormattedContainerExport,
+): { jsonData?: ContainerExportData[]; csv?: string; xlsx?: Buffer } {
+  switch (formatted.kind) {
+    case 'json':
+      return { jsonData: formatted.json.containers }
+    case 'csv':
+      return { csv: formatted.csv }
+    case 'xlsx':
+      return { xlsx: formatted.xlsx }
+  }
 }
 
 export async function runSingleStudyContainerExportGet(
@@ -157,12 +200,7 @@ export async function runSingleStudyContainerExportGet(
     userId?: number | null
     countOnly?: boolean
   }
-): Promise<
-  | { kind: 'count'; count: number }
-  | { kind: 'csv'; csv: string; filename: string }
-  | { kind: 'xlsx'; xlsx: Buffer; filename: string }
-  | { kind: 'json'; json: Awaited<ReturnType<typeof formatAsJSON>>; filename: string }
-> {
+): Promise<{ kind: 'count'; count: number } | (FormattedContainerExport & { filename: string })> {
   const { filters, format, columns, csvOptions, userId, countOnly } = params
   const studyRecord = await resolveStudyRecordByShortCode(database, filters.study)
   if (!studyRecord) {
@@ -193,22 +231,15 @@ export async function runSingleStudyContainerExportGet(
   }
 
   const enrichedData = await enrichContainerData(database, result.containers)
-
-  const timestamp = formatExportTimestamp()
-  const filenameBase = `study_${studyRecord.shortCode}_export_${timestamp}`
-
-  if (format === 'json') {
-    const json = await formatAsJSON(database, enrichedData, filters, studyRecord, columns, userId)
-    return { kind: 'json', json, filename: `${filenameBase}.json` }
-  }
-
-  if (format === 'csv') {
-    const csv = await formatAsCSV(database, enrichedData, columns, csvOptions, userId)
-    return { kind: 'csv', csv, filename: `${filenameBase}.csv` }
-  }
-
-  const xlsx = await formatAsExcel(database, enrichedData, columns, userId)
-  return { kind: 'xlsx', xlsx, filename: `${filenameBase}.xlsx` }
+  const formatted = await formatContainerExport(database, enrichedData, {
+    format,
+    columns,
+    csvOptions,
+    userId,
+    metadata: { filters, study: studyRecord },
+  })
+  const filenameBase = `study_${studyRecord.shortCode}_export_${formatExportTimestamp()}`
+  return { ...formatted, filename: `${filenameBase}.${formatted.kind}` }
 }
 
 export async function runSingleStudyContainerExportPost(
@@ -304,37 +335,20 @@ export async function runSingleStudyContainerExportPost(
     subjectIdToName
   )
 
-  const formatted = await formatContainerExport(
-    database,
-    enrichedData,
+  const formatted = await formatContainerExport(database, enrichedData, {
     format,
-    { ...filters, study: studyCode, date_tolerance: dateTolerance },
-    studyRecord,
     columns,
     csvOptions,
-    userId
-  )
+    userId,
+    metadata: { filters: { ...filters, study: studyCode, date_tolerance: dateTolerance }, study: studyRecord },
+  })
 
   return buildPostExportEnvelope({
     format,
     filenameBase: `study_${studyRecord.shortCode}_export_${formatExportTimestamp()}`,
     summary,
-    ...formatted,
+    ...postEnvelopeData(formatted),
   })
-}
-
-/** Placeholder study for export metadata when an export spans Studies or has none (ADR 0011). */
-const MULTI_STUDY_RECORD: StudyRecord = {
-  id: 0,
-  shortCode: 'MULTI',
-  title: 'Multi-Study Export',
-  description: null,
-  leadPerson: '',
-  isLongitudinal: false,
-  created: '',
-  lastUpdated: '',
-  createdBy: null,
-  updatedBy: null,
 }
 
 export async function runMultiStudyContainerExportPost(
@@ -365,17 +379,8 @@ export async function runMultiStudyContainerExportPost(
       errors: [`Invalid study codes: ${validation.invalid.join(', ')}`],
     }
     if (countOnly) return { count: 0, summary }
-    const formatted = await formatContainerExport(
-      database,
-      [],
-      format,
-      { study: 'MULTI' },
-      MULTI_STUDY_RECORD,
-      columns,
-      csvOptions,
-      userId
-    )
-    return buildPostExportEnvelope({ format, filenameBase, summary, ...formatted })
+    const formatted = await formatContainerExport(database, [], { format, columns, csvOptions, userId })
+    return buildPostExportEnvelope({ format, filenameBase, summary, ...postEnvelopeData(formatted) })
   }
 
   const entriesByStudy = new Map<number, MultiStudyExportEntry[]>()
@@ -447,18 +452,9 @@ export async function runMultiStudyContainerExportPost(
     return { count: enrichedData.length, summary }
   }
 
-  const formatted = await formatContainerExport(
-    database,
-    enrichedData,
-    format,
-    { study: 'MULTI' },
-    MULTI_STUDY_RECORD,
-    columns,
-    csvOptions,
-    userId
-  )
+  const formatted = await formatContainerExport(database, enrichedData, { format, columns, csvOptions, userId })
 
-  return buildPostExportEnvelope({ format, filenameBase, summary, ...formatted })
+  return buildPostExportEnvelope({ format, filenameBase, summary, ...postEnvelopeData(formatted) })
 }
 
 export async function runBarcodeContainerExportPost(
@@ -479,16 +475,7 @@ export async function runBarcodeContainerExportPost(
   const selected = await selectContainers(database, { kind: 'micronixBarcodes', barcodes: foundBarcodes })
   const enrichedData = await enrichContainerData(database, selected.containers)
 
-  const formatted = await formatContainerExport(
-    database,
-    enrichedData,
-    format,
-    { study: 'MULTI' },
-    MULTI_STUDY_RECORD,
-    columns,
-    csvOptions,
-    userId
-  )
+  const formatted = await formatContainerExport(database, enrichedData, { format, columns, csvOptions, userId })
 
   return buildPostExportEnvelope({
     format,
@@ -498,7 +485,7 @@ export async function runBarcodeContainerExportPost(
       barcodes_found: foundBarcodes,
       barcodes_not_found: barcodes.filter((barcode) => !barcodeToContainerId.has(barcode)),
     },
-    ...formatted,
+    ...postEnvelopeData(formatted),
   })
 }
 
