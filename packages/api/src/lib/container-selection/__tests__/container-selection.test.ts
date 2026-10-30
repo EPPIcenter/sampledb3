@@ -28,7 +28,14 @@ import {
 } from '../../../__tests__/helpers/factories'
 import type { Database } from '../../../db/client'
 import { storageContainer as storageContainerTable } from '../../../db/schema'
-import { containerHasAllTags, containerTypesFilter, selectContainers, type ContainerSelection, type ContainerSelectionFilters } from '..'
+import {
+  containerHasAllTags,
+  containerTypesFilter,
+  selectContainers,
+  selectContainerSelectionTypes,
+  type ContainerSelection,
+  type ContainerSelectionFilters,
+} from '..'
 
 describe('selectContainers', () => {
   let db: Database
@@ -543,6 +550,41 @@ describe('selectContainers', () => {
 
       expect(ids(result.containers)).toEqual([first.id, last.id])
       expect(ids(result.specimens)).toEqual([specimen.id])
+    })
+  })
+  describe('selectContainerSelectionTypes', () => {
+    it('lists the distinct specimen types of the matching Specimens and the types of their Containers', async () => {
+      const study = await createTestStudy(db, { title: 'Study', shortCode: 'S1' })
+      const other = await createTestStudy(db, { title: 'Other', shortCode: 'S2' })
+      const subject = await seedSubject(study.id, 'P1')
+      const plasma = (await createTestSpecimenType(db, { name: 'Plasma' })).id
+      const serum = (await createTestSpecimenType(db, { name: 'Serum' })).id
+      const blood = await seedSpecimen({ studySubjectId: subject.id })
+      await seedContainer(blood.id, { kind: 'cryovial_tube' })
+      await seedContainer(blood.id, { kind: 'cryovial_tube' })
+      await seedContainer(blood.id, { kind: 'unknown' })
+      await seedSpecimen({ studySubjectId: subject.id }, { specimenTypeId: plasma })
+      await seedContainer((await seedSpecimen({ studySubjectId: (await seedSubject(other.id, 'Q1')).id }, { specimenTypeId: serum })).id)
+
+      const types = await selectContainerSelectionTypes(db, { kind: 'study', studyId: study.id })
+
+      expect(types).toEqual({ specimenTypeIds: [specimenTypeId, plasma], containerTypes: ['cryovial_tube', 'unknown'] })
+    })
+
+    it('lists only the specimen types of Specimens with a matching Container under a Container-level filter', async () => {
+      const study = await createTestStudy(db, { title: 'Study', shortCode: 'S1' })
+      const subject = await seedSubject(study.id, 'P1')
+      const plasma = (await createTestSpecimenType(db, { name: 'Plasma' })).id
+      await seedContainer((await seedSpecimen({ studySubjectId: subject.id })).id, { kind: 'cryovial_tube' })
+      await seedContainer((await seedSpecimen({ studySubjectId: subject.id }, { specimenTypeId: plasma })).id)
+
+      const types = await selectContainerSelectionTypes(db, {
+        kind: 'study',
+        studyId: study.id,
+        filters: { containerTypes: ['micronix_tube'] },
+      })
+
+      expect(types).toEqual({ specimenTypeIds: [plasma], containerTypes: ['micronix_tube'] })
     })
   })
 })

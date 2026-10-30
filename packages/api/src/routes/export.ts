@@ -10,7 +10,7 @@ import {
 import { specimenType } from '../db/schema'
 import { inArray } from 'drizzle-orm'
 import { z } from 'zod'
-import { CONTAINER_TYPES, selectContainers } from '../lib/container-selection'
+import { selectContainerSelectionTypes } from '../lib/container-selection'
 import { resolveStudyByShortCode } from '../lib/identifier-resolution'
 import {
   formatExportTimestamp,
@@ -263,20 +263,17 @@ export function createExportRoutes(database: Database): Hono {
         throw new ExpectedNotFoundError('Study not found')
       }
 
-      const selected = await selectContainers(database, { kind: 'study', studyId })
-      if (selected.specimens.length === 0) {
-        return c.json({ specimen_types: [], container_types: [] })
-      }
-
-      const specimenTypeIds = [...new Set(selected.specimens.map((row) => row.specimenTypeId))]
-      const specimenTypes = await database
-        .select({ id: specimenType.id, name: specimenType.name })
-        .from(specimenType)
-        .where(inArray(specimenType.id, specimenTypeIds))
-        .orderBy(specimenType.id)
-
-      const present = new Set(selected.containerTypes.values())
-      const containerTypes = CONTAINER_TYPES.filter((type) => type !== 'unknown' && present.has(type))
+      const types = await selectContainerSelectionTypes(database, { kind: 'study', studyId })
+      // Specimen types are a small reference table, so this IN list stays bounded.
+      const specimenTypes =
+        types.specimenTypeIds.length === 0
+          ? []
+          : await database
+              .select({ id: specimenType.id, name: specimenType.name })
+              .from(specimenType)
+              .where(inArray(specimenType.id, types.specimenTypeIds))
+              .orderBy(specimenType.id)
+      const containerTypes = types.containerTypes.filter((type) => type !== 'unknown')
 
       return c.json({
         specimen_types: specimenTypes,

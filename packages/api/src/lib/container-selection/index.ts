@@ -15,7 +15,14 @@ import {
   specimenFilterConditions,
 } from './conditions'
 import { micronixBarcodeScopes, subjectListScopes, type SelectionScope } from './scopes'
-import type { ContainerSelection, ContainerSelectionResult, SelectedContainer, SelectedSpecimen } from './types'
+import { CONTAINER_TYPES } from './filters'
+import type {
+  ContainerSelection,
+  ContainerSelectionResult,
+  ContainerSelectionTypes,
+  SelectedContainer,
+  SelectedSpecimen,
+} from './types'
 
 export * from './types'
 export { containerHasAllTags, hasContainerLevelFilter } from './conditions'
@@ -26,8 +33,53 @@ export async function selectContainers(
   database: Database,
   selection: ContainerSelection,
 ): Promise<ContainerSelectionResult> {
+  const { scopes, containerConditions } = await selectionScopes(database, selection)
+  return runScopes(database, scopes, containerConditions)
+}
+
+/**
+ * The specimen types and container types a selection matches, without loading its rows.
+ * Specimen types follow the same rule as `selectContainers`' Specimens: with a Container-level
+ * filter, only Specimens with a matching Container count.
+ */
+export async function selectContainerSelectionTypes(
+  database: Database,
+  selection: ContainerSelection,
+): Promise<ContainerSelectionTypes> {
+  const { scopes, containerConditions } = await selectionScopes(database, selection)
+  const specimenTypeIds = new Set<number>()
+  const containerTypes = new Set<ContainerSubtype>()
+  for (const scope of scopes) {
+    const rows = await database
+      .selectDistinct({ specimenTypeId: specimen.specimenTypeId, containerType: containerTypeSql })
+      .from(storageContainer)
+      .innerJoin(specimen, eq(storageContainer.specimenId, specimen.id))
+      .where(and(scope.specimens, scope.containers, ...containerConditions))
+    for (const row of rows) {
+      containerTypes.add(row.containerType)
+      if (containerConditions.length > 0) specimenTypeIds.add(row.specimenTypeId)
+    }
+    if (containerConditions.length === 0) {
+      const specimenRows = await database
+        .selectDistinct({ specimenTypeId: specimen.specimenTypeId })
+        .from(specimen)
+        .where(scope.specimens)
+      for (const row of specimenRows) specimenTypeIds.add(row.specimenTypeId)
+    }
+  }
+  return {
+    specimenTypeIds: [...specimenTypeIds].sort((a, b) => a - b),
+    containerTypes: CONTAINER_TYPES.filter((type) => containerTypes.has(type)),
+  }
+}
+
+/** The bounded scopes a selection runs, and the Container-level conditions every scope shares. */
+async function selectionScopes(
+  database: Database,
+  selection: ContainerSelection,
+): Promise<{ scopes: SelectionScope[]; containerConditions: SQL[] }> {
   if (selection.kind === 'micronixBarcodes') {
-    return runScopes(database, micronixBarcodeScopes(database, selection.barcodes), [])
+    return { scopes: micronixBarcodeScopes(database, selection.barcodes), containerConditions: [] }
   }
 
   const filters = selection.filters ?? {}
@@ -53,11 +105,10 @@ export async function selectContainers(
       break
   }
   const specimenConditions = specimenFilterConditions(filters)
-  return runScopes(
-    database,
-    scopes.map((scope) => ({ ...scope, specimens: and(scope.specimens, ...specimenConditions) })),
-    containerFilterConditions(filters),
-  )
+  return {
+    scopes: scopes.map((scope) => ({ ...scope, specimens: and(scope.specimens, ...specimenConditions) })),
+    containerConditions: containerFilterConditions(filters),
+  }
 }
 
 /**

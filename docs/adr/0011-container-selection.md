@@ -11,6 +11,7 @@ We put **Container selection** (see [CONTEXT.md](../../CONTEXT.md)) behind one m
 ## Interface
 
 - One function takes a selection and returns the matching Container rows, the matching Specimen rows, and each Container's type. It never enriches: callers pass the rows to `loadContainerReadViews` ([ADR 0009](./0009-container-read-view.md)).
+- A second function takes the same selection and returns only the distinct specimen types and container types it matches, without loading rows, for callers that list them, such as export's available types.
 - A selection is one of:
   - a **Study**;
   - a subject list of (Study, Subject ids, per-subject dates) entries spanning any number of Studies;

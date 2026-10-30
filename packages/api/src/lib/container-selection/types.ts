@@ -77,3 +77,11 @@ export interface ContainerSelectionResult {
   /** Each selected Container's type, by Container id. */
   containerTypes: Map<number, ContainerSubtype>
 }
+
+/** The specimen types and container types a selection matches. */
+export interface ContainerSelectionTypes {
+  /** Specimen type ids, ascending. */
+  specimenTypeIds: number[]
+  /** Container types, in `CONTAINER_TYPES` order; `'unknown'` when a Container has no subtype row. */
+  containerTypes: ContainerSubtype[]
+}
