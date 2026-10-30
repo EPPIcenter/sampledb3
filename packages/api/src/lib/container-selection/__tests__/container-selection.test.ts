@@ -133,6 +133,7 @@ describe('selectContainers', () => {
 
       expect(ids(result.specimens)).toEqual([stored.id, unstored.id])
       expect(result.containers).toHaveLength(1)
+      expect(result.hasContainerLevelFilter).toBe(false)
     })
 
     it('matches nothing for an unknown Study id', async () => {
@@ -141,7 +142,7 @@ describe('selectContainers', () => {
 
       const result = await selectContainers(db, { kind: 'study', studyId: study.id + 999 })
 
-      expect(result).toEqual({ containers: [], specimens: [], containerTypes: new Map() })
+      expect(result).toEqual({ containers: [], specimens: [], containerTypes: new Map(), hasContainerLevelFilter: false })
     })
   })
 
@@ -214,6 +215,7 @@ describe('selectContainers', () => {
 
       expect(ids(result.containers)).toEqual([januaryTube.id])
       expect(ids(result.specimens)).toEqual([january.id])
+      expect(result.hasContainerLevelFilter).toBe(true)
     })
 
     it('keeps Containers of the listed container types, and only their Specimens', async () => {
@@ -244,7 +246,7 @@ describe('selectContainers', () => {
 
       const result = await selectContainers(db, select(study.id, subject.id, { containerTypes: containerTypesFilter(['not_a_type']) }))
 
-      expect(result).toEqual({ containers: [], specimens: [], containerTypes: new Map() })
+      expect(result).toEqual({ containers: [], specimens: [], containerTypes: new Map(), hasContainerLevelFilter: true })
     })
 
     it('keeps Containers carrying every selected Tag, and only their Specimens', async () => {
@@ -312,7 +314,7 @@ describe('selectContainers', () => {
       expect(ids(underRack.containers)).toEqual([tube.id, vial.id, well.id, boxedPaper.id, baggedPaper.id])
       expect(ids(underRack.specimens)).toEqual([specimen.id])
       expect(ids(underShelf.containers)).toEqual([tube.id, well.id, boxedPaper.id])
-      expect(unknown).toEqual({ containers: [], specimens: [], containerTypes: new Map() })
+      expect(unknown).toEqual({ containers: [], specimens: [], containerTypes: new Map(), hasContainerLevelFilter: true })
     })
   })
 
@@ -432,7 +434,7 @@ describe('selectContainers', () => {
 
       const result = await selectContainers(db, { kind: 'subjects', subjects: [] })
 
-      expect(result).toEqual({ containers: [], specimens: [], containerTypes: new Map() })
+      expect(result).toEqual({ containers: [], specimens: [], containerTypes: new Map(), hasContainerLevelFilter: false })
     })
 
     it('selects every listed Subject when the list is longer than one IN chunk', async () => {

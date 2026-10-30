@@ -24,7 +24,7 @@ import type {
 } from './types'
 
 export * from './types'
-export { containerHasAllTags, hasContainerLevelFilter } from './conditions'
+export { containerHasAllTags } from './conditions'
 export { containerTypesFilter, specimenSourceType } from './filters'
 
 /** Select the Containers and Specimens a selection matches, with each Container's type. */
@@ -143,5 +143,10 @@ async function runScopes(
     specimens = specimens.filter((row) => stored.has(row.id))
   }
   const byId = (a: { id: number }, b: { id: number }) => a.id - b.id
-  return { containers: containers.sort(byId), specimens: specimens.sort(byId), containerTypes }
+  return {
+    containers: containers.sort(byId),
+    specimens: specimens.sort(byId),
+    containerTypes,
+    hasContainerLevelFilter: containerConditions.length > 0,
+  }
 }

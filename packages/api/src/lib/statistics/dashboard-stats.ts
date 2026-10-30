@@ -1,7 +1,6 @@
 import type { Database } from '../../db/client'
 import {
   containerTypesFilter,
-  hasContainerLevelFilter,
   selectContainers,
   specimenSourceType,
   type ContainerSelection,
@@ -82,11 +81,11 @@ export async function getDashboardStatistics(
 ): Promise<DashboardStatistics> {
   const selection = await statisticsSelection(database, filters)
   if (!selection) return emptyDashboardStatistics()
-  const { containers, specimens, containerTypes } = await selectContainers(database, selection)
+  const { containers, specimens, containerTypes, hasContainerLevelFilter } = await selectContainers(database, selection)
   if (specimens.length === 0) return emptyDashboardStatistics()
 
   const specimenAggregates = await computeSpecimenAggregates(database, specimens, {
-    useSpecimenTypeCache: !hasContainerLevelFilter(selectionFilters(filters)),
+    useSpecimenTypeCache: !hasContainerLevelFilter,
   })
   const containerTotal = containers.length
   const averagePerSpecimen = specimenAggregates.total > 0 ? containerTotal / specimenAggregates.total : 0

@@ -76,6 +76,11 @@ export interface ContainerSelectionResult {
   specimens: SelectedSpecimen[]
   /** Each selected Container's type, by Container id. */
   containerTypes: Map<number, ContainerSubtype>
+  /**
+   * Whether a Container-level filter (Container created, container types, Tags or Location)
+   * was set, so `specimens` holds only Specimens with a matching Container.
+   */
+  hasContainerLevelFilter: boolean
 }
 
 /** The specimen types and container types a selection matches. */

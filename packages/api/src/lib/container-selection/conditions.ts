@@ -80,14 +80,6 @@ export function containerFilterConditions(filters: ContainerSelectionFilters): S
 }
 
 /**
- * Whether any Container-level filter is set: Container created, container types, Tags or
- * Location. With one set, the selection keeps only Specimens with a matching Container.
- */
-export function hasContainerLevelFilter(filters: ContainerSelectionFilters): boolean {
-  return containerFilterConditions(filters).length > 0
-}
-
-/**
  * Containers stored in a Location or any Location under it: tubes and static wells on
  * micronix plates, tubes in cryovial boxes, and papers on sheets in boxes or bags there.
  */
