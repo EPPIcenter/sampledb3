@@ -493,6 +493,7 @@ describe('Export API', () => {
     it('returns 400 when study parameter is missing', async () => {
       const res = await ctx.request('/api/export/available-types', { method: 'GET' })
       expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ error: 'Study parameter is required', errorCode: 'VALIDATION_ERROR' })
     })
 
     it('returns 404 when study does not exist', async () => {

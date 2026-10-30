@@ -5,6 +5,7 @@ import {
   handleRouteError,
   ExpectedNotFoundError,
   RouteError,
+  ValidationError,
 } from '../lib/error-handler'
 import { specimenType } from '../db/schema'
 import { inArray } from 'drizzle-orm'
@@ -55,7 +56,12 @@ const subjectDatesSchema = z
   .nullish()
 
 function handleExportFailure(c: Context, message: string, error: unknown): Response {
-  if (error instanceof ExpectedNotFoundError || error instanceof RouteError || error instanceof z.ZodError) {
+  if (
+    error instanceof ExpectedNotFoundError ||
+    error instanceof RouteError ||
+    error instanceof ValidationError ||
+    error instanceof z.ZodError
+  ) {
     return handleRouteError(error, c)
   }
   const details = error instanceof Error ? error.message : String(error)
@@ -249,7 +255,7 @@ export function createExportRoutes(database: Database): Hono {
     try {
       const studyCode = c.req.query('study')
       if (!studyCode) {
-        return c.json({ error: 'Study parameter is required' }, 400)
+        throw new ValidationError('Study parameter is required')
       }
 
       const studyId = await resolveStudyByShortCode(database, studyCode)
