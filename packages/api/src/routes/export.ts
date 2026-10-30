@@ -8,6 +8,7 @@ import {
 } from '../lib/error-handler'
 import { specimenType } from '../db/schema'
 import { inArray } from 'drizzle-orm'
+import { z } from 'zod'
 import { CONTAINER_TYPES, selectContainers } from '../lib/container-selection'
 import { resolveStudyByShortCode } from '../lib/identifier-resolution'
 import {
@@ -39,8 +40,22 @@ function parseTagIdsFromBody(body: unknown): number[] | undefined {
   return ids.length > 0 ? ids : undefined
 }
 
+/** One per-Subject collection date: an exact date or a range. */
+const subjectDateFilterSchema = z.union([
+  z.strictObject({ exact: z.string() }),
+  z.strictObject({ from: z.string().optional(), to: z.string().optional() }),
+])
+
+/**
+ * `subject_dates` of a single-study POST export: per subject name, one date filter, several
+ * (one per visit), or null for undated.
+ */
+const subjectDatesSchema = z
+  .record(z.string(), z.union([subjectDateFilterSchema, z.array(subjectDateFilterSchema), z.null()]))
+  .nullish()
+
 function handleExportFailure(c: Context, message: string, error: unknown): Response {
-  if (error instanceof ExpectedNotFoundError || error instanceof RouteError) {
+  if (error instanceof ExpectedNotFoundError || error instanceof RouteError || error instanceof z.ZodError) {
     return handleRouteError(error, c)
   }
   const details = error instanceof Error ? error.message : String(error)
@@ -205,8 +220,7 @@ export function createExportRoutes(database: Database): Hono {
         return c.json({ error: 'subject_names array is required' }, 400)
       }
 
-      const subjectDates =
-        body.subject_dates && typeof body.subject_dates === 'object' ? body.subject_dates : undefined
+      const subjectDates = subjectDatesSchema.parse(body.subject_dates) ?? undefined
 
       const result = await runSingleStudyContainerExportPost(database, {
         studyCode: body.study,

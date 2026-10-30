@@ -211,8 +211,8 @@ export async function runSingleStudyContainerExportPost(
     csvOptions?: CSVExportOptions
     userId?: number | null
     countOnly?: boolean
-    /** Per-Subject collection dates, keyed by subject name. */
-    subjectDates?: Record<string, SubjectDateFilter | SubjectDateFilter[]>
+    /** Per-Subject collection dates, keyed by subject name. A null entry means undated. */
+    subjectDates?: Record<string, SubjectDateFilter | SubjectDateFilter[] | null>
     dateTolerance?: number
   }
 ): Promise<PostExportEnvelope | { count: number; summary: ExportSummary }> {
@@ -265,7 +265,7 @@ export async function runSingleStudyContainerExportPost(
     return {
       studyId: studyRecord.id,
       subjectId,
-      dates: dates === undefined ? undefined : Array.isArray(dates) ? dates : [dates],
+      dates: dates == null ? undefined : Array.isArray(dates) ? dates : [dates],
     }
   })
   const result = await selectContainers(database, {

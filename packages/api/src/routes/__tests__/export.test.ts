@@ -389,6 +389,36 @@ describe('Export API', () => {
       expect(exported.rows.map(([id]) => id).sort((a, b) => a - b)).toEqual([datedJan, undatedFeb])
       expect(exported.summary.total_containers).toBe(2)
     })
+
+    it('treats a Subject whose subject_dates entry is null as undated', async () => {
+      const { micronixId } = await seedTypedContainers('PNULL', { cryovial: false })
+
+      const exported = await postCsvExport({
+        study: 'PNULL',
+        subject_names: ['Subj1'],
+        subject_dates: { Subj1: null },
+      })
+
+      expect(exported.rows).toEqual([[micronixId, 'micronix_tube']])
+    })
+
+    it.each([
+      ['a string', '2024-01-01'],
+      ['an array', [{ exact: '2024-01-01' }]],
+      ['an entry that is not a date filter', { Subj1: 'yesterday' }],
+      ['an exact date that is not a string', { Subj1: { exact: 20240101 } }],
+      ['a date filter with an unknown key', { Subj1: [{ on: '2024-01-01' }] }],
+    ])('returns 400 when subject_dates is %s', async (_, subjectDates) => {
+      await seedTypedContainers('PBAD', { cryovial: false })
+
+      const res = await ctx.request('/api/export/containers', {
+        method: 'POST',
+        json: { study: 'PBAD', subject_names: ['Subj1'], subject_dates: subjectDates, format: 'csv' },
+      })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ errorCode: 'VALIDATION_ERROR' })
+    })
   })
 
   describe('POST /api/export/containers/validate-studies', () => {
