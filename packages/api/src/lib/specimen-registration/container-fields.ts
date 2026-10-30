@@ -36,10 +36,6 @@ export function validateContainerWriteFields(
     }
     if (!hasPosition(input.collection)) return positionRequired('cryovial tubes')
   } else if (input.containerType === 'paper') {
-    const barcode = Reflect.get(input, 'barcode')
-    if (typeof barcode === 'string' && barcode !== '') {
-      return { valid: false, field: 'sublabel', error: 'Paper containers use sublabel for spot identifiers, not barcode' }
-    }
     const collection = input.collection
     if (!collection) {
       return { valid: false, field: 'collection', error: 'Collection is required for paper containers' }

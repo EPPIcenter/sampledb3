@@ -489,6 +489,22 @@ describe('Specimens API', () => {
       expect(await ctx.db.select().from(storageContainer).where(eq(storageContainer.specimenId, testSpecimen.id))).toEqual([])
     })
 
+    it('rejects a barcode on a paper container at the schema (ADR 0006)', async () => {
+      const res = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {
+        method: 'POST',
+        json: {
+          containerType: 'paper',
+          barcode: 'LEGACY',
+          sublabel: 'Spot-1',
+          collection: { type: 'sheet', name: 'Sheet-1', parent: { type: 'box', name: 'PaperBox', locationId: 1 } },
+        },
+      })
+
+      expect(res.status).toBe(400)
+      expect(JSON.stringify(await res.json())).toContain('not barcode')
+      expect(await ctx.db.select().from(storageContainer).where(eq(storageContainer.specimenId, testSpecimen.id))).toEqual([])
+    })
+
     it('accepts unitId and quantities from container defaults (web payload)', async () => {
       const [uL] = await ctx.db.select().from(unit).where(eq(unit.symbol, 'uL'))
       const res = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {

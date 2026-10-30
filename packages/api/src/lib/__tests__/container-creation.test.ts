@@ -111,16 +111,6 @@ describe('container-creation', () => {
         expect(result.valid).toBe(false)
         expect(result.error).toBe('Sheet name is required for papers')
       })
-
-      it('rejects barcode on paper inbound path', () => {
-        const result = validateContainerWriteFields({
-          containerType: 'paper',
-          collection: { type: 'sheet', name: 'S1', parent: { type: 'box', name: 'Box1' } },
-          barcode: 'P-1',
-        } as Parameters<typeof validateContainerWriteFields>[0])
-        expect(result.valid).toBe(false)
-        expect(result.error).toContain('sublabel')
-      })
     })
 
     describe('static_well', () => {
