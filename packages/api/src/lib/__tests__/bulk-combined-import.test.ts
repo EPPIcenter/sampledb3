@@ -8,6 +8,8 @@ import {
   createTestLocation,
   createTestMicronixPlate,
   createTestUnit,
+  createTestSpecimenTypeContainerType,
+  createTestContainerTypeUnit,
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
 import {
@@ -16,10 +18,9 @@ import {
   validateBulkCombinedPayload,
   type BulkCombinedSubjectInput,
 } from '../bulk-combined-import'
-import { specimenTypeContainerType, containerTypeUnit, studySubject, specimen } from '../../db/schema'
+import { studySubject, specimen } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
-import { utcNow } from '../datetime'
 import { withWriteTransaction } from '../../db/write-transaction'
 
 describe('bulk-combined-import', () => {
@@ -308,10 +309,9 @@ describe('bulk-combined-import', () => {
       const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
       locationId = (await createTestLocation(testDb, { name: 'Shelf', storageTypeId: String(storageType.id), canContainCollections: true })).id
       const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
-      const now = utcNow()
       for (const containerType of ['micronix_tube', 'paper'] as const) {
-        await testDb.insert(specimenTypeContainerType).values({ specimenTypeId: specimenType.id, containerType, created: now, lastUpdated: now })
-        await testDb.insert(containerTypeUnit).values({ containerType, unitId: unit.id })
+        await createTestSpecimenTypeContainerType(testDb, { specimenTypeId: specimenType.id, containerType })
+        await createTestContainerTypeUnit(testDb, { containerType, unitId: unit.id })
       }
       await setContainerDefaults(testDb, {
         micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
