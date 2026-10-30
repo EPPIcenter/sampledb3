@@ -9,6 +9,9 @@ This guide covers the helpers. The rules are under API tests in `CODING_STANDARD
 `setupTestDatabase()` in `helpers/db-setup.ts` opens an in-memory database through `openOperationalDatabase(':memory:')`, the production path, so it gets `initial_schema.sql` plus any pending migrations. To change the schema, follow `packages/api/src/db/README.md`.
 
 ```typescript
+import { describe, beforeEach, afterEach } from 'vitest'
+import type { Database as SQLiteDatabase } from 'bun:sqlite'
+import type { Database } from '../../db/client'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 
 describe('My API', () => {
