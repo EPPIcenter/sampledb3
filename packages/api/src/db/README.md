@@ -12,6 +12,8 @@ Multi-statement writes that `await` must use `withWriteTransaction` from `write-
 
 Tests should use the same entry point (e.g. `openOperationalDatabase(':memory:')` via `setupTestDatabase()`).
 
+**Exception: read-only inspection.** `scripts/check-integrity.ts` opens the file with `new Database(path, { readonly: true })` instead. It is often pointed at a backup, and `openOperationalDatabase` would migrate it and enable WAL (both are writes). Resolve the path with `resolveOperationalDatabasePath` so it finds the same file. Any other tool that only reads, and must leave the file as it found it, should do the same.
+
 ## Schema version
 
 - Table: `schema_version` with a single row (`version INTEGER NOT NULL`).
