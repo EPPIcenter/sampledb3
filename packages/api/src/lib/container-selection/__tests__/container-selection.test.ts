@@ -69,7 +69,7 @@ describe('selectContainers', () => {
     })
   }
 
-  type ContainerKind = 'micronix_tube' | 'cryovial_tube' | 'untyped'
+  type ContainerKind = 'micronix_tube' | 'cryovial_tube' | 'unknown'
 
   async function seedContainer(
     specimenId: number,
@@ -218,7 +218,7 @@ describe('selectContainers', () => {
       const tubeOnly = await seedSpecimen({ studySubjectId: subject.id })
       await seedContainer(tubeOnly.id, { kind: 'micronix_tube' })
       const untypedOnly = await seedSpecimen({ studySubjectId: subject.id })
-      const untyped = await seedContainer(untypedOnly.id, { kind: 'untyped' })
+      const untyped = await seedContainer(untypedOnly.id, { kind: 'unknown' })
 
       const vials = await selectContainers(db, select(study.id, subject.id, { containerTypes: containerTypesFilter(['cryovial_tube', 'not_a_type']) }))
       const unknown = await selectContainers(db, select(study.id, subject.id, { containerTypes: ['unknown'] }))
@@ -287,14 +287,14 @@ describe('selectContainers', () => {
       const specimen = await seedSpecimen({ studySubjectId: subject.id })
       const tube = await seedContainer(specimen.id, { collectionId: shelfPlate })
       const vial = await seedContainer(specimen.id, { kind: 'cryovial_tube', collectionId: rackBox })
-      const well = await seedContainer(specimen.id, { kind: 'untyped' })
+      const well = await seedContainer(specimen.id, { kind: 'unknown' })
       await createTestStaticWell(db, { containerId: well.id, collectionId: shelfPlate })
-      const boxedPaper = await seedContainer(specimen.id, { kind: 'untyped' })
+      const boxedPaper = await seedContainer(specimen.id, { kind: 'unknown' })
       await createTestPaper(db, { containerId: boxedPaper.id, sheetId: shelfSheet })
-      const baggedPaper = await seedContainer(specimen.id, { kind: 'untyped' })
+      const baggedPaper = await seedContainer(specimen.id, { kind: 'unknown' })
       await createTestPaper(db, { containerId: baggedPaper.id, sheetId: rackSheet })
       await seedContainer(specimen.id)
-      await seedContainer(specimen.id, { kind: 'untyped' })
+      await seedContainer(specimen.id, { kind: 'unknown' })
       const elsewhere = await seedSpecimen({ studySubjectId: subject.id })
       await seedContainer(elsewhere.id)
 
