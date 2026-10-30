@@ -2,6 +2,7 @@ import type { Database } from '../db/client'
 import { study, studySubject, specimenType, micronixTube, storageContainer, cryovialTube, paper } from '../db/schema'
 import { eq, and, inArray } from 'drizzle-orm'
 import type { DatabaseOrTransaction } from './db-types'
+import { chunkArray, SQL_IN_CHUNK_SIZE } from './sql-helpers'
 
 /**
  * Resolve study short code to study ID
@@ -140,34 +141,24 @@ export async function resolveSubjectsByNameAndStudy(
 }
 
 /**
- * Batch resolve subject names to IDs for a single study (optimized)
+ * Batch resolve subject names to IDs for a single study, a chunk of names at a time so no
+ * IN list grows with the upload.
  */
 export async function resolveSubjectNamesByStudy(
   database: Database,
   subjectNames: string[],
   studyId: number
 ): Promise<Map<string, number>> {
-  const uniqueNames = [...new Set(subjectNames)]
-  if (uniqueNames.length === 0) return new Map()
-  
-  const subjects = await database
-    .select({
-      id: studySubject.id,
-      name: studySubject.name,
-    })
-    .from(studySubject)
-    .where(
-      and(
-        eq(studySubject.studyId, studyId),
-        inArray(studySubject.name, uniqueNames)
-      ) as any
-    )
-  
   const result = new Map<string, number>()
-  for (const subject of subjects) {
-    result.set(subject.name, subject.id)
+  for (const names of chunkArray([...new Set(subjectNames)], SQL_IN_CHUNK_SIZE)) {
+    const subjects = await database
+      .select({ id: studySubject.id, name: studySubject.name })
+      .from(studySubject)
+      .where(and(eq(studySubject.studyId, studyId), inArray(studySubject.name, names)))
+    for (const subject of subjects) {
+      result.set(subject.name, subject.id)
+    }
   }
-  
   return result
 }
 
