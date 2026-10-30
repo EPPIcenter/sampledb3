@@ -11,7 +11,8 @@ import {
 } from '../../db/schema'
 import { eq, and, sql, inArray } from 'drizzle-orm'
 import { resolveContainerTypes } from '../container-placement'
-import { buildDateFilter, chunkArray } from './helpers'
+import { buildDateFilter } from './helpers'
+import { chunkArray, SQL_IN_CHUNK_SIZE } from '../sql-helpers'
 import { computeContainerAggregates } from './container-aggregates'
 import {
   resolveContainerIdsAtLocations,
@@ -20,6 +21,31 @@ import {
 import { computeSpecimenAggregates } from './specimen-aggregates'
 import { computeStorageStatistics } from './storage-aggregates'
 import type { DashboardStatistics, StatisticsFilters } from './types'
+
+/** Statistics with every count zero, for filters that match nothing. */
+function emptyDashboardStatistics(): DashboardStatistics {
+  return {
+    specimens: {
+      total: 0,
+      bySourceType: {},
+      bySpecimenType: {},
+      byStudy: {},
+      collectionTimeline: [],
+      creationTimeline: [],
+    },
+    containers: {
+      total: 0,
+      byType: {},
+      byTags: {},
+      byStatus: {},
+      averagePerSpecimen: 0,
+    },
+    storage: {
+      byLocation: [],
+      byRootLocation: {},
+    },
+  }
+}
 
 /** Filtered dashboard statistics for specimens, containers, and storage. */
 export async function getDashboardStatistics(
@@ -43,8 +69,7 @@ export async function getDashboardStatistics(
     // Build specimen filter conditions
     const specimenConditions = []
     
-    // Filter by study
-    let subjectIds: number[] = []
+    // Filter by study, selecting its subjects with a subquery rather than an id list
     if (studyCode) {
       const studyRecord = await database
         .select()
@@ -52,47 +77,25 @@ export async function getDashboardStatistics(
         .where(eq(study.shortCode, studyCode))
         .get()
       
-      if (studyRecord) {
-        const subjects = await database
-          .select({ id: studySubject.id })
-          .from(studySubject)
-          .where(eq(studySubject.studyId, studyRecord.id))
-        subjectIds = subjects.map(s => s.id)
-        if (subjectIds.length > 0) {
-          if (subjectIds.length === 1) {
-            specimenConditions.push(
-              eq(specimen.studySubjectId, subjectIds[0])
-            )
-          } else {
-            specimenConditions.push(
-              inArray(specimen.studySubjectId, subjectIds)
-            )
-          }
-        } else {
-          // No subjects in study, return empty results
-          return {
-            specimens: {
-              total: 0,
-              bySourceType: {},
-              bySpecimenType: {},
-              byStudy: {},
-              collectionTimeline: [],
-              creationTimeline: [],
-            },
-            containers: {
-              total: 0,
-              byType: {},
-              byTags: {},
-              byStatus: {},
-              averagePerSpecimen: 0,
-            },
-            storage: {
-              byLocation: [],
-              byRootLocation: {},
-            },
-          }
-        }
+      // An unknown study matches nothing; it must not fall through to whole-database totals.
+      if (!studyRecord) {
+        return emptyDashboardStatistics()
       }
+      const studySubjectIds = database
+        .select({ id: studySubject.id })
+        .from(studySubject)
+        .where(eq(studySubject.studyId, studyRecord.id))
+      const anySubject = await database
+        .select({ id: studySubject.id })
+        .from(studySubject)
+        .where(eq(studySubject.studyId, studyRecord.id))
+        .limit(1)
+        .get()
+      if (!anySubject) {
+        // No subjects in study, return empty results
+        return emptyDashboardStatistics()
+      }
+      specimenConditions.push(inArray(specimen.studySubjectId, studySubjectIds))
     }
 
     if (sourceType === 'subject') {
@@ -123,8 +126,6 @@ export async function getDashboardStatistics(
     const specimenIds = filteredSpecimens.map(s => s.id)
 
     let specimenAggregates = await computeSpecimenAggregates(database, filteredSpecimens, {
-      studyCode,
-      subjectIds,
       useSpecimenTypeCache: true,
     })
 
@@ -134,27 +135,7 @@ export async function getDashboardStatistics(
     let filteredLocationIds: number[] = []
 
     if (locationFilter.kind === 'not_found') {
-      return {
-        specimens: {
-          total: 0,
-          bySourceType: {},
-          bySpecimenType: {},
-          byStudy: {},
-          collectionTimeline: [],
-          creationTimeline: [],
-        },
-        containers: {
-          total: 0,
-          byType: {},
-          byTags: {},
-          byStatus: {},
-          averagePerSpecimen: 0,
-        },
-        storage: {
-          byLocation: [],
-          byRootLocation: {},
-        },
-      }
+      return emptyDashboardStatistics()
     }
 
     if (locationFilter.kind === 'resolved') {
@@ -191,27 +172,7 @@ export async function getDashboardStatistics(
 
       if (tagFilteredContainerIds.length === 0) {
         // No containers match all the tags, return empty results
-        return {
-          specimens: {
-            total: 0,
-            bySourceType: {},
-            bySpecimenType: {},
-            byStudy: {},
-            collectionTimeline: [],
-            creationTimeline: [],
-          },
-          containers: {
-            total: 0,
-            byType: {},
-            byTags: {},
-            byStatus: {},
-            averagePerSpecimen: 0,
-          },
-          storage: {
-            byLocation: [],
-            byRootLocation: {},
-          },
-        }
+        return emptyDashboardStatistics()
       }
     }
 
@@ -230,28 +191,26 @@ export async function getDashboardStatistics(
         )
       }
       
+      const locationFilteredIdSet = locationFilteredContainerIds ? new Set(locationFilteredContainerIds) : null
+      const tagFilteredIdSet = tagFilteredContainerIds ? new Set(tagFilteredContainerIds) : null
+
       // Batch query if too many specimen IDs to avoid SQLite variable limit
       // Use Promise.all to parallelize queries for better performance
-      const specimenChunks = chunkArray(specimenIds, 500)
+      const specimenChunks = chunkArray(specimenIds, SQL_IN_CHUNK_SIZE)
       
       const chunkResults = await Promise.all(
         specimenChunks.map(async (specimenChunk, chunkIndex) => {
-          let containerQuery = database.select().from(storageContainer)
-          const containerConditions = [inArray(storageContainer.specimenId, specimenChunk)]
-          
-          // Apply location filter if provided
-          if (locationFilteredContainerIds) {
-            containerConditions.push(inArray(storageContainer.id, locationFilteredContainerIds))
-          }
-          
-          // Apply tag filter if provided
-          if (tagFilteredContainerIds) {
-            containerConditions.push(inArray(storageContainer.id, tagFilteredContainerIds))
-          }
-
-          containerQuery = containerQuery.where(and(...containerConditions) as any) as any
-          const containers = await containerQuery
-          return containers
+          const containers = await database
+            .select()
+            .from(storageContainer)
+            .where(inArray(storageContainer.specimenId, specimenChunk))
+          // Location and tag filters are applied in memory: as IN lists they can exceed
+          // SQLite's parameter limit on large locations.
+          return containers.filter(
+            (c) =>
+              (!locationFilteredIdSet || locationFilteredIdSet.has(c.id)) &&
+              (!tagFilteredIdSet || tagFilteredIdSet.has(c.id)),
+          )
         })
       )
       
@@ -269,27 +228,7 @@ export async function getDashboardStatistics(
       })
     } else if (filteredSpecimens.length === 0) {
       // No specimens match, so no containers
-      return {
-        specimens: {
-          total: 0,
-          bySourceType: {},
-          bySpecimenType: {},
-          byStudy: {},
-          collectionTimeline: [],
-          creationTimeline: [],
-        },
-        containers: {
-          total: 0,
-          byType: {},
-          byTags: {},
-          byStatus: {},
-          averagePerSpecimen: 0,
-        },
-        storage: {
-          byLocation: [],
-          byRootLocation: {},
-        },
-      }
+      return emptyDashboardStatistics()
     } else {
       // No specimen filter, but we might have state/status/location filters
       if (hasLocationFilter && filteredLocationIds.length > 0) {
@@ -304,37 +243,31 @@ export async function getDashboardStatistics(
         } else {
           // Fetch containers matching location and other filters
           // Use Promise.all to parallelize queries
-          const containerIdChunks = chunkArray(locationFilteredContainerIds, 500)
+          const containerIdChunks = chunkArray(locationFilteredContainerIds, SQL_IN_CHUNK_SIZE)
           const chunkResults = await Promise.all(
             containerIdChunks.map(async (containerIdChunk) => {
-              let containerQuery = database.select().from(storageContainer)
-              const containerConditions = [inArray(storageContainer.id, containerIdChunk)]
-
-              // Apply tag filter if provided
-              if (tagFilteredContainerIds) {
-                containerConditions.push(inArray(storageContainer.id, tagFilteredContainerIds))
-              }
-
-              containerQuery = containerQuery.where(and(...containerConditions) as any) as any
-              return await containerQuery
+              // Tag filter is already intersected into locationFilteredContainerIds.
+              return await database
+                .select()
+                .from(storageContainer)
+                .where(inArray(storageContainer.id, containerIdChunk))
             })
           )
           filteredContainers = chunkResults.flat()
         }
       } else {
         // No location filter
-        let containerQuery = database.select().from(storageContainer)
-        const containerConditions = []
-
-        // Apply tag filter if provided
         if (tagFilteredContainerIds) {
-          containerConditions.push(inArray(storageContainer.id, tagFilteredContainerIds))
+          const tagIdChunks = chunkArray(tagFilteredContainerIds, SQL_IN_CHUNK_SIZE)
+          const chunkResults = await Promise.all(
+            tagIdChunks.map((idChunk) =>
+              database.select().from(storageContainer).where(inArray(storageContainer.id, idChunk)),
+            ),
+          )
+          filteredContainers = chunkResults.flat()
+        } else {
+          filteredContainers = await database.select().from(storageContainer)
         }
-
-        if (containerConditions.length > 0) {
-          containerQuery = containerQuery.where(and(...containerConditions) as any) as any
-        }
-        filteredContainers = await containerQuery
       }
     }
 
@@ -358,8 +291,6 @@ export async function getDashboardStatistics(
       const adjustedSpecimens = filteredSpecimens.filter((s) => filteredSpecimenIds.has(s.id))
 
       specimenAggregates = await computeSpecimenAggregates(database, adjustedSpecimens, {
-        studyCode,
-        subjectIds,
         useSpecimenTypeCache: false,
       })
     }

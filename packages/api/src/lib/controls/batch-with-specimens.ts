@@ -26,7 +26,7 @@ import {
 import type { BatchContainerInput } from './batch-schemas'
 import { withWriteTransaction } from '../../db/write-transaction'
 import { validateCollectionDate } from '../validation'
-import { ValidationError } from '../error-handler'
+import { ConflictError, ValidationError, sqliteConstraintConflict } from '../error-handler'
 
 export interface CreateBatchWithSpecimensRequest {
   batch: {
@@ -377,5 +377,32 @@ export async function addSpecimensToBatch(
       specimens: createdSpecimens,
       createdCollections: [],
     }
+  })
+}
+
+/**
+ * Create several batches with their specimens in one transaction, so a failure on any
+ * batch leaves none of them behind (retrying would otherwise duplicate the earlier ones).
+ */
+export async function createBatchesWithSpecimens(
+  database: Database,
+  batches: CreateBatchWithSpecimensRequest[],
+): Promise<Array<Awaited<ReturnType<typeof createBatchWithSpecimens>>>> {
+  return withWriteTransaction(database, async (tx) => {
+    const results: Array<Awaited<ReturnType<typeof createBatchWithSpecimens>>> = []
+    for (const [index, data] of batches.entries()) {
+      try {
+        results.push(await createBatchWithSpecimens(tx, data))
+      } catch (error: unknown) {
+        // Keep a conflict a 409 (ConflictError or a UNIQUE/FK violation); the rest are bad input.
+        const conflict = error instanceof Error ? sqliteConstraintConflict(error) : null
+        const reason = conflict ?? (error instanceof Error ? error.message : String(error))
+        const sentence = /[.!?]$/.test(reason) ? reason : `${reason}.`
+        const message = `Control batch ${index + 1} ('${data.batch.name}'): ${sentence} No control batches were created.`
+        if (conflict || error instanceof ConflictError) throw new ConflictError(message)
+        throw new ValidationError(message)
+      }
+    }
+    return results
   })
 }

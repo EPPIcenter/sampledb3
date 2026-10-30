@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { eq } from 'drizzle-orm'
 import { authenticatedRequest } from '../../__tests__/helpers/test-client'
 import {
   setupAuthenticatedRouteTest,
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createControlsRoutes } from '../controls'
+import { controlDefinition } from '../../db/schema'
 import {
   createTestControlDefinition,
   createTestStrain,
@@ -384,6 +386,69 @@ describe('Controls API', () => {
       const body = (await res.json()) as { error?: string }
       expect(body.error).toBeDefined()
       expect(String(body.error).toLowerCase()).toMatch(/name|unique|taken|duplicate/)
+    })
+  })
+
+  describe(`PATCH ${BASE}/:id`, () => {
+    it('rejects a controlType change so a definition cannot leave the blood routes', async () => {
+      const def = await createTestControlDefinition(ctx.db, { name: 'Blood A', controlType: 'blood' })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { controlType: 'antibody' } })
+
+      expect(res.status).toBe(400)
+      const body = (await res.json()) as { error: string; errorCode: string }
+      expect(body.errorCode).toBe('VALIDATION_ERROR')
+      expect(body.error).toMatch(/controlType/)
+      const [stored] = await ctx.db.select().from(controlDefinition).where(eq(controlDefinition.id, def.id))
+      expect(stored?.controlType).toBe('blood')
+    })
+
+    it('accepts the unchanged controlType the edit form sends', async () => {
+      const def = await createTestControlDefinition(ctx.db, { name: 'Blood A', controlType: 'blood' })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, {
+        method: 'PATCH',
+        json: { controlType: 'blood', name: 'Blood B' },
+      })
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { control: { name: string; controlType: string } }
+      expect(data.control).toMatchObject({ name: 'Blood B', controlType: 'blood' })
+    })
+
+    it('returns 409 when renaming to an existing definition name', async () => {
+      await createTestControlDefinition(ctx.db, { name: 'Taken' })
+      const def = await createTestControlDefinition(ctx.db, { name: 'Mine' })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { name: 'Taken' } })
+
+      expect(res.status).toBe(409)
+    })
+
+    it('returns 409 when changing density to match another definition', async () => {
+      const strain = await createTestStrain(ctx.db, { name: '3D7' })
+      const strains = [{ id: strain.id, name: '3D7', percentage: 100 }]
+      await createTestControlDefinition(ctx.db, { name: 'D100', properties: { strains, targetDensity: 100 } })
+      const def = await createTestControlDefinition(ctx.db, { name: 'D200', properties: { strains, targetDensity: 200 } })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { targetDensity: 100 } })
+
+      expect(res.status).toBe(409)
+      expect(await res.json()).toMatchObject({
+        error: 'A control definition with this combination of density and strains already exists',
+        errorCode: 'CONFLICT',
+        existingDefinition: { name: 'D100' },
+      })
+    })
+
+    it('does not count the definition being edited as a duplicate', async () => {
+      const strain = await createTestStrain(ctx.db, { name: '3D7' })
+      const strains = [{ id: strain.id, name: '3D7', percentage: 100 }]
+      const def = await createTestControlDefinition(ctx.db, { name: 'D200', properties: { strains, targetDensity: 200 } })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { targetDensity: 200 } })
+
+      expect(res.status).toBe(200)
     })
   })
 

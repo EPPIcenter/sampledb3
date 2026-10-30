@@ -1,13 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { render, screen, waitFor } from '../../__tests__/helpers/render'
+import { render, screen, waitFor, within } from '../../__tests__/helpers/render'
 import SpecimenDetail from '../SpecimenDetail'
+
+const mockNavigate = vi.fn()
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
   return {
     ...actual,
     useParams: () => ({ id: '1' }),
+    useNavigate: () => mockNavigate,
   }
 })
 
@@ -55,6 +58,7 @@ vi.mock('../../contexts/UserContext', async () => {
 })
 
 import { api } from '../../lib/api/client'
+import { specimensApi } from '../../lib/api/specimens'
 
 describe('SpecimenDetail', () => {
   beforeEach(() => {
@@ -63,6 +67,15 @@ describe('SpecimenDetail', () => {
       study: { title: 'Study', code: 'ST1' },
     })
     mockAddContainer.mockResolvedValue({ containerId: 101 })
+    mockNavigate.mockReset()
+  })
+
+  it('shows the collection date on its own calendar day', async () => {
+    vi.mocked(specimensApi.get).mockResolvedValueOnce({
+      specimen: { id: 1, specimenTypeId: 1, specimenType: { name: 'Blood' }, studySubjectId: 1, collectionDate: '2024-01-15' },
+    } as Awaited<ReturnType<typeof specimensApi.get>>)
+    await render(<SpecimenDetail />)
+    expect(await screen.findByText('1/15/2024')).toBeInTheDocument()
   })
 
   it('shows specimen content after load', async () => {
@@ -91,5 +104,28 @@ describe('SpecimenDetail', () => {
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: /add container/i })).toBeInTheDocument()
     })
+  })
+
+  it('goes back to /specimens on Backspace', async () => {
+    const user = userEvent.setup()
+    await render(<SpecimenDetail />)
+    await screen.findByRole('button', { name: /add container/i })
+
+    await user.keyboard('{Backspace}')
+
+    expect(mockNavigate).toHaveBeenCalledWith('/specimens')
+  })
+
+  it('ignores Backspace while the Add container modal is open', async () => {
+    const user = userEvent.setup()
+    await render(<SpecimenDetail />)
+    await user.click(await screen.findByRole('button', { name: /add container/i }))
+    const dialog = await screen.findByRole('dialog', { name: /add container/i })
+    within(dialog).getAllByRole('button')[0].focus()
+
+    await user.keyboard('{Backspace}')
+
+    expect(mockNavigate).not.toHaveBeenCalledWith('/specimens')
+    expect(screen.getByRole('dialog', { name: /add container/i })).toBeInTheDocument()
   })
 })

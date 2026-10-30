@@ -42,6 +42,11 @@ describe('parseScannerPlateCsv', () => {
     expect(rows[1]).toMatchObject({ container_barcode: '', target_position: 'B02' })
   })
 
+  it('reads quoted scanner exports', () => {
+    const rows = parseScannerPlateCsv('"container_barcode","target_position"\r\n"MTX1","A01"', singleConfig)
+    expect(rows[0]).toMatchObject({ container_barcode: 'MTX1', target_position: 'A01' })
+  })
+
   it('returns no rows for an empty or header-only file', () => {
     expect(parseScannerPlateCsv('', singleConfig)).toEqual([])
     expect(parseScannerPlateCsv('container_barcode,target_position', singleConfig)).toEqual([])

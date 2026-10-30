@@ -8,6 +8,7 @@ import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/
 import { users, sessions } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
+import { BCRYPT_COST } from '../../lib/auth/auth-service'
 import type { Database } from '../../db/client'
 import {
   createTestUser,
@@ -139,7 +140,7 @@ describe('Auth API', () => {
     beforeEach(async () => {
       // Create a test user (approved so they can log in)
       const createdAt = utcNow()
-      const passwordHash = await bcrypt.hash('password123', 10)
+      const passwordHash = await bcrypt.hash('password123', BCRYPT_COST)
       await testDb.insert(users).values({
         email: 'login@example.com',
         name: 'Login Test User',
@@ -386,6 +387,31 @@ describe('Auth API', () => {
       // Check for session cookie
       const cookies = res.headers.get('set-cookie')
       expect(cookies).toContain('session_id')
+    })
+
+    it('matches an email before a username that equals it', async () => {
+      await testDb.insert(users).values({
+        email: 'squatter@example.com',
+        name: 'Squatter',
+        username: 'victim@example.com',
+        passwordHash: await bcrypt.hash('squatter123', BCRYPT_COST),
+        role: 'member',
+        createdAt: utcNow(),
+        approvedAt: utcNow(),
+      })
+      await createTestUser(testDb, { email: 'victim@example.com', name: 'Victim', password: 'password123' })
+
+      const res = await createTestClient(app).api.auth.login.$post({
+        json: { emailOrUsername: 'victim@example.com', password: 'password123' },
+      })
+      expect(res.status).toBe(200)
+    })
+
+    it('rejects a username containing "@"', async () => {
+      const res = await createTestClient(app).api.auth['self-register'].$post({
+        json: { email: 'new@example.com', name: 'New', username: 'other@example.com', password: 'password123' },
+      })
+      expect(res.status).toBe(400)
     })
 
     it('should reject invalid username', async () => {

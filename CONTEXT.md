@@ -166,8 +166,9 @@ Server-side flat export of inventory summary data (command palette or inventory.
 _Avoid_: Container export; bulk export; collection table snapshot export
 
 **CSV download**:
-A comma-separated values file generated or downloaded from SampleDB — container/specimen/inventory exports, collection table snapshots, import templates, and other CSV outputs. All share the same wire conventions (UTF-8 with BOM, CRLF line endings, plain cell values per RFC 4180) so files behave consistently in Excel and in R/Python. **Container export** workflows additionally let lab staff override delimiter, BOM, and line ending before download.
-_Avoid_: Excel formula cell wrappers (`="..."`); using CSV as the Excel text-preservation format (use **XLSX download** for that); different wire conventions for templates vs exports
+A comma-separated values file generated or downloaded from SampleDB — container/specimen/inventory exports, collection table snapshots, import templates, and other CSV outputs. All share the same wire conventions (UTF-8 with BOM, CRLF line endings, cell values quoted per RFC 4180) so files behave consistently in Excel and in R/Python. **Container export** workflows additionally let lab staff override delimiter, BOM, and line ending before download.
+Server-side data exports (**Container export**, **Specimen export**, **Inventory export**) apply **formula neutralization**: a text cell that a spreadsheet would run as a formula (starting with `=`, `+`, `@`, tab, carriage return, or `-` unless the whole cell is a number) gets a leading `'`, so stored text such as `=HYPERLINK(...)` cannot execute when the file is opened. Numbers, including negative ones like `-131`, are unchanged. Import templates and other files meant to be re-imported are not neutralized, since the `'` would become part of the imported value.
+_Avoid_: Excel formula cell wrappers (`="..."`); using CSV as the Excel text-preservation format (use **XLSX download** for that); different wire conventions for templates vs exports; neutralizing import templates
 
 **XLSX download**:
 Excel workbook export from **Container export** workflows. Preserves identifier and code columns as text cells (leading zeros, long barcodes) without CSV workarounds.

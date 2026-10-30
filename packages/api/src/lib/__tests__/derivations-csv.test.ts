@@ -20,6 +20,10 @@ import {
   createTestStorageType,
   createTestLocation,
   createTestMicronixPlate,
+  createTestMicronixTube,
+  createTestBag,
+  createTestSpecimen,
+  createTestStorageContainer,
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
 import { utcNow } from '../datetime'
@@ -76,6 +80,11 @@ describe('derivations-csv', () => {
       const rows = parseCsv(text)
       expect(rows.length).toBe(1)
       expect(rows[0].parent_container_id).toBe('1')
+    })
+
+    it('matches headers case-insensitively and drops rows with no values', () => {
+      const rows = parseCsv('Parent_Container_ID,Plate_Name\n1,P1\n,\n,,\n')
+      expect(rows).toEqual([{ parent_container_id: '1', plate_name: 'P1' }])
     })
 
     it('handles newlines inside quoted fields', () => {
@@ -281,6 +290,142 @@ describe('derivations-csv', () => {
       const child = await testDb.select().from(storageContainer).where(eq(storageContainer.id, childContainerId!)).get()
       expect(child).toBeDefined()
       expect(child!.unitId).toBe(unit.id)
+    })
+  })
+
+  describe('row values and positions', () => {
+    let testDb: Database
+    let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
+
+    beforeEach(async () => {
+      const setup = await setupTestDatabase()
+      testDb = setup.db
+      sqlite = setup.sqlite
+    })
+
+    afterEach(() => {
+      if (sqlite) cleanupTestDatabase(sqlite)
+    })
+
+    const settings = {
+      derivationType: 'Extraction',
+      specimenTypeName: 'DNA',
+      containerType: 'micronix_tube' as const,
+      protocol: 'Standard',
+      derivationDate: '2025-01-15',
+    }
+    const header = 'parent_container_id,plate_name,position,container_barcode'
+
+    /** Parent tube at PlateDef/A01 holding 10 uL, plus a tube already at A02. */
+    async function seedParent() {
+      const now = utcNow()
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(testDb, { micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' } })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+      const study = await createTestStudy(testDb, { title: 'Deriv Study', shortCode: 'DERIV' })
+      const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'Subj1' })
+      const bloodType = await createTestSpecimenType(testDb, { name: 'Blood' })
+      const dnaType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      await testDb.insert(specimenTypeContainerType).values([
+        { specimenTypeId: bloodType.id, containerType: 'micronix_tube', created: now },
+        { specimenTypeId: dnaType.id, containerType: 'micronix_tube', created: now },
+      ])
+      const [parentSpecimen] = await testDb
+        .insert(specimen)
+        .values({ studySubjectId: subject.id, specimenTypeId: bloodType.id, collectionDate: '2025-01-01', created: now, lastUpdated: now })
+        .returning()
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const loc = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id), canContainCollections: true })
+      const plate = await createTestMicronixPlate(testDb, { name: 'PlateDef', locationId: loc.id })
+      const addTube = async (barcode: string, position: string, quantity: number) => {
+        const [sc] = await testDb
+          .insert(storageContainer)
+          .values({ specimenId: parentSpecimen.id, unitId: unit.id, totalQuantity: quantity, remainingQuantity: quantity, created: now, lastUpdated: now })
+          .returning()
+        await createTestMicronixTube(testDb, { containerId: sc.id, collectionId: plate.id, position, barcode })
+        return sc
+      }
+      const parent = await addTube('MT-PARENT', 'A01', 10)
+      await addTube('MT-TAKEN', 'A02', 1)
+      return { parent, loc, plate, unit }
+    }
+
+    it('checks non-padded positions against stored ones and against each other', async () => {
+      const { parent } = await seedParent()
+      const csv = [header, `${parent.id},PlateDef,A2,C1`, `${parent.id},PlateDef,A3,C2`, `${parent.id},PlateDef,A03,C3`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows.map((r) => r.valid)).toEqual([false, true, false])
+      expect(result.rows[0].error).toMatch(/already used in that plate/)
+      expect(result.rows[2].error).toMatch(/more than once in your file/)
+    })
+
+    it('warns about a mismatched source type even when the first row has no parent', async () => {
+      const { parent, plate, unit } = await seedParent()
+      const plasmaType = await createTestSpecimenType(testDb, { name: 'Plasma' })
+      const plasma = await createTestSpecimen(testDb, plasmaType.id)
+      const plasmaTube = await createTestStorageContainer(testDb, { specimenId: plasma.id, unitId: unit.id })
+      await createTestMicronixTube(testDb, { containerId: plasmaTube.id, collectionId: plate.id, barcode: 'MT-PLASMA', position: 'H12' })
+      const csv = [header, '99999,PlateDef,B01,C0', `${parent.id},PlateDef,B02,C1`, `${plasmaTube.id},PlateDef,B03,C2`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, { ...settings, validateSourceSpecimenType: true })
+
+      expect(result.rows[0].valid).toBe(false)
+      expect(result.rows[1].warnings).toBeUndefined()
+      expect(result.rows[2].warnings).toContain('Source specimen type does not match other rows')
+    })
+
+    it('reports a quantity that is not a number instead of dropping it', async () => {
+      const { parent } = await seedParent()
+      const csv = [`${header},quantity_used`, `${parent.id},PlateDef,B01,C1,3x`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows[0].valid).toBe(false)
+      expect(result.rows[0].error).toBe("quantity_used '3x' is not a number")
+    })
+
+    it('uses the shared reduce-parent setting when the cell is blank', async () => {
+      const { parent } = await seedParent()
+      const csv = [`${header},quantity_used,reduce_parent_quantity`, `${parent.id},PlateDef,B01,C1,3,`].join('\n')
+
+      const result = await importDerivationsFromCsv(testDb, csv, {
+        settings: { ...settings, reduceParentQuantity: false },
+      })
+
+      expect(result.rows[0].success).toBe(true)
+      const after = await testDb.select().from(storageContainer).where(eq(storageContainer.id, parent.id)).get()
+      expect(after?.remainingQuantity).toBe(10)
+    })
+
+    it('rejects paper rows whose box does not exist', async () => {
+      const { parent } = await seedParent()
+      const csv = ['parent_container_id,container_type,box_name,sheet_name,sublabel', `${parent.id},paper,No Such Box,Sheet-1,S1`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, { ...settings, containerType: '' })
+
+      expect(result.rows[0].valid).toBe(false)
+      expect(result.rows[0].error).toMatch(/Box 'No Such Box' not found/)
+    })
+
+    it('finds the bag named by bag_name for paper rows', async () => {
+      const { parent, loc } = await seedParent()
+      await createTestBag(testDb, { name: 'Shared Name', locationId: loc.id })
+      const csv = ['parent_container_id,container_type,bag_name,sheet_name,sublabel', `${parent.id},paper,Shared Name,Sheet-1,S1`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, { ...settings, containerType: '' })
+
+      expect(result.rows[0]).toMatchObject({ valid: true, collectionStatus: 'existing' })
+    })
+
+    it('reports a paper row with neither box_name nor bag_name as a missing field', async () => {
+      const { parent } = await seedParent()
+      const csv = ['parent_container_id,container_type,box_name,sheet_name,sublabel', `${parent.id},paper,,Sheet-1,S1`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, { ...settings, containerType: '' })
+
+      expect(result.rows[0].error).toBe('box_name or bag_name is required for paper')
     })
   })
 })

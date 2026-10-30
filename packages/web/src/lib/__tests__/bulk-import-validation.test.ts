@@ -75,6 +75,11 @@ describe('bulk-import-validation', () => {
       expect(rows[0].position).toBe('A01')
       expect(rows[0].study_short_code).toBe('ST1')
     })
+    it('keeps quoted commas inside a cell and handles CRLF', () => {
+      const csv = 'subject_name,comment,position\r\nS1,"low vol, hemolyzed",A01\r\n'
+      const rows = parseBulkImportCSV(csv)
+      expect(rows).toEqual([{ subject_name: 'S1', comment: 'low vol, hemolyzed', position: 'A01' }])
+    })
   })
 
   describe('mapBulkImportRowsToPayload', () => {

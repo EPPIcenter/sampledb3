@@ -8,6 +8,7 @@ import { SkeletonCard } from '../ui'
 import { useStatistics } from '../hooks/useStatistics'
 import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/statistics.css'
+import { toLocalDateString } from '../lib/date-utils'
 
 type BinSize = 'day' | 'week' | 'month' | 'quarter' | 'year'
 
@@ -25,7 +26,7 @@ const TIME_PRESETS = [
 function formatDateOffset(daysAgo: number): string {
   const d = new Date()
   d.setDate(d.getDate() - daysAgo)
-  return d.toISOString().slice(0, 10)
+  return toLocalDateString(d)
 }
 
 /** Build human-readable filter chip labels from applied filters. */

@@ -9,6 +9,8 @@
 export {
   type ContainerExportData,
   type ExportFilters,
+  type SubjectDateFilter,
+  type SubjectDateSelection,
 } from './export'
 export {
   DEFAULT_EXPORT_COLUMN_KEYS,
@@ -25,6 +27,7 @@ export {
   parseBarcodeExportFilterCsv,
   parseMultiStudyExportFilterCsv,
   parseSingleStudyExportFilterCsv,
+  subjectDateSelections,
   type ExportFilterColumnSpec,
   type MultiStudyExportFilterRow,
   type SingleStudyExportFilterRow,

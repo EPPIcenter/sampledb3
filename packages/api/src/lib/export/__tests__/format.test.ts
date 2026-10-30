@@ -203,9 +203,15 @@ describe('formatSimpleCSV', () => {
       ])
     })
 
-    it('handles cells starting with equals sign as plain text', () => {
+    it('neutralizes cells a spreadsheet would run as a formula', () => {
       const result = formatSimpleCSV(['formula'], [['=SUM(A1:A10)']], lfNoBom)
-      expect(result).toBe('formula\n=SUM(A1:A10)')
+      expect(result).toBe("formula\n'=SUM(A1:A10)")
+    })
+
+    it('leaves negative numbers unchanged but neutralizes other "-" text', () => {
+      const result = formatSimpleCSV(['subject', 'comment'], [['-131', '-2 in SubjID']], lfNoBom)
+      // Only whole numbers are spared; text after a leading "-" could be a formula.
+      expect(result).toBe("subject,comment\n-131,'-2 in SubjID")
     })
   })
 })

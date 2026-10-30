@@ -1,12 +1,13 @@
 import type { Database } from '../../db/client'
 import { micronixTube, cryovialTube, micronixPlate, cryovialBox } from '../../db/schema'
-import { eq, like, sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import {
   resolveContainerPlacements,
   type ContainerPlacement,
   type KnownContainerPlacement,
 } from '../container-placement'
 import type { SearchResult } from './types'
+import { likeContains } from '../sql-like'
 
 type ContainerSearchRow = {
   id: number
@@ -88,7 +89,7 @@ export async function searchContainers(database: Database, query: string): Promi
     })
     .from(micronixTube)
     .leftJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id))
-    .where(like(micronixTube.barcode, `%${query}%`))
+    .where(likeContains(micronixTube.barcode, query))
     .limit(10)
 
   for (const tube of micronixTubes) {
@@ -115,7 +116,7 @@ export async function searchContainers(database: Database, query: string): Promi
     })
     .from(cryovialTube)
     .leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id))
-    .where(like(cryovialTube.barcode, `%${query}%`))
+    .where(likeContains(cryovialTube.barcode, query))
     .limit(10)
 
   for (const tube of cryovialTubes) {

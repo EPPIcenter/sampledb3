@@ -11,7 +11,7 @@ import {
   sheet,
 } from '../db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
-import { resolveCollection, type CollectionType } from './collections/collection-resolve'
+import { resolveCollection, resolveSheetsByName, type CollectionType } from './collections/collection-resolve'
 import { checkGridPositionOccupancy } from './container-occupancy'
 import { normalizePosition } from './normalize-position'
 
@@ -42,6 +42,9 @@ export interface MoveOperation {
 export interface CollectionMapping {
   fromCollectionName: string
   toCollectionName: string
+  /** For sheets: box or bag holding the source / target sheet (sheet names repeat). */
+  fromParentName?: string
+  toParentName?: string
 }
 
 export interface BatchMoveRequest {
@@ -62,13 +65,16 @@ export interface MoveResult {
   errors?: ValidationError[]
 }
 
+/** Collections whose containers sit at grid positions. */
+type GridCollectionType = 'cryovial_box' | 'micronix_plate'
+
 /**
  * Resolve container by position and collection
  */
 export async function resolveContainerByPosition(
   database: Database,
   collectionName: string,
-  collectionType: CollectionType,
+  collectionType: GridCollectionType,
   rawPosition: string
 ): Promise<ContainerInfo | null> {
   // Stored grid positions are normalized ("B1" -> "B01"); match that form.
@@ -279,7 +285,7 @@ export async function resolveContainerByIdentifier(database: Database, identifie
   if (identifier.type === 'barcode' && identifier.barcode) {
     return resolveContainerByBarcode(database, identifier.barcode)
   } else if (identifier.type === 'position' && identifier.sourceCollectionName && identifier.sourcePosition) {
-    const types: CollectionType[] = ['cryovial_box', 'micronix_plate', 'box', 'sheet']
+    const types: GridCollectionType[] = ['cryovial_box', 'micronix_plate']
     for (const type of types) {
       const result = await resolveContainerByPosition(database, identifier.sourceCollectionName, type, identifier.sourcePosition)
       if (result) return result
@@ -378,6 +384,32 @@ export async function executeMoves(database: Database, request: BatchMoveRequest
     const mappingMap = new Map<number, number>()
     const mappingErrors: string[] = []
     for (const m of mappings) {
+      if (collectionType === 'sheet') {
+        // A sheet name alone resolves only when exactly one sheet has it; otherwise the
+        // mapping must name the box or bag. Every source sheet in the named parent maps to
+        // the one target sheet (legacy bags can hold several with the same name).
+        const fromIds = await resolveSheetsByName(database, m.fromCollectionName, m.fromParentName)
+        const toIds = await resolveSheetsByName(database, m.toCollectionName, m.toParentName)
+        if (fromIds.length === 0) mappingErrors.push(`Source collection "${m.fromCollectionName}" not found`)
+        if (toIds.length === 0) mappingErrors.push(`Target collection "${m.toCollectionName}" not found`)
+        const ambiguousSource = fromIds.length > 1 && m.fromParentName === undefined
+        if (ambiguousSource) {
+          mappingErrors.push(
+            `Source sheet "${m.fromCollectionName}" matches ${fromIds.length} sheets; set fromParentName to the box or bag that holds it`,
+          )
+        }
+        if (toIds.length > 1) {
+          mappingErrors.push(
+            m.toParentName === undefined
+              ? `Target sheet "${m.toCollectionName}" matches ${toIds.length} sheets; set toParentName to the box or bag that holds it`
+              : `Target sheet "${m.toCollectionName}" matches ${toIds.length} sheets in "${m.toParentName}"`,
+          )
+        }
+        if (fromIds.length > 0 && !ambiguousSource && toIds.length === 1) {
+          for (const fromId of fromIds) mappingMap.set(fromId, toIds[0])
+        }
+        continue
+      }
       const fromId = await resolveCollection(m.fromCollectionName, collectionType, database)
       const toId = await resolveCollection(m.toCollectionName, collectionType, database)
       if (fromId && toId) {

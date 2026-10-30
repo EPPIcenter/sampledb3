@@ -9,8 +9,12 @@ import { eq, and, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { parseControlProperties } from '../lib/control-properties'
 import { validateControlBatchName, generateUniqueBatchName } from '../lib/validation'
-import { generateControlDefinitionName, generateUniqueControlDefinitionName } from '../lib/control-name-generation'
-import { handleRouteError } from '../lib/error-handler'
+import {
+  generateControlDefinitionName,
+  generateUniqueControlDefinitionName,
+  isControlDefinitionNameTaken,
+} from '../lib/control-name-generation'
+import { ConflictError, handleRouteError, ValidationError } from '../lib/error-handler'
 import type { BloodControlProperties } from '../types/properties'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
@@ -21,11 +25,13 @@ import { validateControlBatchCsv } from '../lib/controls/batch-csv-validate'
 import {
   createBloodControlBatchSchema,
   createBatchWithSpecimensSchema,
+  createBatchesWithSpecimensSchema,
   addSpecimensToBatchSchema,
   validateControlBatchCsvSchema,
 } from '../lib/controls/batch-schemas'
 import {
   createBatchWithSpecimens,
+  createBatchesWithSpecimens,
   addSpecimensToBatch,
 } from '../lib/controls/batch-with-specimens'
 import { getBloodControlBatchSummary } from '../lib/controls/batch-summary'
@@ -41,6 +47,7 @@ import {
   strainCompositionEntrySchema,
   resolveStrainComposition,
   findBloodControlDefinitionByComposition,
+  DuplicateControlCompositionError,
   findMatchingDefinitionInList,
   buildBloodControlPropertiesPayload,
 } from '../lib/controls/strain-composition'
@@ -394,12 +401,7 @@ controls.post('/definitions/bulk', memberMiddleware, async (c) => {
       let finalName: string
       const customName = providedNames[i]?.trim()
       if (customName) {
-        const existingByName = await dbInstance
-          .select({ id: controlDefinition.id })
-          .from(controlDefinition)
-          .where(eq(controlDefinition.name, customName))
-          .get()
-        if (existingByName) {
+        if (await isControlDefinitionNameTaken(dbInstance, customName)) {
           return c.json({ error: `Control definition name "${customName}" is already in use` }, 400)
         }
         finalName = customName
@@ -466,10 +468,7 @@ controls.post('/', memberMiddleware, async (c) => {
       targetDensityUnitId,
     })
     if (duplicate) {
-      return c.json({
-        error: 'A control definition with this combination of density and strains already exists',
-        existingDefinition: duplicate,
-      }, 409)
+      throw new DuplicateControlCompositionError(duplicate)
     }
 
     const props: Record<string, unknown> = { ...(properties || {}) }
@@ -495,13 +494,8 @@ controls.post('/', memberMiddleware, async (c) => {
         strains: strainsWithNames,
       })
     } else {
-      const existingByName = await dbInstance
-        .select()
-        .from(controlDefinition)
-        .where(eq(controlDefinition.name, finalName))
-        .get()
-      if (existingByName) {
-        return c.json({ error: 'A control definition with this name already exists' }, 409)
+      if (await isControlDefinitionNameTaken(dbInstance, finalName)) {
+        throw new ConflictError('A control definition with this name already exists')
       }
     }
 
@@ -550,7 +544,7 @@ controls.patch('/:id', memberMiddleware, async (c) => {
     const body = await c.req.json()
     const schema = z.object({
       name: z.string().min(1).optional(),
-      controlType: z.enum(['blood', 'plasma_positive', 'plasma_negative', 'antibody', 'extraction', 'negative']).optional(),
+      controlType: z.string().optional(),
       targetDensity: z.number().optional(),
       targetDensityUnitId: z.number().int().optional(),
       strains: z.array(strainCompositionEntrySchema).optional(),
@@ -558,7 +552,12 @@ controls.patch('/:id', memberMiddleware, async (c) => {
     })
 
     const data = schema.parse(body)
-    const { strains, targetDensity, targetDensityUnitId, properties, ...baseData } = data
+    const { strains, targetDensity, targetDensityUnitId, properties, controlType, ...baseData } = data
+    // controlType is fixed at creation: these routes only serve blood definitions.
+    // The edit form sends the current type back, so only a change is an error.
+    if (controlType !== undefined && controlType !== existing.controlType) {
+      throw new ValidationError('controlType cannot be changed after a control definition is created')
+    }
 
     const existingProps = (existing.properties as Record<string, unknown>) || {}
     const newProps: Record<string, unknown> = { ...existingProps, ...(properties || {}) }
@@ -582,6 +581,29 @@ controls.patch('/:id', memberMiddleware, async (c) => {
       const unitRecord = await dbInstance.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
       if (unitRecord) {
         newProps.targetDensityUnitSymbol = unitRecord.symbol
+      }
+    }
+
+    if (baseData.name !== undefined && baseData.name !== existing.name) {
+      if (await isControlDefinitionNameTaken(dbInstance, baseData.name)) {
+        throw new ConflictError('A control definition with this name already exists')
+      }
+    }
+
+    // Same rule as create: no two definitions with the same density and strain mix.
+    if (strains !== undefined || targetDensity !== undefined || targetDensityUnitId !== undefined) {
+      const storedStrains = (newProps.strains as Array<{ id: number; percentage: number }> | undefined) ?? []
+      const duplicate = await findBloodControlDefinitionByComposition(
+        dbInstance,
+        {
+          strains: storedStrains.map((strain) => ({ strainId: strain.id, percentage: strain.percentage })),
+          targetDensity: newProps.targetDensity as number | undefined,
+          targetDensityUnitId: newProps.targetDensityUnitId as number | undefined,
+        },
+        { excludeId: id },
+      )
+      if (duplicate) {
+        throw new DuplicateControlCompositionError(duplicate)
       }
     }
 
@@ -680,6 +702,18 @@ controls.post('/:id/batches', memberMiddleware, async (c) => {
     const user = c.get('user')
     const batch = await createBloodControlBatch(dbInstance, definitionId, data, user?.id)
     return c.json({ batch }, 201)
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
+
+// Create several batches (one per density) all-or-nothing
+controls.post('/batches/create-many-with-specimens', memberMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const data = createBatchesWithSpecimensSchema.parse(body)
+    const results = await createBatchesWithSpecimens(dbInstance, data.batches)
+    return c.json({ batches: results }, 201)
   } catch (error) {
     return handleRouteError(error, c)
   }

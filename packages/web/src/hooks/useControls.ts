@@ -3,6 +3,7 @@ import { controlsApi, type ControlBatch, type ControlDefinition } from '../lib/a
 import { strainsApi } from '../lib/api/reference-data'
 import type { Strain } from '../lib/api/reference-data'
 import { getCompositionKey } from '../lib/composition-key'
+import { localToday } from '../lib/date-utils'
 
 export const controlKeys = {
   all: ['blood-controls'] as const,
@@ -113,7 +114,7 @@ export function useControlDefinitionWizardSeed(definitionId: number | undefined)
   return useQuery({
     queryKey: [...controlKeys.all, 'wizard-definition-seed', definitionId] as const,
     queryFn: async () => {
-      const today = new Date().toISOString().split('T')[0]
+      const today = localToday()
       const [summaryResponse, nameResponse] = await Promise.all([
         controlsApi.getDefinitionSummary(definitionId!),
         controlsApi.suggestBatchName(definitionId!, today),

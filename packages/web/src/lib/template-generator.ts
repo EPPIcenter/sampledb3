@@ -1,6 +1,7 @@
 import type { BulkDerivationSettings } from './api/derivations'
 import { buildCsv } from './csv'
 import { getCollectionNameColumn } from './container-columns'
+import { localToday } from './date-utils'
 
 export interface TemplateOptions {
   parentType: 'barcode' | 'control_batch' | 'study_subject' | 'cryovial_position'
@@ -83,7 +84,7 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
   if (parentColumns.includes('specimen_type_name')) defaultDerivationPerRow.specimen_type_name = derivedExampleSpecimenType
   if (parentColumns.includes('container_type')) defaultDerivationPerRow.container_type = settings.containerType || 'micronix_tube'
   if (parentColumns.includes('protocol')) defaultDerivationPerRow.protocol = exampleProtocolVal
-  if (parentColumns.includes('derivation_date')) defaultDerivationPerRow.derivation_date = new Date().toISOString().split('T')[0]
+  if (parentColumns.includes('derivation_date')) defaultDerivationPerRow.derivation_date = localToday()
   if (parentColumns.includes('quantity')) defaultDerivationPerRow.quantity = '1'
   if (parentColumns.includes('quantity_used')) defaultDerivationPerRow.quantity_used = '1'
   if (parentColumns.includes('reduce_parent_quantity')) defaultDerivationPerRow.reduce_parent_quantity = 'true'

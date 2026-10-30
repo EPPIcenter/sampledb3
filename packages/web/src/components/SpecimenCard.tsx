@@ -1,14 +1,12 @@
 import { Link } from 'react-router-dom'
 import { getSpecimenTypeIcon, getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
+import { formatDate } from '../lib/date-utils'
 import type { SubjectSummarySpecimen } from '../lib/api/subjects';interface SpecimenCardProps {
   specimen: SubjectSummarySpecimen
 }
 
 export default function SpecimenCard({ specimen }: SpecimenCardProps) {
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return null
-    return new Date(dateString).toLocaleDateString()
-  }
+  const formatCollectionDate = (dateString?: string) => (dateString ? formatDate(dateString, 'numeric') : null)
 
   const formatContainerBreakdown = () => {
     const entries = Object.entries(specimen.containerBreakdown)
@@ -39,7 +37,7 @@ export default function SpecimenCard({ specimen }: SpecimenCardProps) {
               </p>
               {specimen.collectionDate && (
                 <p className="text-sm text-app-text-muted mt-1">
-                  Collected: {formatDate(specimen.collectionDate)}
+                  Collected: {formatCollectionDate(specimen.collectionDate)}
                 </p>
               )}
             </div>

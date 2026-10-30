@@ -160,7 +160,9 @@ containers.patch('/:id', memberMiddleware, async (c) => {
     
     const data = schema.parse(body)
     const { tagIds, unitId, barcode: rawBarcode, sublabel: rawSublabel, ...restData } = data
-    const updateData: { comment?: string; remainingQuantity?: number; unitId?: number } = { ...restData }
+    const updateData: { comment?: string | null; remainingQuantity?: number; unitId?: number } = { ...restData }
+    // An emptied comment clears it.
+    if (restData.comment !== undefined && restData.comment.trim() === '') updateData.comment = null
 
     const [container, micronixInfo, cryovialInfo, paperInfo, staticWellInfo] = await Promise.all([
       database.select().from(storageContainer).where(eq(storageContainer.id, id)).get(),
