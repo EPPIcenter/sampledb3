@@ -1,20 +1,22 @@
-type PaginatedListBody = {
+export type PaginatedListBody = {
   pagination?: { total?: number }
   [key: string]: unknown
 }
 
-/** Read total row count from a paginated list endpoint (`limit: 1`). */
+export type ListTotalParams = { limit: number; created_from?: string; created_to?: string }
+
+/**
+ * Read the total row count from a paginated list endpoint (`limit: 1`). A failed request
+ * rejects, so the caller can show an error instead of a count of 0.
+ */
 export async function listTotal(
-  fetchPage: (params: { limit: number; created_to?: string }) => Promise<PaginatedListBody>,
+  fetchPage: (params: ListTotalParams) => Promise<PaginatedListBody>,
   arrayKey: string,
-  extraParams?: { created_to?: string },
+  extraParams?: Omit<ListTotalParams, 'limit'>,
 ): Promise<number> {
-  try {
-    const res = await fetchPage({ limit: 1, ...extraParams })
-    if (res.pagination?.total != null) return res.pagination.total
-    const arr = res[arrayKey]
-    return Array.isArray(arr) ? arr.length : 0
-  } catch {
-    return 0
-  }
+  const res = await fetchPage({ limit: 1, ...extraParams })
+  if (res.pagination?.total != null) return res.pagination.total
+  const arr = res[arrayKey]
+  if (Array.isArray(arr)) return arr.length
+  throw new Error(`List response has neither pagination.total nor a "${arrayKey}" array`)
 }

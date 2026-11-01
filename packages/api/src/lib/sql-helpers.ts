@@ -1,4 +1,4 @@
-import { lt, lte } from 'drizzle-orm'
+import { gte, lt, lte, type SQL } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
 import { shiftCalendarDate } from './datetime'
 
@@ -9,6 +9,21 @@ import { shiftCalendarDate } from './datetime'
 export function dateToUpperBound(column: SQLiteColumn, dateTo: string) {
   const next = /^\d{4}-\d{2}-\d{2}$/.test(dateTo) ? shiftCalendarDate(dateTo, 1) : null
   return next ? lt(column, next) : lte(column, dateTo)
+}
+
+/**
+ * Conditions for a `created_from` / `created_to` query pair on a timestamp column. Either
+ * bound may be absent; `dateTo` includes its whole day (see `dateToUpperBound`).
+ */
+export function dateRangeConditions(
+  column: SQLiteColumn,
+  dateFrom: string | undefined,
+  dateTo: string | undefined,
+): SQL[] {
+  const conditions: SQL[] = []
+  if (dateFrom) conditions.push(gte(column, dateFrom))
+  if (dateTo) conditions.push(dateToUpperBound(column, dateTo))
+  return conditions
 }
 
 /**

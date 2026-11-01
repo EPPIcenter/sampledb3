@@ -1,12 +1,16 @@
 import type { Database } from '../../db/client'
 import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { study, studySubject } from '../../db/schema'
-import { eq, inArray, or, sql } from 'drizzle-orm'
-import { SQL_IN_CHUNK_SIZE } from '../sql-helpers'
+import { and, eq, inArray, or, sql } from 'drizzle-orm'
+import { SQL_IN_CHUNK_SIZE, dateRangeConditions } from '../sql-helpers'
 import { likeContains } from '../sql-like'
 
 export type ListStudiesParams = {
   search?: string
+  /** Earliest `created` date (YYYY-MM-DD), inclusive. */
+  createdFrom?: string
+  /** Latest `created` date (YYYY-MM-DD), inclusive of the whole day. */
+  createdTo?: string
   page: number
   limit: number
 }
@@ -35,21 +39,17 @@ export type GetStudySummariesResult = {
 
 /** List studies with optional search and pagination. */
 export async function listStudies(database: Database, params: ListStudiesParams): Promise<ListStudiesResult> {
-  const { search, page, limit } = params
+  const { search, createdFrom, createdTo, page, limit } = params
   const offset = (page - 1) * limit
 
-  let query = database.select().from(study)
-  let countQuery = database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(study)
-
-  if (search) {
-    const whereClause = or(likeContains(study.title, search), likeContains(study.shortCode, search))
-    query = query.where(whereClause) as any
-    countQuery = countQuery.where(whereClause) as any
-  }
+  const whereClause = and(
+    search ? or(likeContains(study.title, search), likeContains(study.shortCode, search)) : undefined,
+    ...dateRangeConditions(study.created, createdFrom, createdTo),
+  )
 
   const [studiesList, countResult] = await Promise.all([
-    query.limit(limit).offset(offset),
-    countQuery,
+    database.select().from(study).where(whereClause).limit(limit).offset(offset),
+    database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(study).where(whereClause),
   ])
 
   const total = countResult[0]?.count || 0

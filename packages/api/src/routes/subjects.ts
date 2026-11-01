@@ -11,6 +11,7 @@ import {
 } from '../db/schema'
 import { eq, sql, and, inArray, or, isNull } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../lib/constants'
+import { dateRangeConditions } from '../lib/sql-helpers'
 import { z } from 'zod'
 import { resolveStudyByShortCode, resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from '../lib/identifier-resolution'
 import { validateSubjectName, validateStudyShortCode, validateSpecimenData, validateCollectionDate, validateContainerTypeForSpecimenType, validateUnitForContainerType } from '../lib/validation'
@@ -48,10 +49,13 @@ subjects.get('/', authMiddleware, async (c) => {
     const page = validatePage(c.req.query('page'))
     const limit = await validateLimit(dbInstance, c.req.query('limit'))
     const offset = (page - 1) * limit
-    
+    const whereClause = and(
+      ...dateRangeConditions(studySubject.created, c.req.query('created_from'), c.req.query('created_to')),
+    )
+
     const [subjectsList, countResult] = await Promise.all([
-      dbInstance.select().from(studySubject).limit(limit).offset(offset),
-      dbInstance.select({ count: sql<number>`COUNT(*)`.as('count') }).from(studySubject),
+      dbInstance.select().from(studySubject).where(whereClause).limit(limit).offset(offset),
+      dbInstance.select({ count: sql<number>`COUNT(*)`.as('count') }).from(studySubject).where(whereClause),
     ])
     
     const total = countResult[0]?.count || 0

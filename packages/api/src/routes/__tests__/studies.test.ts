@@ -42,6 +42,21 @@ describe('Studies API (list, get, create, update)', () => {
       expect(data.pagination).toHaveProperty('totalPages')
     })
 
+    it('counts only studies created inside created_from and created_to', async () => {
+      await createTestStudy(ctx.db, { title: 'Before', shortCode: 'B1', created: '2026-08-31 23:59:59' })
+      await createTestStudy(ctx.db, { title: 'First day', shortCode: 'F1', created: '2026-09-01 00:00:00' })
+      await createTestStudy(ctx.db, { title: 'Last day', shortCode: 'L1', created: '2026-09-30 23:59:59' })
+      await createTestStudy(ctx.db, { title: 'After', shortCode: 'A1', created: '2026-10-01 00:00:00' })
+
+      const res = await ctx.request('/api/studies?created_from=2026-09-01&created_to=2026-09-30&limit=1')
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { pagination: { total: number } }
+      expect(data.pagination.total).toBe(2)
+
+      const toOnly = await ctx.request('/api/studies?created_to=2026-09-30&limit=1')
+      expect(((await toOnly.json()) as { pagination: { total: number } }).pagination.total).toBe(3)
+    })
+
     it('returns 401 when not authenticated', async () => {
       const res = await authenticatedRequest(ctx.createRequestApp(), '/api/studies', { method: 'GET' })
       expect(res.status).toBe(401)

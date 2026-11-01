@@ -34,7 +34,7 @@ Metrics sit in three groups:
 - **Studies:** **Studies** and **Subjects**
 - **Storage:** **Locations**
 
-Some cards show a 30-day trend. The section heading **Key metrics** is visually hidden; the group labels are what you read on the page.
+**Specimens**, **Studies**, and **Subjects** can show a 30-day trend: the percentage change between the number created in the last 30 days and the number created in the 30 days before. A card shows no trend when nothing was created in the earlier 30 days. If a count fails to load, its card says so and offers **Retry** instead of showing a number. The section heading **Key metrics** is visually hidden; the group labels are what you read on the page.
 
 ## Recent Studies and Recent Activity
 

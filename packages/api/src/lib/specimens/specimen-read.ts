@@ -4,7 +4,7 @@ import { eq, and, or, sql, inArray } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../constants'
 import { findContainersByBarcode } from '../identifier-resolution'
 import { collectionDateFilter, timestampFilter } from '../date-filters'
-import { dateToUpperBound } from '../sql-helpers'
+import { dateRangeConditions } from '../sql-helpers'
 import { likeContains } from '../sql-like'
 
 export type ListSpecimensQuery = {
@@ -153,12 +153,7 @@ export async function listSpecimens(database: Database, query: ListSpecimensQuer
   if (collectionTo) {
     conditions.push(sql`${specimen.collectionDate} <= ${collectionTo}`)
   }
-  if (createdFromBound) {
-    conditions.push(sql`${specimen.created} >= ${createdFromBound}`)
-  }
-  if (createdToBound) {
-    conditions.push(dateToUpperBound(specimen.created, createdToBound))
-  }
+  conditions.push(...dateRangeConditions(specimen.created, createdFromBound, createdToBound))
 
   if (barcode) {
     // Every Specimen with a Container carrying the barcode; cryovial barcodes repeat.

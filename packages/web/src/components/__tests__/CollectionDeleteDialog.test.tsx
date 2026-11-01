@@ -233,7 +233,7 @@ describe('CollectionDeleteDialog refresh after delete', () => {
       { id: 4, name: '103' },
       { id: 7, name: 'Other plate' },
     ])
-    const otherKeys = [dashboardKeys.critical(), studyKeys.summaryCard(1), subjectKeys.summary(2), locationKeys.detail(3)]
+    const otherKeys = [dashboardKeys.count('specimens'), studyKeys.summaryCard(1), subjectKeys.summary(2), locationKeys.detail(3)]
     for (const key of otherKeys) queryClient.setQueryData(key, { stale: false })
 
     const user = userEvent.setup()

@@ -354,13 +354,16 @@ export async function createTestControlDefinition(db: Database, data?: {
 /**
  * Create a test study
  */
-export async function createTestStudy(db: Database, data: { title: string, shortCode: string, leadPerson?: string }) {
+export async function createTestStudy(
+  db: Database,
+  data: { title: string, shortCode: string, leadPerson?: string, created?: string },
+) {
   const now = utcNow()
   const [result] = await db.insert(study).values({
     ...data,
     isLongitudinal: false,
     leadPerson: data.leadPerson ?? 'Test Person',
-    created: now,
+    created: data.created ?? now,
     lastUpdated: now,
   }).returning()
   return result
@@ -369,11 +372,14 @@ export async function createTestStudy(db: Database, data: { title: string, short
 /**
  * Create a test study subject
  */
-export async function createTestStudySubject(db: Database, data: { studyId: number, name: string }) {
+export async function createTestStudySubject(
+  db: Database,
+  data: { studyId: number, name: string, created?: string },
+) {
   const now = utcNow()
   const [result] = await db.insert(studySubject).values({
     ...data,
-    created: now,
+    created: data.created ?? now,
     lastUpdated: now,
   }).returning()
   return result
