@@ -118,12 +118,16 @@ function ReferenceDataContent({
       return
     }
 
-    if (isAdding) {
-      await specimenTypesApi.addContainerType(specimenTypeId, containerType)
-    } else {
-      await specimenTypesApi.removeContainerType(specimenTypeId, containerType)
+    try {
+      if (isAdding) {
+        await specimenTypesApi.addContainerType(specimenTypeId, containerType)
+      } else {
+        await specimenTypesApi.removeContainerType(specimenTypeId, containerType)
+      }
+    } finally {
+      // Refetch on failure too, so the toggle shows what the server saved. ContainerTypeToggle shows the error.
+      void invalidateAfterReferenceDataWrite(queryClient)
     }
-    void invalidateAfterReferenceDataWrite(queryClient)
   }
 
   useEffect(() => {
