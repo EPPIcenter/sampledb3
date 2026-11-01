@@ -38,6 +38,12 @@ An action that removes or rewrites recorded **Operational data** or configuratio
 - Deleting a non-tutorial **Study** (removes its **Subjects**, **Specimens**, and **Containers**)
 - Deleting **Reference data**, a **Location**, or a user account
 
+Members may also take these actions, which cannot be undone but are part of everyday lab work, so they are not destructive actions:
+
+- Merging two **Subjects**
+- Deleting a qPCR experiment with its plate layout and results
+- Deleting one **Specimen** and its **Containers** from a **Control batch**
+
 _Avoid_: Calling an ordinary edit (renaming a **Collection**, changing a **Container**'s quantity, removing a **Tag** from a **Container**) a destructive action.
 
 ### Provenance hierarchy
