@@ -57,6 +57,17 @@ describe('Studies API (list, get, create, update)', () => {
       expect(((await toOnly.json()) as { pagination: { total: number } }).pagination.total).toBe(3)
     })
 
+    it.each([
+      ['created_from', 'yesterday'],
+      ['created_to', '2024-13-01'],
+    ])('returns 400 for %s=%s', async (param, value) => {
+      const res = await ctx.request(`/api/studies?${param}=${encodeURIComponent(value)}`)
+
+      expect(res.status).toBe(400)
+      const data = (await res.json()) as { error: string }
+      expect(data.error).toContain(param)
+    })
+
     it('returns 401 when not authenticated', async () => {
       const res = await authenticatedRequest(ctx.createRequestApp(), '/api/studies', { method: 'GET' })
       expect(res.status).toBe(401)

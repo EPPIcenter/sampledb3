@@ -12,6 +12,7 @@ import {
 import { eq, sql, and, inArray, or, isNull } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../lib/constants'
 import { dateRangeConditions } from '../lib/sql-helpers'
+import { timestampFilter } from '../lib/date-filters'
 import { z } from 'zod'
 import { resolveStudyByShortCode, resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from '../lib/identifier-resolution'
 import { validateSubjectName, validateStudyShortCode, validateSpecimenData, validateCollectionDate, validateContainerTypeForSpecimenType, validateUnitForContainerType } from '../lib/validation'
@@ -50,7 +51,11 @@ subjects.get('/', authMiddleware, async (c) => {
     const limit = await validateLimit(dbInstance, c.req.query('limit'))
     const offset = (page - 1) * limit
     const whereClause = and(
-      ...dateRangeConditions(studySubject.created, c.req.query('created_from'), c.req.query('created_to')),
+      ...dateRangeConditions(
+        studySubject.created,
+        timestampFilter('created_from', c.req.query('created_from')),
+        timestampFilter('created_to', c.req.query('created_to')),
+      ),
     )
 
     const [subjectsList, countResult] = await Promise.all([
