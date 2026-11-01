@@ -96,6 +96,20 @@ describe('cryovial ingest', () => {
     ])
   })
 
+  it('rejects the same target position or source tube twice in one file', () => {
+    const text = [
+      'source_collection_name,source_position,target_position',
+      'BOX-BETA,A01,B01',
+      'BOX-BETA,A02,b1',
+      'BOX-BETA,a1,C01',
+    ].join('\n')
+    const file = ingestScanCsvText(cryovialScanMoveVariant, fileSource('box-alpha.csv'), text, { collections: boxes })
+    expect(file.validationErrors).toEqual([
+      { row: 2, error: 'Target position B01 appears more than once (also row 1)' },
+      { row: 3, error: 'Source tube BOX-BETA A01 appears more than once (also row 1)' },
+    ])
+  })
+
   it('requires a manual choice when multiple boxes match the filename case-insensitively', () => {
     const text = 'source_collection_name,source_position,target_position\nBOX-BETA,A01,B01'
     const file = ingestScanCsvText(cryovialScanMoveVariant, fileSource('box-alpha.csv'), text, {

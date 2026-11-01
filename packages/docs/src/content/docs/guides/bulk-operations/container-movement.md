@@ -25,6 +25,7 @@ Requirements:
 - A row with a barcode moves that tube to that well on the destination plate.
 - Leave the barcode cell empty for wells that should be empty.
 - Positions use **A01**: letter A-H plus two zero-padded digits. `A1` and `a1` are padded to `A01`.
+- Each barcode appears once. Upload flags a repeated position (`A1` and `A01` count as the same well) or barcode by row.
 
 **Destination plate name** comes from the file name by default, or from a CSV column that repeats the plate name on every row, depending on scanner configuration. Name the file after the destination plate, for example `PLATE-002.csv`. The system strips `.csv` and common date or time suffixes such as `_2024-01-15` when inferring the name.
 
@@ -72,7 +73,7 @@ Each source plate can map to only one destination across all files.
 
 Open **Operations → Move Containers → Move Cryovial Tubes**. Command palette: **Move Cryovial Containers**.
 
-CSV columns: `source_collection_name`, `source_position`, `target_position`. There is no destination box column. Destination comes from the file name or the **Destination Box** picker. Click **Download Template** for headers. `target_position` is a row letter A-J plus a column 1-10, for example `A5` (stored as `A05`). Upload flags any other target position by row. `source_position` is matched as stored, so a tube with an older, malformed position can still be moved to a valid one.
+CSV columns: `source_collection_name`, `source_position`, `target_position`. There is no destination box column. Destination comes from the file name or the **Destination Box** picker. Click **Download Template** for headers. `target_position` is a row letter A-J plus a column 1-10, for example `A5` (stored as `A05`). Upload flags any other target position by row, as well as a target position or source tube listed twice in one file. `source_position` is matched as stored, so a tube with an older, malformed position can still be moved to a valid one.
 
 A move to an occupied target fails unless the occupying tube is also moved in the same batch. There is no overwrite option.
 
@@ -95,10 +96,11 @@ Before Resolve, relocation checks run: if a well is empty in the upload but occu
 
 Writes for the rows that will execute are still wrapped in a transaction, so a write-time failure rolls that set back. Paper movement has no atomicity choice; selected sheets move together.
 
-After execution, micronix and cryovial results are per file. Paper shows sheet counts.
+After execution, micronix and cryovial results are per file, with each error under the file and CSV row it came from. Paper shows sheet counts. **Execute Moves** is disabled while the moves run, so a second click sends nothing.
 
 ## Errors
 
+- Lookup failed (for example a server error during Resolve): the message appears on each file. Click **Next: Resolve Containers** again to retry with the same files.
 - Unresolved micronix barcodes: they are listed on Resolve. Click **Back**, fix the CSV, then **Next: Resolve Containers**. You do not need to recreate destination plates that already exist.
 - Relocation error on Upload (tube at an empty well not relocated): every tube currently on the destination plate must stay in place (barcode in that well) or appear at another well in the same batch.
 - Occupied destination at execute: adjust positions or use a different atomicity mode.

@@ -91,7 +91,7 @@ describe('groupResolveResults', () => {
       micronixScanMoveVariant,
     )
     expect(outcomes[0].errors).toEqual([
-      { row: 0, error: 'Some containers are not from micronix plates' },
+      { row: 0, error: 'Some containers are not from micronix plates', kind: 'resolution' },
     ])
     expect(outcomes[1].errors).toEqual([])
   })
@@ -114,11 +114,11 @@ describe('validateRelocations', () => {
       new Map([
         ['PLATE-A', { A02: { type: 'micronix_tube', barcode: 'ORPHAN' } }],
       ]),
-      'plate',
+      micronixScanMoveVariant,
     )
     expect(errors.get(0)).toEqual([
       {
-        row: 0,
+        row: 2,
         error:
           'Position A02 on plate "PLATE-A" is empty in your upload but tube ORPHAN is currently there and is not relocated in this move.',
         kind: 'relocation',
@@ -141,13 +141,68 @@ describe('validateRelocations', () => {
       new Map([
         ['PLATE-A', { A02: { type: 'micronix_tube', barcode: 'ORPHAN' } }],
       ]),
-      'plate',
+      micronixScanMoveVariant,
+    )
+    expect(errors.size).toBe(0)
+  })
+
+  it('matches scanner positions like A1 and a01 to the stored A01 well', () => {
+    const files = [
+      makeFile({
+        selectedDestinationName: 'PLATE-A',
+        csvRows: [
+          { container_barcode: 'BC1', target_position: 'b1' },
+          { container_barcode: '', target_position: 'A1' },
+          { container_barcode: '', target_position: 'a03' },
+        ],
+      }),
+    ]
+    const errors = validateRelocations(
+      files,
+      new Map([
+        [
+          'PLATE-A',
+          {
+            A01: { type: 'micronix_tube', barcode: 'ORPHAN-1' },
+            // A legacy unpadded key still matches.
+            A3: { type: 'micronix_tube', barcode: 'ORPHAN-3' },
+          },
+        ],
+      ]),
+      micronixScanMoveVariant,
+    )
+    expect(errors.get(0)?.map((e) => [e.row, e.error])).toEqual([
+      [
+        2,
+        'Position A01 on plate "PLATE-A" is empty in your upload but tube ORPHAN-1 is currently there and is not relocated in this move.',
+      ],
+      [
+        3,
+        'Position A03 on plate "PLATE-A" is empty in your upload but tube ORPHAN-3 is currently there and is not relocated in this move.',
+      ],
+    ])
+  })
+
+  it('treats a tube scanned at B1 as filling the stored B01 well', () => {
+    const files = [
+      makeFile({
+        selectedDestinationName: 'PLATE-A',
+        csvRows: [
+          { container_barcode: 'BC1', target_position: 'B1' },
+          { container_barcode: '', target_position: 'B01' },
+        ],
+      }),
+    ]
+    const errors = validateRelocations(
+      files,
+      new Map([['PLATE-A', { B01: { type: 'micronix_tube', barcode: 'OTHER' } }]]),
+      micronixScanMoveVariant,
     )
     expect(errors.size).toBe(0)
   })
 
   it('reports a missing destination instead of validating wells', () => {
-    const errors = validateRelocations(baseFiles, new Map(), 'plate')
+    const errors = validateRelocations(baseFiles, new Map(), micronixScanMoveVariant)
     expect(errors.get(0)).toEqual([
       {
         row: 0,
