@@ -3,6 +3,8 @@ import { tagsApi } from '../lib/api/reference-data';
 import type { Tag } from '../lib/api/reference-data';
 import { settingsApi } from '../lib/api/settings';
 import type { Unit } from '../lib/api/types';
+import type { ContainerUpdate } from '../lib/api/containers'
+import { useUpdateContainer } from '../hooks/useContainers'
 import { useHotkey, useModifierHotkey } from '../hooks/useHotkey'
 import { Modal } from '../ui'
 
@@ -16,8 +18,10 @@ interface ContainerEditModalProps {
     tags?: Array<{ id: number; name: string }>
     unit?: { id: number; symbol: string }
     containerType?: string
-    /** Subtype barcode; editable for micronix_tube, cryovial_tube, paper (not static_well) */
+    /** Tube barcode; editable for micronix_tube and cryovial_tube */
     barcode?: string | null
+    /** Paper sublabel; editable for paper */
+    sublabel?: string | null
   }
   onSuccess: () => void
 }
@@ -25,9 +29,15 @@ interface ContainerEditModalProps {
 type ContainerForEdit = ContainerEditModalProps['container']
 
 function canEditBarcode(containerType: string | undefined): boolean {
-  return (
-    containerType === 'micronix_tube' || containerType === 'cryovial_tube' || containerType === 'paper'
-  )
+  return containerType === 'micronix_tube' || containerType === 'cryovial_tube'
+}
+
+function errorMessageOf(err: unknown): string {
+  if (err && typeof err === 'object' && 'response' in err) {
+    const message = (err as { response?: { data?: { error?: unknown } } }).response?.data?.error
+    if (typeof message === 'string' && message.length > 0) return message
+  }
+  return err instanceof Error && err.message ? err.message : 'Failed to update container'
 }
 
 function ContainerEditModalForm({
@@ -46,6 +56,7 @@ function ContainerEditModalForm({
   const [loadingTags, setLoadingTags] = useState(false)
   const [loadingUnits, setLoadingUnits] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
+  const updateContainer = useUpdateContainer()
 
   const [formData, setFormData] = useState({
     comment: container.comment || '',
@@ -53,6 +64,7 @@ function ContainerEditModalForm({
     unitId: container.unit?.id || undefined,
     tagIds: container.tags?.map(t => t.id) || [],
     barcode: container.barcode ?? '',
+    sublabel: container.sublabel ?? '',
   })
 
   // Load tags and units when form mounts (key={container.id} resets form per container)
@@ -95,13 +107,7 @@ function ContainerEditModalForm({
     setError(null)
 
     try {
-      const updateData: {
-        comment?: string
-        remainingQuantity?: number
-        unitId?: number
-        tagIds?: number[]
-        barcode?: string | null
-      } = {}
+      const updateData: ContainerUpdate = {}
 
       // Only include fields that have changed
       if (formData.comment !== (container.comment || '')) {
@@ -158,30 +164,27 @@ function ContainerEditModalForm({
         }
       }
 
+      if (container.containerType === 'paper') {
+        const t = formData.sublabel.trim()
+        const next = t.length > 0 ? t : null
+        const previous = container.sublabel?.trim() || null
+        if (next !== previous) {
+          updateData.sublabel = next
+        }
+      }
+
       // Only send request if there are changes
       if (Object.keys(updateData).length === 0) {
         onClose()
         return
       }
 
-      const response = await fetch(`/api/containers/${container.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(updateData),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to update container')
-      }
+      await updateContainer.mutateAsync({ id: container.id, data: updateData })
 
       onSuccess()
       onClose()
-    } catch (err: any) {
-      setError(err.message || 'Failed to update container')
+    } catch (err: unknown) {
+      setError(errorMessageOf(err))
     } finally {
       setLoading(false)
     }
@@ -245,6 +248,25 @@ function ContainerEditModalForm({
                     placeholder="Scan or type barcode"
                   />
                   <p className="mt-1 text-xs text-app-text-muted">To change grid position, use Move containers in the app menu.</p>
+                </div>
+              )}
+
+              {container.containerType === 'paper' && (
+                <div>
+                  <label htmlFor="sublabel" className="block text-sm font-medium text-app-text mb-1">
+                    Sublabel
+                  </label>
+                  <input
+                    type="text"
+                    id="sublabel"
+                    value={formData.sublabel}
+                    onChange={(e) => setFormData({ ...formData, sublabel: e.target.value })}
+                    className="w-full px-3 py-2 border border-app-border rounded-md shadow-sm font-mono focus:ring-app-accent focus:border-app-accent"
+                    disabled={loading}
+                    autoComplete="off"
+                    placeholder="Spot identifier on the sheet"
+                  />
+                  <p className="mt-1 text-xs text-app-text-muted">To move it to another sheet, use Move Papers in the app menu.</p>
                 </div>
               )}
 

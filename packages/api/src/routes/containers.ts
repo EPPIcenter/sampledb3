@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Database } from '../db/client'
 import { storageContainer, micronixTube, cryovialTube, paper, staticWell, tag, storageContainerTag } from '../db/schema'
-import { eq, and, sql } from 'drizzle-orm'
+import { eq, and, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
@@ -11,7 +11,15 @@ import { resolveContainerByBarcode } from '../lib/identifier-resolution'
 import { enrichContainerForApi, enrichContainersForApi, toEnrichedContainerApi } from '../lib/container-api-enrichment'
 import { loadContainerReadViews } from '../lib/container-read-view'
 import { mapEnrichedContainerToWire, mapEnrichedContainersToWire } from '../lib/container-wire-mapper'
-import { handleRouteError, RouteError, containersFetchFailedBody } from '../lib/error-handler'
+import {
+  handleRouteError,
+  RouteError,
+  containersFetchFailedBody,
+  NotFoundError,
+  ValidationError,
+} from '../lib/error-handler'
+import { withWriteTransaction } from '../db/write-transaction'
+import { validateUnitForContainerType } from '../lib/validation'
 import { containerHasAllTags } from '../lib/container-selection'
 
 /**
@@ -119,171 +127,152 @@ containers.get('/:id', authMiddleware, async (c) => {
   }
 })
 
-// Update container
+// Update container. Every change is saved, or none: the checks and writes share one transaction.
+const containerPatchSchema = z.object({
+  comment: z.string().optional(),
+  remainingQuantity: z.number().optional(),
+  unitId: z.number().int().optional(),
+  tagIds: z.array(z.number().int()).optional(), // Replaces the Container's Tags
+  barcode: z.union([z.string(), z.null()]).optional(),
+  sublabel: z.union([z.string(), z.null()]).optional(),
+})
+
+type ContainerSubtype = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+
+async function containerSubtypeOf(database: Database, id: number): Promise<ContainerSubtype | null> {
+  const [micronixInfo, cryovialInfo, paperInfo, staticWellInfo] = await Promise.all([
+    database.select({ id: micronixTube.id }).from(micronixTube).where(eq(micronixTube.id, id)).get(),
+    database.select({ id: cryovialTube.id }).from(cryovialTube).where(eq(cryovialTube.id, id)).get(),
+    database.select({ id: paper.id }).from(paper).where(eq(paper.id, id)).get(),
+    database.select({ id: staticWell.id }).from(staticWell).where(eq(staticWell.id, id)).get(),
+  ])
+  if (micronixInfo) return 'micronix_tube'
+  if (cryovialInfo) return 'cryovial_tube'
+  if (paperInfo) return 'paper'
+  if (staticWellInfo) return 'static_well'
+  return null
+}
+
+/** The barcode to store (null clears it). Throws when this subtype can't take one. */
+function nextBarcode(containerType: ContainerSubtype | null, rawBarcode: string | null): string | null {
+  if (containerType === 'paper') {
+    throw new ValidationError('Paper containers use sublabel for spot identifiers, not barcode')
+  }
+  if (containerType === 'static_well' || !containerType) {
+    throw new ValidationError('Barcode cannot be set for this container type')
+  }
+  const trimmed = rawBarcode?.trim() ?? ''
+  if (containerType === 'micronix_tube') {
+    if (rawBarcode === null) throw new ValidationError('Micronix tube barcode cannot be cleared')
+    if (trimmed.length === 0) throw new ValidationError('Micronix tube barcode cannot be empty')
+  }
+  return trimmed.length === 0 ? null : trimmed
+}
+
+function nextSublabel(containerType: ContainerSubtype | null, rawSublabel: string | null): string | null {
+  if (containerType !== 'paper') {
+    throw new ValidationError('Sublabel can only be set for paper containers')
+  }
+  const trimmed = rawSublabel?.trim() ?? ''
+  return trimmed.length === 0 ? null : trimmed
+}
+
+async function assertIdentifierFree(
+  database: Database,
+  id: number,
+  identifier: string | null,
+  label: 'Barcode' | 'Sublabel',
+): Promise<void> {
+  if (identifier === null) return
+  const takenBy = await resolveContainerByBarcode(database, identifier)
+  if (takenBy !== null && takenBy !== id) {
+    throw new ValidationError(`${label} '${identifier}' is already in use`)
+  }
+}
+
+/** De-duplicated Tag ids, after checking that each one exists. */
+async function knownTagIds(database: Database, tagIds: number[]): Promise<number[]> {
+  const unique = [...new Set(tagIds)]
+  if (unique.length === 0) return unique
+  const found = await database.select({ id: tag.id }).from(tag).where(inArray(tag.id, unique))
+  const foundIds = new Set(found.map((row) => row.id))
+  const unknown = unique.filter((tagId) => !foundIds.has(tagId))
+  if (unknown.length > 0) {
+    throw new ValidationError(`Unknown tag id${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}`, {
+      unknownTagIds: unknown,
+    })
+  }
+  return unique
+}
+
 containers.patch('/:id', memberMiddleware, async (c) => {
   try {
     const id = parseInt(requireParam(c, 'id'))
-    
     if (isNaN(id)) {
-      return c.json({ error: 'Invalid container ID' }, 400)
+      throw new ValidationError('Invalid container ID')
     }
 
-    const body = await c.req.json()
-    const schema = z.object({
-      comment: z.string().optional(),
-      remainingQuantity: z.number().optional(),
-      unitId: z.number().int().optional(),
-      tagIds: z.array(z.number().int()).optional(), // Replace tags
-      barcode: z.union([z.string(), z.null()]).optional(),
-      sublabel: z.union([z.string(), z.null()]).optional(),
-    })
-    
-    const data = schema.parse(body)
-    const { tagIds, unitId, barcode: rawBarcode, sublabel: rawSublabel, ...restData } = data
-    const updateData: { comment?: string | null; remainingQuantity?: number; unitId?: number } = { ...restData }
-    // An emptied comment clears it.
-    if (restData.comment !== undefined && restData.comment.trim() === '') updateData.comment = null
+    const data = containerPatchSchema.parse(await c.req.json())
+    const { tagIds, unitId, barcode: rawBarcode, sublabel: rawSublabel, comment, remainingQuantity } = data
+    const userId = c.get('user')?.id
 
-    const [container, micronixInfo, cryovialInfo, paperInfo, staticWellInfo] = await Promise.all([
-      database.select().from(storageContainer).where(eq(storageContainer.id, id)).get(),
-      database.select().from(micronixTube).where(eq(micronixTube.id, id)).get(),
-      database.select().from(cryovialTube).where(eq(cryovialTube.id, id)).get(),
-      database.select().from(paper).where(eq(paper.id, id)).get(),
-      database.select().from(staticWell).where(eq(staticWell.id, id)).get(),
-    ])
+    const updated = await withWriteTransaction(database, async (tx) => {
+      const container = await tx.select({ id: storageContainer.id }).from(storageContainer).where(eq(storageContainer.id, id)).get()
+      if (!container) {
+        throw new NotFoundError('Container', id)
+      }
+      const containerType = await containerSubtypeOf(tx, id)
 
-    if (!container) {
-      return c.json({ error: 'Container not found' }, 404)
-    }
-
-    let containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well' | null = null
-    if (micronixInfo) containerType = 'micronix_tube'
-    else if (cryovialInfo) containerType = 'cryovial_tube'
-    else if (paperInfo) containerType = 'paper'
-    else if (staticWellInfo) containerType = 'static_well'
-
-    // Validate unit if provided
-    if (unitId !== undefined) {
-      if (containerType) {
-        // Validate unit is allowed for container type
-        const { validateUnitForContainerType } = await import('../lib/validation')
-        const validation = await validateUnitForContainerType(database, containerType, unitId)
+      // Check everything before the first write.
+      if (unitId !== undefined && containerType) {
+        const validation = await validateUnitForContainerType(tx, containerType, unitId)
         if (!validation.valid) {
-          return c.json({ error: validation.error }, 400)
+          throw new ValidationError(validation.error ?? 'Invalid unit for this container type')
+        }
+      }
+      const newBarcode = rawBarcode === undefined ? undefined : nextBarcode(containerType, rawBarcode)
+      if (newBarcode !== undefined) await assertIdentifierFree(tx, id, newBarcode, 'Barcode')
+      const newSublabel = rawSublabel === undefined ? undefined : nextSublabel(containerType, rawSublabel)
+      if (newSublabel !== undefined) await assertIdentifierFree(tx, id, newSublabel, 'Sublabel')
+      const newTagIds = tagIds === undefined ? undefined : await knownTagIds(tx, tagIds)
+
+      const [row] = await tx
+        .update(storageContainer)
+        .set({
+          ...(comment !== undefined && { comment: comment.trim() === '' ? null : comment }),
+          ...(remainingQuantity !== undefined && { remainingQuantity }),
+          ...(unitId !== undefined && { unitId }),
+          lastUpdated: utcNow(),
+          updatedBy: userId,
+        })
+        .where(eq(storageContainer.id, id))
+        .returning()
+
+      if (newTagIds !== undefined) {
+        await tx.delete(storageContainerTag).where(eq(storageContainerTag.storageContainerId, id))
+        if (newTagIds.length > 0) {
+          await tx.insert(storageContainerTag).values(newTagIds.map((tagId) => ({ storageContainerId: id, tagId })))
         }
       }
 
-      updateData.unitId = unitId
-    }
-
-    let newBarcode: string | null | undefined
-    let newSublabel: string | null | undefined
-    if (rawBarcode !== undefined) {
-      if (containerType === 'paper') {
-        return c.json({ error: 'Paper containers use sublabel for spot identifiers, not barcode' }, 400)
-      }
-      if (containerType === 'static_well' || !containerType) {
-        return c.json({ error: 'Barcode cannot be set for this container type' }, 400)
-      }
-
-      if (containerType === 'micronix_tube') {
-        if (rawBarcode === null) {
-          return c.json({ error: 'Micronix tube barcode cannot be cleared' }, 400)
-        }
-        const trimmed = rawBarcode.trim()
-        if (trimmed.length === 0) {
-          return c.json({ error: 'Micronix tube barcode cannot be empty' }, 400)
-        }
-        newBarcode = trimmed
-      } else {
-        if (rawBarcode === null) {
-          newBarcode = null
-        } else {
-          const trimmed = rawBarcode.trim()
-          newBarcode = trimmed.length === 0 ? null : trimmed
+      if (newBarcode !== undefined) {
+        if (containerType === 'micronix_tube' && newBarcode !== null) {
+          await tx.update(micronixTube).set({ barcode: newBarcode }).where(eq(micronixTube.id, id))
+        } else if (containerType === 'cryovial_tube') {
+          await tx.update(cryovialTube).set({ barcode: newBarcode }).where(eq(cryovialTube.id, id))
         }
       }
-
-      if (newBarcode !== null) {
-        const takenBy = await resolveContainerByBarcode(database, newBarcode)
-        if (takenBy !== null && takenBy !== id) {
-          return c.json({ error: `Barcode '${newBarcode}' is already in use` }, 400)
-        }
+      if (newSublabel !== undefined) {
+        await tx.update(paper).set({ sublabel: newSublabel }).where(eq(paper.id, id))
       }
-    }
 
-    if (rawSublabel !== undefined) {
-      if (containerType !== 'paper') {
-        return c.json({ error: 'Sublabel can only be set for paper containers' }, 400)
-      }
-      if (rawSublabel === null) {
-        newSublabel = null
-      } else {
-        const trimmed = rawSublabel.trim()
-        newSublabel = trimmed.length === 0 ? null : trimmed
-      }
-      if (newSublabel !== null) {
-        const takenBy = await resolveContainerByBarcode(database, newSublabel)
-        if (takenBy !== null && takenBy !== id) {
-          return c.json({ error: `Sublabel '${newSublabel}' is already in use` }, 400)
-        }
-      }
-    }
+      return row
+    })
 
-    // Update container fields (excluding tagIds and barcode on subtype)
-    const user = c.get('user')
-    const [updated] = await database
-      .update(storageContainer)
-      .set({
-        ...updateData,
-        lastUpdated: utcNow(),
-        updatedBy: user?.id,
-      })
-      .where(eq(storageContainer.id, id))
-      .returning()
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
-    if (!updated) {
-      return c.json({ error: 'Container not found' }, 404)
-    }
-    
-    // Update tags if provided
-    if (tagIds !== undefined) {
-      // Remove all existing tags
-      await database.delete(storageContainerTag)
-        .where(eq(storageContainerTag.storageContainerId, id))
-      
-      // Add new tags
-      if (tagIds.length > 0) {
-        await database.insert(storageContainerTag).values(
-          tagIds.map(tagId => ({
-            storageContainerId: id,
-            tagId,
-          }))
-        )
-      }
-    }
-
-    if (rawBarcode !== undefined) {
-      if (containerType === 'micronix_tube' && newBarcode != null) {
-        await database.update(micronixTube).set({ barcode: newBarcode }).where(eq(micronixTube.id, id))
-      } else if (containerType === 'cryovial_tube' && newBarcode !== undefined) {
-        await database.update(cryovialTube).set({ barcode: newBarcode }).where(eq(cryovialTube.id, id))
-      }
-    }
-
-    if (rawSublabel !== undefined && containerType === 'paper') {
-      await database.update(paper).set({ sublabel: newSublabel ?? null }).where(eq(paper.id, id))
-    }
-
-    // Return enriched container
     const enriched = await enrichContainerForApi(database, updated)
     return c.json({ container: mapEnrichedContainerToWire(enriched) })
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    return c.json({ error: 'Internal server error' }, 500)
+  } catch (error: unknown) {
+    return handleRouteError(error, c)
   }
 })
 

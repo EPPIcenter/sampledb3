@@ -705,12 +705,10 @@ export default function ContainerDetail() {
             tags: container.tags,
             unit: container.unit,
             containerType: effectiveContainerType,
-            barcode: tubeBarcode ?? paperSublabel,
+            barcode: tubeBarcode,
+            sublabel: paperSublabel,
           }}
-          onSuccess={() => {
-            refreshContainer()
-            setShowEditModal(false)
-          }}
+          onSuccess={() => setShowEditModal(false)}
         />
       )}
 
