@@ -1,6 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
+import userEvent from '@testing-library/user-event'
 import ControlBatchDetail from '../ControlBatchDetail'
+import { controlsApi } from '../../lib/api/controls'
+import { collectionKeys } from '../../hooks/useCollections'
+import { controlKeys } from '../../hooks/useControls'
+import { specimenKeys } from '../../hooks/useSpecimens'
+import { dashboardKeys } from '../../hooks/useDashboard'
+import {
+  createInvalidationTestClient,
+  keysNotInvalidated,
+  seedQueries,
+} from '../../__tests__/helpers/query-invalidation'
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
@@ -33,6 +44,7 @@ vi.mock('../../lib/api/controls', async () => {
       },
     }),
     deleteBatch: vi.fn().mockResolvedValue(undefined),
+    deleteSpecimenFromBatch: vi.fn().mockResolvedValue({ message: 'Deleted' }),
   }
   })
 })
@@ -70,5 +82,29 @@ describe('ControlBatchDetail', () => {
     await render(<ControlBatchDetail />)
     expect(await screen.findByRole('button', { name: /^Edit$/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Delete Batch/i })).not.toBeInTheDocument()
+  })
+
+  it('refreshes the Collection grids, Specimen lists and dashboard after deleting a Specimen from the batch', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const loaded = await controlsApi.getBatchSummary(1)
+    vi.mocked(controlsApi.getBatchSummary).mockResolvedValueOnce({
+      ...loaded,
+      specimens: [{ id: 30, specimenTypeName: 'Whole blood', collectionDate: '2024-01-02' }],
+    } as never)
+    const queryClient = createInvalidationTestClient()
+    const otherPages = [
+      collectionKeys.micronixPlate(4),
+      controlKeys.overview(),
+      specimenKeys.list({}),
+      dashboardKeys.count('specimens'),
+    ]
+    seedQueries(queryClient, otherPages)
+    await render(<ControlBatchDetail />, { queryClient })
+
+    await user.click(await screen.findByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(controlsApi.deleteSpecimenFromBatch).toHaveBeenCalledWith(1, 30))
+    await waitFor(() => expect(keysNotInvalidated(queryClient, otherPages)).toEqual([]))
   })
 })

@@ -199,8 +199,8 @@ export default function StudyDetail() {
     subject.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  // useMergeSubjects has already refreshed the queries the merge changed.
   const handleMergeSuccess = () => {
-    invalidateSubjects()
     setMergeModalOpen(false)
   }
 

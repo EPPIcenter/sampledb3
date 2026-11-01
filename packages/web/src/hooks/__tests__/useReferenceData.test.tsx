@@ -10,8 +10,19 @@ import {
   useUpdateSpecimenType,
   useDeleteSpecimenType,
   useStorageTypes,
+  useCreateTag,
+  useDeleteTag,
+  specimenTypeKeys,
+  tagKeys,
 } from '../useReferenceData'
-import { specimenTypesApi, storageTypesApi } from '../../lib/api/reference-data'
+import { exportWorkflowKeys } from '../useExportWorkflow'
+import { specimenTypesApi, storageTypesApi, tagsApi } from '../../lib/api/reference-data'
+import {
+  createInvalidationTestClient,
+  keysNotInvalidated,
+  observeQuery,
+  seedQueries,
+} from '../../__tests__/helpers/query-invalidation'
 import type { SpecimenType } from '../../lib/api/types'
 import type { StorageType } from '../../lib/api/reference-data'
 
@@ -31,7 +42,12 @@ vi.mock('../../lib/api/reference-data', async () => {
   },
   storageTypesApi: {
     list: vi.fn(),
-  }
+  },
+  tagsApi: {
+    list: vi.fn(),
+    create: vi.fn(),
+    delete: vi.fn(),
+  },
   })
 })
 
@@ -286,5 +302,47 @@ describe('useReferenceData Hooks', () => {
   })
 })
 
+describe('Tag writes refresh other pages', () => {
+  function setup() {
+    const queryClient = createInvalidationTestClient()
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>{children}</ToastProvider>
+      </QueryClientProvider>
+    )
+    return { queryClient, wrapper }
+  }
 
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
 
+  it('a new Tag invalidates the export Tag filter and the Specimen form catalogs', async () => {
+    vi.mocked(tagsApi.create).mockResolvedValue({ id: 4, name: 'Hemolyzed' } as never)
+    const { queryClient, wrapper } = setup()
+    const otherPages = [[...exportWorkflowKeys.referenceData(), 'tags'], tagKeys.list(), specimenTypeKeys.list()]
+    seedQueries(queryClient, otherPages)
+
+    const { result } = renderHook(() => useCreateTag(), { wrapper })
+    result.current.mutate({ name: 'Hemolyzed' } as never)
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(keysNotInvalidated(queryClient, otherPages)).toEqual([])
+  })
+
+  it("a deleted Tag refreshes the Tag list without refetching the Tag's own query", async () => {
+    vi.mocked(tagsApi.delete).mockResolvedValue(undefined as never)
+    const { queryClient, wrapper } = setup()
+    const list = await observeQuery(queryClient, tagKeys.list())
+    const deleted = await observeQuery(queryClient, tagKeys.detail(4))
+
+    const { result } = renderHook(() => useDeleteTag(), { wrapper })
+    result.current.mutate(4)
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    await waitFor(() => expect(list.queryFn).toHaveBeenCalledTimes(2))
+    expect(deleted.queryFn).toHaveBeenCalledTimes(1)
+    list.unsubscribe()
+    deleted.unsubscribe()
+  })
+})

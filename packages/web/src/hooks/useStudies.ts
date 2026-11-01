@@ -26,15 +26,15 @@ export const studyKeys = {
 
 /** Page size for loading every study; the API clamps it to its configured maximum. */
 const ALL_STUDIES_PAGE_LIMIT = 1000
-const SUMMARY_CARD_STALE_MS = 5 * 60 * 1000
 
 function summaryBatchKey(ids: number[]) {
   return [...studyKeys.all, 'summaries-batch', [...ids].sort((a, b) => a - b)] as const
 }
 
+/** A card is resolved once loaded, until a write invalidates it. */
 function isSummaryCardResolved(queryClient: QueryClient, id: number): boolean {
   const state = queryClient.getQueryState(studyKeys.summaryCard(id))
-  return state?.status === 'success' || state?.status === 'error'
+  return (state?.status === 'success' || state?.status === 'error') && !state.isInvalidated
 }
 
 export async function prefetchStudySummaryCards(
@@ -57,7 +57,8 @@ export async function prefetchStudySummaryCards(
         .forEach((id) => queryClient.setQueryData(studyKeys.summaryCard(id), null))
       return summaries
     },
-    staleTime: SUMMARY_CARD_STALE_MS,
+    // Callers pass only unresolved cards, so fetch even when an earlier batch of the same ids is cached.
+    staleTime: 0,
   })
 }
 
@@ -66,21 +67,12 @@ export function useStudySummaryCards() {
   const queryClient = useQueryClient()
   const [cacheTick, setCacheTick] = useState(0)
   const loadingIdsRef = useRef(new Set<number>())
-
-  useEffect(() => {
-    return queryClient.getQueryCache().subscribe((event) => {
-      const key = event.query.queryKey
-      if (
-        key?.[0] === studyKeys.all[0] &&
-        (key[1] === 'summary-card' || key[1] === 'summaries-batch')
-      ) {
-        setCacheTick((n) => n + 1)
-      }
-    })
-  }, [queryClient])
+  /** Cards this page has asked for, so an invalidated one on screen refetches. */
+  const requestedIdsRef = useRef(new Set<number>())
 
   const prefetch = useCallback(
     (studyIds: number[]) => {
+      studyIds.forEach((id) => requestedIdsRef.current.add(id))
       const toFetch = studyIds.filter((id) => !isSummaryCardResolved(queryClient, id))
       if (toFetch.length === 0) return
       toFetch.forEach((id) => loadingIdsRef.current.add(id))
@@ -92,6 +84,39 @@ export function useStudySummaryCards() {
     },
     [queryClient]
   )
+
+  useEffect(() => {
+    let invalidatedIds: number[] = []
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      const key = event.query.queryKey
+      if (
+        key[0] !== studyKeys.all[0] ||
+        (key[1] !== 'summary-card' && key[1] !== 'summaries-batch')
+      ) {
+        return
+      }
+      setCacheTick((n) => n + 1)
+      const id = key[2]
+      if (
+        key[1] === 'summary-card' &&
+        typeof id === 'number' &&
+        requestedIdsRef.current.has(id) &&
+        event.type === 'updated' &&
+        event.action.type === 'invalidate'
+      ) {
+        // An invalidation marks every card in one pass; refetch them in one batch.
+        if (invalidatedIds.length === 0) {
+          queueMicrotask(() => {
+            const ids = invalidatedIds
+            invalidatedIds = []
+            prefetch(ids)
+          })
+        }
+        invalidatedIds.push(id)
+      }
+    })
+    return unsubscribe
+  }, [queryClient, prefetch])
 
   const getCardState = useCallback(
     (studyId: number): { summary?: StudySummaryBasic | null; loading: boolean } => {

@@ -10,9 +10,8 @@ import {
   type ReferenceDataConfig,
   type ReferenceDataType,
 } from '../config/reference-data-config'
-import { useStorageTypes } from '../hooks/useReferenceData'
+import { invalidateAfterReferenceDataWrite, useStorageTypes } from '../hooks/useReferenceData'
 import {
-  referenceDataPageKeys,
   useReferenceDataAllLocations,
   useReferenceDataTab,
   useSpecimenTypeContainerTypes,
@@ -113,16 +112,6 @@ function ReferenceDataContent({
     setPage(1)
   }
 
-  const refreshTabData = () => {
-    void queryClient.invalidateQueries({
-      queryKey: referenceDataPageKeys.tab(activeTab, searchDebounced),
-    })
-  }
-
-  const refreshContainerTypeRelationships = () => {
-    void containerTypesQuery.refetch()
-  }
-
   const handleToggleContainerType = async (specimenTypeId: number, containerType: string, isAdding: boolean) => {
     // Block non-admin users from toggling
     if (!isAdmin) {
@@ -134,7 +123,7 @@ function ReferenceDataContent({
     } else {
       await specimenTypesApi.removeContainerType(specimenTypeId, containerType)
     }
-    refreshContainerTypeRelationships()
+    void invalidateAfterReferenceDataWrite(queryClient)
   }
 
   useEffect(() => {
@@ -155,10 +144,7 @@ function ReferenceDataContent({
         }
       }
       setEditingItem(null)
-      refreshTabData()
-      if (activeTab === 'specimen-types') {
-        refreshContainerTypeRelationships()
-      }
+      void invalidateAfterReferenceDataWrite(queryClient)
     } catch (error: any) {
       throw error
     }
@@ -167,7 +153,7 @@ function ReferenceDataContent({
   const handleDelete = async (id: number) => {
     if (config.delete) {
       await config.delete(id)
-      refreshTabData()
+      void invalidateAfterReferenceDataWrite(queryClient, { type: activeTab, id })
     }
   }
 
