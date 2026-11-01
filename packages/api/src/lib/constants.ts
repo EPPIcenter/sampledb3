@@ -1,27 +1,20 @@
 import type { Database } from '../db/client'
 import { pageQueryParam } from './query-params'
 
-// Cache for pagination settings
-let paginationCache: { defaultPageSize: number; maxPageSize: number } | null = null
-
 /**
- * Get pagination settings from cache or database
+ * Get pagination settings through the settings cache, which is keyed per database and
+ * cleared when an admin saves settings, so a new page size applies without a restart.
  * @param db - Database instance
  * @throws Error if pagination settings are not configured
  */
 async function getPaginationSettings(db: Database): Promise<{ defaultPageSize: number; maxPageSize: number }> {
-  if (paginationCache) {
-    return paginationCache
-  }
-
   const { getPaginationSettings } = await import('./settings')
   const settings = await getPaginationSettings(db)
-  
+
   if (!settings) {
     throw new Error('Pagination settings are not configured. Please run database initialization.')
   }
 
-  paginationCache = settings
   return settings
 }
 
