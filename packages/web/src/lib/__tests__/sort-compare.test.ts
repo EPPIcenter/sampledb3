@@ -26,6 +26,12 @@ describe('compareBySortType', () => {
     expect(sorted([10, '9', 100, 0.5], 'number')).toEqual([0.5, '9', 10, 100])
   })
 
+  it('sorts a zoneless server timestamp as UTC', () => {
+    // Tests run in America/Los_Angeles: read as local time, 10:00 would be 18:00Z and sort last.
+    const dates = ['2024-01-15T12:00:00Z', '2024-01-15 10:00:00']
+    expect(sorted(dates, 'date')).toEqual(['2024-01-15 10:00:00', '2024-01-15T12:00:00Z'])
+  })
+
   it('sorts dates chronologically', () => {
     const dates = ['2024-03-01', '2023-12-31T23:00:00Z', '2024-01-15']
     expect(sorted(dates, 'date')).toEqual(['2023-12-31T23:00:00Z', '2024-01-15', '2024-03-01'])

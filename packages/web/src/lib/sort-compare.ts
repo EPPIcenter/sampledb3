@@ -1,3 +1,5 @@
+import { displayDateTime } from './date-utils'
+
 /** How a sortable value is ordered. */
 export type SortType = 'text' | 'number' | 'date'
 
@@ -28,7 +30,8 @@ function sortKey(value: unknown, type: SortType): string | number | null {
       if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.getTime()
       if (typeof value !== 'string' && typeof value !== 'number') return null
       if (typeof value === 'string' && value.trim() === '') return null
-      const t = new Date(value).getTime()
+      // A string goes through the display parser, so a zoneless server timestamp sorts as UTC.
+      const t = typeof value === 'string' ? displayDateTime(value) : new Date(value).getTime()
       return Number.isNaN(t) ? null : t
     }
   }
