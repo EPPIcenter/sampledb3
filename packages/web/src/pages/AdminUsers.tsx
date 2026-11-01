@@ -25,6 +25,11 @@ interface EditUserData {
 export default function AdminUsers() {
   const queryClient = useQueryClient()
   const [mutationError, setMutationError] = useState<string | null>(null)
+  /** Error from the open modal's request, shown inside that modal. */
+  const [modalError, setModalError] = useState<string | null>(null)
+  const [modalPending, setModalPending] = useState(false)
+  // State updates land after the click handler returns, so a ref blocks a second click in the same tick.
+  const modalPendingRef = useRef(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showDeleted, setShowDeleted] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -70,62 +75,60 @@ export default function AdminUsers() {
     )
   }, [users, searchQuery])
 
-  const handleCreate = async () => {
+  /**
+   * Runs a modal's request once: ignores clicks while one is pending and shows a failure inside the modal.
+   */
+  const runModalRequest = async (fallbackMessage: string, request: () => Promise<void>) => {
+    if (modalPendingRef.current) return
+    modalPendingRef.current = true
+    setModalPending(true)
+    setModalError(null)
     try {
-      if (!createForm.email || !createForm.name || !createForm.password) {
-        setMutationError('All fields are required')
-        return
-      }
-
-      if (createForm.password.length < 8) {
-        setMutationError('Password must be at least 8 characters')
-        return
-      }
-
-      await adminApi.createUser(createForm)
-      setShowCreateModal(false)
-      setCreateForm({ email: '', name: '', password: '', role: 'member' })
-      setMutationError(null)
-      refreshUsers()
+      await request()
     } catch (err: unknown) {
-      const message = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-        : null
-      setMutationError(message || 'Failed to create user')
+      setModalError(apiErrorMessage(err, fallbackMessage))
+    } finally {
+      modalPendingRef.current = false
+      setModalPending(false)
     }
+  }
+
+  const handleCreate = async () => {
+    if (!createForm.email || !createForm.name || !createForm.password) {
+      setModalError('All fields are required')
+      return
+    }
+
+    if (createForm.password.length < 8) {
+      setModalError('Password must be at least 8 characters')
+      return
+    }
+
+    await runModalRequest('Failed to create user', async () => {
+      await adminApi.createUser(createForm)
+      closeCreateModal()
+      refreshUsers()
+    })
   }
 
   const handleEdit = async () => {
     if (!selectedUser) return
 
-    try {
+    await runModalRequest('Failed to update user', async () => {
       await adminApi.updateUser(selectedUser.id, editForm)
-      setShowEditModal(false)
-      setSelectedUser(null)
-      setEditForm({})
+      closeEditModal()
       refreshUsers()
-    } catch (err: unknown) {
-      const message = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-        : null
-      setMutationError(message || 'Failed to update user')
-    }
+    })
   }
 
   const handleDelete = async () => {
     if (!selectedUser) return
 
-    try {
+    await runModalRequest('Failed to delete user', async () => {
       await adminApi.deleteUser(selectedUser.id)
-      setShowDeleteModal(false)
-      setSelectedUser(null)
+      closeDeleteModal()
       refreshUsers()
-    } catch (err: unknown) {
-      const res = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { error?: string; details?: string } } }).response?.data
-        : null
-      setMutationError(res?.error || res?.details || 'Failed to delete user')
-    }
+    })
   }
 
   const handleApprove = async (user: User) => {
@@ -155,27 +158,20 @@ export default function AdminUsers() {
   const handleResetPassword = async () => {
     if (!selectedUser) return
 
-    try {
-      if (!passwordForm.password || passwordForm.password !== passwordForm.confirmPassword) {
-        setMutationError('Passwords do not match')
-        return
-      }
-
-      if (passwordForm.password.length < 8) {
-        setMutationError('Password must be at least 8 characters')
-        return
-      }
-
-      await adminApi.resetPassword(selectedUser.id, passwordForm.password)
-      setShowPasswordModal(false)
-      setSelectedUser(null)
-      setPasswordForm({ password: '', confirmPassword: '' })
-    } catch (err: unknown) {
-      const message = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-        : null
-      setMutationError(message || 'Failed to reset password')
+    if (!passwordForm.password || passwordForm.password !== passwordForm.confirmPassword) {
+      setModalError('Passwords do not match')
+      return
     }
+
+    if (passwordForm.password.length < 8) {
+      setModalError('Password must be at least 8 characters')
+      return
+    }
+
+    await runModalRequest('Failed to reset password', async () => {
+      await adminApi.resetPassword(selectedUser.id, passwordForm.password)
+      closePasswordModal()
+    })
   }
 
   const loadSessions = async (userId: number) => {
@@ -184,30 +180,61 @@ export default function AdminUsers() {
       const response = await adminApi.getUserSessions(userId)
       setSessions(response.sessions)
     } catch (err: unknown) {
-      const message = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-        : null
-      setMutationError(message || 'Failed to load sessions')
+      setModalError(apiErrorMessage(err, 'Failed to load sessions'))
     } finally {
       setSessionsLoading(false)
     }
   }
 
   const handleRevokeSession = async (sessionId: string) => {
-    try {
+    await runModalRequest('Failed to revoke session', async () => {
       await adminApi.revokeSession(sessionId)
       if (selectedUser) {
         await loadSessions(selectedUser.id)
       }
-    } catch (err: unknown) {
-      const message = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-        : null
-      setMutationError(message || 'Failed to revoke session')
-    }
+    })
+  }
+
+  const openCreateModal = () => {
+    setModalError(null)
+    setShowCreateModal(true)
+  }
+
+  const closeCreateModal = () => {
+    setShowCreateModal(false)
+    setCreateForm({ email: '', name: '', password: '', role: 'member' })
+    setModalError(null)
+  }
+
+  const closeEditModal = () => {
+    setShowEditModal(false)
+    setSelectedUser(null)
+    setEditForm({})
+    setModalError(null)
+  }
+
+  const closeDeleteModal = () => {
+    setShowDeleteModal(false)
+    setSelectedUser(null)
+    setModalError(null)
+  }
+
+  const closePasswordModal = () => {
+    setShowPasswordModal(false)
+    setSelectedUser(null)
+    setPasswordForm({ password: '', confirmPassword: '' })
+    setModalError(null)
+  }
+
+  const closeSessionsModal = () => {
+    setShowSessionsModal(false)
+    setSelectedUser(null)
+    setSessions([])
+    setModalError(null)
   }
 
   const openEditModal = (user: User) => {
+    setModalError(null)
     setSelectedUser(user)
     setEditForm({
       name: user.name,
@@ -218,17 +245,20 @@ export default function AdminUsers() {
   }
 
   const openDeleteModal = (user: User) => {
+    setModalError(null)
     setSelectedUser(user)
     setShowDeleteModal(true)
   }
 
   const openPasswordModal = (user: User) => {
+    setModalError(null)
     setSelectedUser(user)
     setPasswordForm({ password: '', confirmPassword: '' })
     setShowPasswordModal(true)
   }
 
   const openSessionsModal = async (user: User) => {
+    setModalError(null)
     setSelectedUser(user)
     setShowSessionsModal(true)
     await loadSessions(user.id)
@@ -280,7 +310,7 @@ export default function AdminUsers() {
               <p className="text-[rgb(var(--app-text-muted))] mt-1">Manage users, roles, and permissions</p>
             </div>
             <button
-              onClick={() => setShowCreateModal(true)}
+              onClick={openCreateModal}
               className="admin-btn-primary px-4 py-2 flex items-center gap-2"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -491,10 +521,8 @@ export default function AdminUsers() {
         {/* Create User Modal */}
         <Modal
           isOpen={showCreateModal}
-          onClose={() => {
-            setShowCreateModal(false)
-            setCreateForm({ email: '', name: '', password: '', role: 'member' })
-          }}
+          onClose={closeCreateModal}
+          closeDisabled={modalPending}
           layout="centered"
           showCloseButton={false}
           backdropClassName="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay"
@@ -502,12 +530,14 @@ export default function AdminUsers() {
           contentClassName="p-0"
         >
               <h2 className="text-xl font-bold mb-4">Create New User</h2>
+              <ModalError message={modalError} />
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
+                  <label htmlFor="create-user-name" className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
                     Name
                   </label>
                   <input
+                    id="create-user-name"
                     type="text"
                     value={createForm.name}
                     onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
@@ -515,10 +545,11 @@ export default function AdminUsers() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
+                  <label htmlFor="create-user-email" className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
                     Email
                   </label>
                   <input
+                    id="create-user-email"
                     type="email"
                     value={createForm.email}
                     onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
@@ -526,11 +557,12 @@ export default function AdminUsers() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
+                  <label htmlFor="create-user-password" className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
                     Password
                   </label>
                   <div className="relative">
                     <input
+                      id="create-user-password"
                       type={showPassword ? 'text' : 'password'}
                       value={createForm.password}
                       onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
@@ -555,10 +587,11 @@ export default function AdminUsers() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-app-text mb-1">
+                  <label htmlFor="create-user-role" className="block text-sm font-medium text-app-text mb-1">
                     Role
                   </label>
                   <select
+                    id="create-user-role"
                     value={createForm.role}
                     onChange={(e) =>
                       setCreateForm({
@@ -575,14 +608,12 @@ export default function AdminUsers() {
                 </div>
               </div>
               <div className="flex gap-3 mt-6">
-                <button onClick={handleCreate} className="flex-1 admin-btn-primary px-4 py-2">
+                <button onClick={handleCreate} disabled={modalPending} className="flex-1 admin-btn-primary px-4 py-2 disabled:opacity-50">
                   Create
                 </button>
                 <button
-                  onClick={() => {
-                    setShowCreateModal(false)
-                    setCreateForm({ email: '', name: '', password: '', role: 'member' })
-                  }}
+                  onClick={closeCreateModal}
+                  disabled={modalPending}
                   className="flex-1 admin-btn-secondary px-4 py-2"
                 >
                   Cancel
@@ -593,11 +624,8 @@ export default function AdminUsers() {
         {/* Edit User Modal */}
         <Modal
           isOpen={showEditModal && selectedUser != null}
-          onClose={() => {
-            setShowEditModal(false)
-            setSelectedUser(null)
-            setEditForm({})
-          }}
+          onClose={closeEditModal}
+          closeDisabled={modalPending}
           layout="centered"
           showCloseButton={false}
           backdropClassName="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay"
@@ -605,12 +633,14 @@ export default function AdminUsers() {
           contentClassName="p-0"
         >
               <h2 className="text-xl font-bold mb-4">Edit User</h2>
+              <ModalError message={modalError} />
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
+                  <label htmlFor="edit-user-name" className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
                     Name
                   </label>
                   <input
+                    id="edit-user-name"
                     type="text"
                     value={editForm.name || ''}
                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
@@ -618,10 +648,11 @@ export default function AdminUsers() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
+                  <label htmlFor="edit-user-email" className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
                     Email
                   </label>
                   <input
+                    id="edit-user-email"
                     type="email"
                     value={editForm.email || ''}
                     onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
@@ -629,10 +660,11 @@ export default function AdminUsers() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
+                  <label htmlFor="edit-user-role" className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
                     Role
                   </label>
                   <select
+                    id="edit-user-role"
                     value={editForm.role || 'member'}
                     onChange={(e) =>
                       setEditForm({
@@ -649,15 +681,12 @@ export default function AdminUsers() {
                 </div>
               </div>
               <div className="flex gap-3 mt-6">
-                <button onClick={handleEdit} className="flex-1 admin-btn-primary px-4 py-2">
+                <button onClick={handleEdit} disabled={modalPending} className="flex-1 admin-btn-primary px-4 py-2 disabled:opacity-50">
                   Save
                 </button>
                 <button
-                  onClick={() => {
-                    setShowEditModal(false)
-                    setSelectedUser(null)
-                    setEditForm({})
-                  }}
+                  onClick={closeEditModal}
+                  disabled={modalPending}
                   className="flex-1 admin-btn-secondary px-4 py-2"
                 >
                   Cancel
@@ -669,10 +698,8 @@ export default function AdminUsers() {
         {selectedUser && (
         <Modal
           isOpen={showDeleteModal}
-          onClose={() => {
-            setShowDeleteModal(false)
-            setSelectedUser(null)
-          }}
+          onClose={closeDeleteModal}
+          closeDisabled={modalPending}
           layout="centered"
           showCloseButton={false}
           backdropClassName="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay"
@@ -680,6 +707,7 @@ export default function AdminUsers() {
           contentClassName="p-0"
         >
               <h2 className="text-xl font-bold mb-4">Delete User</h2>
+              <ModalError message={modalError} />
               <p className="text-[rgb(var(--app-text-muted))] mb-4">
                 Are you sure you want to soft delete <strong>{selectedUser.name}</strong>? This
                 action can be undone by restoring the user.
@@ -687,15 +715,14 @@ export default function AdminUsers() {
               <div className="flex gap-3">
                 <button
                   onClick={handleDelete}
-                  className="flex-1 px-4 py-2 bg-app-trend-down text-white rounded-lg hover:opacity-90"
+                  disabled={modalPending}
+                  className="flex-1 px-4 py-2 bg-app-trend-down text-white rounded-lg hover:opacity-90 disabled:opacity-50"
                 >
                   Delete
                 </button>
                 <button
-                  onClick={() => {
-                    setShowDeleteModal(false)
-                    setSelectedUser(null)
-                  }}
+                  onClick={closeDeleteModal}
+                  disabled={modalPending}
                   className="flex-1 admin-btn-secondary px-4 py-2"
                 >
                   Cancel
@@ -708,11 +735,8 @@ export default function AdminUsers() {
         {selectedUser && (
         <Modal
           isOpen={showPasswordModal}
-          onClose={() => {
-            setShowPasswordModal(false)
-            setSelectedUser(null)
-            setPasswordForm({ password: '', confirmPassword: '' })
-          }}
+          onClose={closePasswordModal}
+          closeDisabled={modalPending}
           layout="centered"
           showCloseButton={false}
           backdropClassName="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay"
@@ -720,14 +744,16 @@ export default function AdminUsers() {
           contentClassName="p-0"
         >
               <h2 className="text-xl font-bold mb-4">Reset Password</h2>
+              <ModalError message={modalError} />
               <p className="text-[rgb(var(--app-text-muted))] mb-4">Reset password for {selectedUser.name}</p>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
+                  <label htmlFor="reset-password-new" className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
                     New Password
                   </label>
                   <div className="relative">
                     <input
+                      id="reset-password-new"
                       type={showPassword ? 'text' : 'password'}
                       value={passwordForm.password}
                       onChange={(e) =>
@@ -754,10 +780,11 @@ export default function AdminUsers() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-app-text mb-1">
+                  <label htmlFor="reset-password-confirm" className="block text-sm font-medium text-app-text mb-1">
                     Confirm Password
                   </label>
                   <input
+                    id="reset-password-confirm"
                     type={showPassword ? 'text' : 'password'}
                     value={passwordForm.confirmPassword}
                     onChange={(e) =>
@@ -768,15 +795,12 @@ export default function AdminUsers() {
                 </div>
               </div>
               <div className="flex gap-3 mt-6">
-                <button onClick={handleResetPassword} className="flex-1 admin-btn-primary px-4 py-2">
+                <button onClick={handleResetPassword} disabled={modalPending} className="flex-1 admin-btn-primary px-4 py-2 disabled:opacity-50">
                   Reset Password
                 </button>
                 <button
-                  onClick={() => {
-                    setShowPasswordModal(false)
-                    setSelectedUser(null)
-                    setPasswordForm({ password: '', confirmPassword: '' })
-                  }}
+                  onClick={closePasswordModal}
+                  disabled={modalPending}
                   className="flex-1 admin-btn-secondary px-4 py-2"
                 >
                   Cancel
@@ -789,11 +813,7 @@ export default function AdminUsers() {
         {selectedUser && (
         <Modal
           isOpen={showSessionsModal}
-          onClose={() => {
-            setShowSessionsModal(false)
-            setSelectedUser(null)
-            setSessions([])
-          }}
+          onClose={closeSessionsModal}
           layout="centered"
           showCloseButton={false}
           backdropClassName="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay"
@@ -801,6 +821,7 @@ export default function AdminUsers() {
           contentClassName="p-0"
         >
               <h2 className="text-xl font-bold mb-4">Active Sessions for {selectedUser.name}</h2>
+              <ModalError message={modalError} />
               {sessionsLoading ? (
                 <div className="text-center py-8 dashboard-stat-muted">Loading sessions...</div>
               ) : sessions.length === 0 ? (
@@ -821,7 +842,8 @@ export default function AdminUsers() {
                       </div>
                       <button
                         onClick={() => handleRevokeSession(session.id)}
-                        className="px-3 py-1 text-sm bg-app-trend-down text-white rounded hover:opacity-90"
+                        disabled={modalPending}
+                        className="px-3 py-1 text-sm bg-app-trend-down text-white rounded hover:opacity-90 disabled:opacity-50"
                       >
                         Revoke
                       </button>
@@ -831,11 +853,7 @@ export default function AdminUsers() {
               )}
               <div className="mt-6">
                 <button
-                  onClick={() => {
-                    setShowSessionsModal(false)
-                    setSelectedUser(null)
-                    setSessions([])
-                  }}
+                  onClick={closeSessionsModal}
                   className="w-full admin-btn-secondary px-4 py-2"
                 >
                   Close
@@ -845,6 +863,25 @@ export default function AdminUsers() {
         )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** The API's `error` (or `details`) message from a failed request, else the fallback. */
+function apiErrorMessage(err: unknown, fallback: string): string {
+  if (err && typeof err === 'object' && 'response' in err) {
+    const data = (err as { response?: { data?: { error?: string; details?: string } } }).response?.data
+    if (data?.error) return data.error
+    if (data?.details) return data.details
+  }
+  return fallback
+}
+
+function ModalError({ message }: { message: string | null }) {
+  if (!message) return null
+  return (
+    <div role="alert" className="mb-4 bg-app-trend-down/10 border border-app-trend-down rounded-lg p-3 text-app-trend-down">
+      {message}
     </div>
   )
 }
