@@ -27,6 +27,8 @@ export const containerSchemaWithLocation = bulkCombinedContainerSchema
 export const withSpecimensRequestSchema = z.object({
   studyShortCode: z.string().min(1),
   subjectName: z.string().min(1),
+  /** Refuse a subject name the study already has, instead of adding the specimens to that subject. */
+  newSubjectOnly: z.boolean().optional(),
   specimens: z.array(
     z.object({
       specimenTypeName: z.string().min(1),

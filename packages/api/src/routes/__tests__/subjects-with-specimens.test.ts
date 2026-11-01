@@ -549,6 +549,48 @@ describe('Subjects with Specimens API', () => {
       expect(data.specimens[0].containerCreated).toBe(true)
     })
 
+    it('with newSubjectOnly, refuses a name the study already has and saves nothing', async () => {
+      const existingSubject = await createTestStudySubject(testDb, {
+        studyId: testStudy.id,
+        name: 'EXISTING-SUBJ',
+      })
+
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: ctx.cookie,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'EXISTING-SUBJ',
+          newSubjectOnly: true,
+          specimens: [{ specimenTypeName: 'Whole Blood' }],
+        },
+      })
+
+      expect(res.status).toBe(409)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toBe("Subject name 'EXISTING-SUBJ' already exists in this study")
+      const saved = await testDb.select().from(specimen).where(eq(specimen.studySubjectId, existingSubject.id))
+      expect(saved).toHaveLength(0)
+    })
+
+    it('with newSubjectOnly, creates a subject whose name is new', async () => {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: ctx.cookie,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'BRAND-NEW-SUBJ',
+          newSubjectOnly: true,
+          specimens: [{ specimenTypeName: 'Whole Blood' }],
+        },
+      })
+
+      expect(res.status).toBe(201)
+      const data = await res.json() as SubjectWithSpecimensResponse
+      expect(data.subjectCreated).toBe(true)
+      expect(data.summary.specimensCreated).toBe(1)
+    })
+
     it('should add multiple specimens to existing subject (get-or-create: one specimen, three containers)', async () => {
       // Create existing subject with one specimen (Whole Blood, no collection date)
       const existingSubject = await createTestStudySubject(testDb, {

@@ -41,6 +41,8 @@ export interface BulkCombinedSubjectInput {
 export interface WithSpecimensPayload {
   studyShortCode: string
   subjectName: string
+  /** Refuse a subject name the study already has (409) instead of adding to that subject. */
+  newSubjectOnly?: boolean
   specimens: BulkCombinedSpecimenInput[]
 }
 
@@ -229,9 +231,14 @@ export async function runOneSubjectWithSpecimens(
   userId: number | undefined
 ): Promise<OneSubjectResult> {
   try {
-    const [result] = await withWriteTransaction(database, (tx) =>
-      registerSubjects(tx, payload.studyShortCode, [{ subjectName: payload.subjectName, specimens: payload.specimens }], userId)
-    )
+    const [result] = await withWriteTransaction(database, async (tx) => {
+      const results = await registerSubjects(tx, payload.studyShortCode, [{ subjectName: payload.subjectName, specimens: payload.specimens }], userId)
+      // Throwing here rolls the transaction back, so the specimens aren't added to the existing subject.
+      if (payload.newSubjectOnly && !results[0].subjectCreated) {
+        throw new ConflictError(`Subject name '${payload.subjectName.trim()}' already exists in this study`)
+      }
+      return results
+    })
     return result
   } catch (error) {
     if (!(error instanceof BulkCombinedRejected)) throw error

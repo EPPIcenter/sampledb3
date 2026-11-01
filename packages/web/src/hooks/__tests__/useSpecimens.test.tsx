@@ -244,6 +244,7 @@ describe('useSpecimens Hooks', () => {
       expect(subjectsApi.createWithSpecimens).toHaveBeenCalledWith({
         studyShortCode: 'ST5',
         subjectName: 'NEW-1',
+        newSubjectOnly: true,
         specimens: [{ specimenTypeName: 'Blood', collectionDate: '2024-02-03' }],
       })
       expect(result.current.data).toMatchObject({ id: 3, studySubjectId: 10 })

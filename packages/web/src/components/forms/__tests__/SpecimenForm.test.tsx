@@ -105,6 +105,7 @@ describe('SpecimenForm', () => {
       expect(subjectsApi.createWithSpecimens).toHaveBeenCalledWith({
         studyShortCode: 'SA',
         subjectName: 'NEW-1',
+        newSubjectOnly: true,
         specimens: [{ specimenTypeName: 'Blood' }],
       })
       expect(subjectsApi.create).not.toHaveBeenCalled()

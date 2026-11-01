@@ -94,6 +94,8 @@ export const subjectsApi = {
   createWithSpecimens: (data: {
     studyShortCode: string
     subjectName: string
+    /** Refuse a name the study already has (409) instead of adding to that subject. */
+    newSubjectOnly?: boolean
     specimens: Array<{
       specimenTypeName: string
       collectionDate?: string

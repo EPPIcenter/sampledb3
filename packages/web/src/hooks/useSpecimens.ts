@@ -109,7 +109,7 @@ export type CreateSpecimenWithNewSubjectInput = {
 /**
  * Create a subject and its first specimen in one request (`POST /subjects/with-specimens`).
  * The API writes both in one transaction, so a specimen that fails leaves no subject behind.
- * A subject already named so in the study is reused.
+ * It sends `newSubjectOnly`, so a name the study already has is refused (409) rather than reused.
  */
 export function useCreateSpecimenWithNewSubject(options?: { silent?: boolean }) {
   const queryClient = useQueryClient()
@@ -120,6 +120,7 @@ export function useCreateSpecimenWithNewSubject(options?: { silent?: boolean }) 
       const res = await subjectsApi.createWithSpecimens({
         studyShortCode,
         subjectName,
+        newSubjectOnly: true,
         specimens: [
           {
             ...specimen,
