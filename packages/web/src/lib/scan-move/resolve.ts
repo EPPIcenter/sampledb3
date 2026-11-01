@@ -1,3 +1,4 @@
+import { parseGridPosition, type GridCollectionType } from '@sampledb/contract'
 import type {
   ScanMoveCollectionRef,
   ScanMoveEvent,
@@ -86,22 +87,35 @@ export function groupResolveResults(
   }
 
   for (const fileIndex of wrongTypeFileIndexes) {
-    outcomes[fileIndex].errors.push({ row: 0, error: variant.wrongCollectionTypeError })
+    outcomes[fileIndex].errors.push({ row: 0, error: variant.wrongCollectionTypeError, kind: 'resolution' })
   }
 
   return outcomes
 }
 
+type DestinationWells = Record<string, { type: string; barcode?: string | null }>
+
+/**
+ * Stored-form (`A01`) key for a scanned or stored position, or null when it
+ * isn't a Grid position. Scanners write `A1` or `a01`; wells are keyed `A01`.
+ */
+function gridKey(position: string, collectionType: GridCollectionType): string | null {
+  const parsed = parseGridPosition(position, collectionType)
+  return parsed.ok ? parsed.position : null
+}
+
 /**
  * Relocation validation (micronix capability): a position that is empty in
  * the upload but currently holds a tube is only valid when that tube is
- * relocated elsewhere in the same scan move.
+ * relocated elsewhere in the same scan move. Positions on both sides are
+ * compared in stored form by the Grid position rule.
  */
 export function validateRelocations(
   files: ScanMoveFile[],
-  wellsByDestinationName: Map<string, Record<string, { type: string; barcode?: string | null }>>,
-  destinationNoun: string,
+  wellsByDestinationName: Map<string, DestinationWells>,
+  variant: Pick<ScanMoveVariant, 'destinationNoun' | 'collectionType'>,
 ): Map<number, ScanMoveValidationError[]> {
+  const { destinationNoun, collectionType } = variant
   const errorsByFile = new Map<number, ScanMoveValidationError[]>()
   const pushError = (fileIndex: number, error: ScanMoveValidationError) => {
     if (!errorsByFile.has(fileIndex)) errorsByFile.set(fileIndex, [])
@@ -126,32 +140,36 @@ export function validateRelocations(
       continue
     }
 
+    const wellsByPosition = new Map<string, DestinationWells[string]>()
+    for (const [position, well] of Object.entries(wells)) {
+      wellsByPosition.set(gridKey(position, collectionType) ?? position, well)
+    }
+
     const positionToBarcode = new Map<string, string>()
-    const positionToEmptyFileIndex = new Map<string, number>()
+    const positionToEmpty = new Map<string, { fileIndex: number; row: number }>()
     files.forEach((file, fileIndex) => {
       if (file.selectedDestinationName !== destinationName) return
-      for (const row of file.csvRows) {
-        const position = row.target_position.trim()
+      file.csvRows.forEach((row, rowIndex) => {
+        const raw = row.target_position.trim()
         const barcode = row.container_barcode.trim()
-        if (position === '') continue
+        if (raw === '') return
+        // A position off the grid is reported at upload; compare it verbatim here.
+        const position = gridKey(raw, collectionType) ?? raw
         if (barcode !== '') {
           positionToBarcode.set(position, barcode)
-        } else if (!positionToEmptyFileIndex.has(position)) {
-          positionToEmptyFileIndex.set(position, fileIndex)
+        } else if (!positionToEmpty.has(position)) {
+          positionToEmpty.set(position, { fileIndex, row: rowIndex + 1 })
         }
-      }
+      })
     })
 
     const barcodesRelocatedInMove = new Set(positionToBarcode.values())
-    const emptyPositions = [...positionToEmptyFileIndex.keys()].filter(
-      (position) => !positionToBarcode.has(position),
-    )
-
-    for (const position of emptyPositions) {
-      const well = wells[position] as { type: string; barcode?: string | null } | undefined
+    for (const [position, origin] of positionToEmpty) {
+      if (positionToBarcode.has(position)) continue
+      const well = wellsByPosition.get(position)
       if (well?.type === 'micronix_tube' && well.barcode && !barcodesRelocatedInMove.has(well.barcode)) {
-        pushError(positionToEmptyFileIndex.get(position) ?? 0, {
-          row: 0,
+        pushError(origin.fileIndex, {
+          row: origin.row,
           error: `Position ${position} on ${destinationNoun} "${destinationName}" is empty in your upload but tube ${well.barcode} is currently there and is not relocated in this move.`,
           kind: 'relocation',
         })
@@ -183,20 +201,13 @@ export async function resolveScanMove(
           files.map((f) => f.selectedDestinationName).filter((n): n is string => Boolean(n)),
         ),
       ]
-      const wellsByDestinationName = new Map<
-        string,
-        Record<string, { type: string; barcode?: string | null }>
-      >()
+      const wellsByDestinationName = new Map<string, DestinationWells>()
       for (const name of destinationNames) {
         const collection = collections.find((c) => c.name === name)
         if (collection === undefined) continue
         wellsByDestinationName.set(name, await gateway.getDestinationWells(collection.id))
       }
-      const relocationErrors = validateRelocations(
-        files,
-        wellsByDestinationName,
-        variant.destinationNoun,
-      )
+      const relocationErrors = validateRelocations(files, wellsByDestinationName, variant)
       for (const [fileIndex, errors] of relocationErrors) {
         outcomes[fileIndex].errors.push(...errors)
       }

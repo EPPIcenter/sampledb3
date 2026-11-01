@@ -5,6 +5,7 @@ import type {
   ScanMoveFile,
   ScanMoveFileErrors,
   ScanMoveState,
+  ScanMoveValidationError,
   ScanMoveVariant,
 } from './types'
 
@@ -17,6 +18,25 @@ export function initialScanMoveState(): ScanMoveState {
     atomicMode: 'all_or_nothing',
     moveResult: null,
   }
+}
+
+/** Errors a resolve produces; each resolve (or failed attempt) replaces them. */
+const RESOLVE_ERROR_KINDS: ReadonlySet<ScanMoveValidationError['kind']> = new Set([
+  'relocation',
+  'resolution',
+  'lookup',
+])
+
+function withoutResolveErrors(errors: ScanMoveValidationError[]): ScanMoveValidationError[] {
+  return errors.filter((e) => !RESOLVE_ERROR_KINDS.has(e.kind))
+}
+
+/**
+ * Errors that stop the upload step's Next. A failed lookup doesn't: Next
+ * retries the lookup with the files already uploaded.
+ */
+export function blockingErrors(file: ScanMoveFile): ScanMoveValidationError[] {
+  return file.validationErrors.filter((e) => e.kind !== 'lookup')
 }
 
 function clearResolution(file: ScanMoveFile, name: string | null): ScanMoveFile {
@@ -104,19 +124,12 @@ export function scanMoveReducer(state: ScanMoveState, event: ScanMoveEvent): Sca
       const files = state.files.map((f, i) => {
         const outcome = byIndex.get(i)
         if (!outcome) return f
-        const base = {
+        return {
           ...f,
           resolvedContainers: outcome.resolvedContainers,
           unresolvedContainers: outcome.unresolvedContainers,
           isResolved: true,
-        }
-        if (outcome.errors.length === 0) return base
-        return {
-          ...base,
-          validationErrors: [
-            ...f.validationErrors.filter((e) => e.kind !== 'relocation'),
-            ...outcome.errors,
-          ],
+          validationErrors: [...withoutResolveErrors(f.validationErrors), ...outcome.errors],
         }
       })
       return guarded({ ...state, files, step: event.advanced ? 'resolve' : state.step })
@@ -127,7 +140,10 @@ export function scanMoveReducer(state: ScanMoveState, event: ScanMoveEvent): Sca
         ...state,
         files: state.files.map((f) => ({
           ...f,
-          validationErrors: [...f.validationErrors, { row: 0, error: event.message }],
+          validationErrors: [
+            ...withoutResolveErrors(f.validationErrors),
+            { row: 0, error: `Lookup failed: ${event.message}. Select Next to try again.`, kind: 'lookup' },
+          ],
         })),
       }
 
@@ -176,7 +192,7 @@ export function planNextFromUpload(
     }
   }
 
-  if (state.files.some((f) => f.validationErrors.length > 0)) {
+  if (state.files.some((f) => blockingErrors(f).length > 0)) {
     return { kind: 'has_errors', events: [{ type: 'STEP_SET', step: 'upload' }] }
   }
 

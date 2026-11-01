@@ -1,6 +1,6 @@
 import type { ChangeEvent, ReactNode, RefObject } from 'react'
 import type { Location } from '../../lib/api/types'
-import type { ScanMoveFile } from '../../lib/scan-move'
+import { blockingErrors, type ScanMoveFile, type ScanMoveValidationError } from '../../lib/scan-move'
 import type { ScanMoveWorkflow } from '../../hooks/useScanMoveWorkflow'
 import { isExistingPlateName } from '../../lib/micronix-move-destination-plates'
 import CollectionDestinationPicker, {
@@ -25,6 +25,12 @@ export interface ScanMovePageShellProps extends ScanMovePageShellConfig {
   uploadBeforeFiles?: ReactNode
   renderInferredBanner?: (file: ScanMoveFile) => ReactNode | null
   onStartNewMove?: () => void
+}
+
+/** "file.csv, row 4", "Row 4", or '' for an error tied to no row. */
+function errorLocation(error: ScanMoveValidationError): string {
+  if (error.filename) return error.row > 0 ? `${error.filename}, row ${error.row}` : error.filename
+  return error.row > 0 ? `Row ${error.row}` : ''
 }
 
 function getAllSourceCollections(files: ScanMoveFile[]): string[] {
@@ -280,7 +286,7 @@ export default function ScanMovePageShell({
                   disabled={
                     files.length === 0 ||
                     wf.loading ||
-                    files.some((f) => !f.selectedDestinationName || f.validationErrors.length > 0)
+                    files.some((f) => !f.selectedDestinationName || blockingErrors(f).length > 0)
                   }
                   className="storage-btn-primary px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -512,16 +518,17 @@ export default function ScanMovePageShell({
                   onClick={() => {
                     wf.goToStep(wf.missingDestinationNames.length > 0 ? 'create_plates' : 'upload')
                   }}
+                  disabled={wf.loading}
                   className="storage-btn-secondary"
                 >
                   Back
                 </button>
                 <button
                   onClick={() => void wf.executeMoves()}
-                  disabled={files.some((f) => f.resolvedContainers.length === 0)}
+                  disabled={wf.loading || files.some((f) => f.resolvedContainers.length === 0)}
                   className="storage-btn-primary px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Execute Moves
+                  {wf.loading ? 'Moving...' : 'Execute Moves'}
                 </button>
               </div>
             </>
@@ -560,9 +567,11 @@ export default function ScanMovePageShell({
                       <div key={i} className="bg-app-card border border-app-border rounded p-3">
                         <div className="flex items-center justify-between mb-1">
                           <span className="font-medium text-app-text">{result.filename}</span>
-                          <span className={`text-sm ${result.moved > 0 ? 'text-app-trend-up' : 'text-app-text-muted'}`}>
-                            {result.moved} moved
-                          </span>
+                          {result.moved !== undefined && (
+                            <span className={`text-sm ${result.moved > 0 ? 'text-app-trend-up' : 'text-app-text-muted'}`}>
+                              {result.moved} moved
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm text-app-text-muted">Destination: {result.destinationName}</p>
                         {result.errors && result.errors.length > 0 && (
@@ -585,7 +594,7 @@ export default function ScanMovePageShell({
                     <ul className="list-disc list-inside space-y-2 text-app-trend-down">
                       {moveResult.errors.map((error, i) => (
                         <li key={i} className="text-sm">
-                          {error.row > 0 ? <span className="font-medium">Row {error.row}:</span> : null}{' '}
+                          {errorLocation(error) ? <span className="font-medium">{errorLocation(error)}:</span> : null}{' '}
                           {error.error}
                         </li>
                       ))}
