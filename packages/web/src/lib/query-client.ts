@@ -22,9 +22,11 @@ export const queryClient = new QueryClient({
 })
 
 /**
- * Mark every cached query stale after a write that touches many kinds of records
- * (bulk import, move, cascade delete). Queries on screen refetch now; the rest
- * refetch when next used, so no page shows pre-write data for the 5-minute staleTime.
+ * Mark every cached query stale after a write whose records other pages show: a bulk
+ * import, move or cascade delete, and single writes such as a Container edit, a
+ * Derivation, a Subject merge or a Reference data edit (the table in
+ * `hooks/README.md` lists them). Queries on screen refetch now; the rest refetch when
+ * next used, so no page shows pre-write data for the 5-minute staleTime.
  *
  * `deleted` lists the keys of records the write removed (for example a deleted
  * Collection's detail key). Their queries are marked stale without refetching, so

@@ -1,12 +1,10 @@
 import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
 import type { Derivation } from '../lib/api/derivations'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import { getContainerTypeIcon, getContainerTypeName, getSpecimenTypeIcon } from '../lib/icons'
 import type { ContainerDetail as ContainerDetailData } from '../lib/api/containers'
 import {
-  containerKeys,
   useContainer,
   useContainerDerivationTree,
   useContainerSource,
@@ -37,7 +35,6 @@ function statusColor(name: string): string {
 export default function ContainerDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const { canWrite } = useUser()
   const containerId = id != null ? parseInt(id, 10) : NaN
   const containerQuery = useContainer(containerId)
@@ -60,16 +57,6 @@ export default function ContainerDetail() {
   const [showDerivationModal, setShowDerivationModal] = useState(false)
   const [derivationModalKey, setDerivationModalKey] = useState(0)
   const [showEditModal, setShowEditModal] = useState(false)
-
-  const refreshContainer = () => {
-    void queryClient.invalidateQueries({ queryKey: containerKeys.detail(containerId) })
-    void queryClient.invalidateQueries({ queryKey: containerKeys.derivations(containerId) })
-    void queryClient.invalidateQueries({ queryKey: containerKeys.source(containerId) })
-  }
-
-  const handleDerivationCreated = () => {
-    refreshContainer()
-  }
 
   if (detailStatus === 'loading') {
     return (
@@ -688,7 +675,6 @@ export default function ContainerDetail() {
             sublabel: paperSublabel,
             specimenTypeName: specimen?.specimenType?.name,
           }}
-          onSuccess={handleDerivationCreated}
           openKey={derivationModalKey}
         />
       )}

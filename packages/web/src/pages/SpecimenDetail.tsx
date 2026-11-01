@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import AddContainerForSpecimenModal from '../components/AddContainerForSpecimenModal'
 import { getSpecimenTypeIcon, getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
@@ -10,7 +9,6 @@ import {
   useSpecimen,
   useContainersForSpecimen,
   useSpecimenSourceInfo,
-  specimenKeys,
 } from '../hooks/useSpecimens'
 import {
   Button,
@@ -40,7 +38,6 @@ interface Container {
 export default function SpecimenDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const { canWrite } = useUser()
   const specimenId = id != null ? parseInt(id, 10) : NaN
   const specimenQuery = useSpecimen(specimenId)
@@ -459,9 +456,6 @@ export default function SpecimenDetail() {
           onClose={() => setAddContainerModalOpen(false)}
           specimenId={specimen.id}
           specimenTypeId={specimen.specimenTypeId}
-          onSuccess={() => {
-            void queryClient.invalidateQueries({ queryKey: specimenKeys.containers(id!) })
-          }}
         />
       </div>
     </div>

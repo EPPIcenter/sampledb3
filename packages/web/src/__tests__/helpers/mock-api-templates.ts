@@ -75,6 +75,7 @@ export function studiesHooksMock(): MockApiOverrides {
       get: vi.fn(),
       getSubjects: vi.fn(),
       getSummary: vi.fn(),
+      getSummaries: vi.fn(),
       getTimeline: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),

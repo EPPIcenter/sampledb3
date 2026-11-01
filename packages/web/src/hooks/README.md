@@ -17,6 +17,27 @@ After a **write**, ask:
 | `invalidateDashboardQueries` | Any create/update/delete that changes dashboard counts or widgets |
 | `invalidateSpecimenQueries` | Specimen create (via `useCreateSpecimen`) |
 | `invalidateQpcrExperimentQueries` | qPCR experiment create, delete, settings save, plate upload, results upload |
+| `invalidateAfterBulkWrite` (`lib/query-client.ts`) | A write whose records many pages show; see the table below |
+| `invalidateAfterReferenceDataWrite` | Any Reference data create, update or delete, and a specimen type's allowed container types |
+
+### Writes that invalidate every query
+
+These writes change records that Collection grids, Specimen lists, study and Subject pages, Controls and the dashboard all show, so a list of keys would miss some. They call `invalidateAfterBulkWrite`, which invalidates every query: queries on screen refetch now and the rest refetch when next used. Pass the keys of records the write deleted as `deleted`, so they are marked stale without refetching into a 404.
+
+| Write | Hook or call site | `deleted` |
+|-------|-------------------|-----------|
+| Container edit | `useUpdateContainer` | — |
+| Derivation | `useCreateDerivation` | — |
+| Add a Container to a Specimen | `useAddSpecimenContainer` | — |
+| Subject merge | `useMergeSubjects` | source `subjectKeys.detail` |
+| Delete a Specimen from a Control batch | `useDeleteControlBatchSpecimen` | `specimenKeys.detail`, `specimenKeys.containers` |
+| Delete a Control batch | `ControlBatchDetail` | — (the page navigates away) |
+| Reference data create, update, delete | `invalidateAfterReferenceDataWrite` (Reference Data page and the `useReferenceData` mutation hooks) | the item's detail key and, for a specimen type, its container types |
+| Collection delete with contents | `useDeleteCollectionWithContents` | `collectionKeys.detail` |
+| Study delete | `StudyDetail` | — (removes `studyKeys.detail` first) |
+| Bulk import, derivations import, Control batch wizard, scan move, paper move, Collection move | the workflow hooks and pages | — |
+
+Study cards on the Studies page load through `useStudySummaryCards`, which refetches an invalidated card when it is on screen or next comes into view.
 
 ### Examples
 

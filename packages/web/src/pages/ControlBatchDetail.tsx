@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useHotkey } from '../hooks/useHotkey'
 import { controlsApi } from '../lib/api/controls'
 import { invalidateAfterBulkWrite } from '../lib/query-client'
-import { controlKeys, useControlBatchSummary } from '../hooks/useControls'
+import { controlKeys, useControlBatchSummary, useDeleteControlBatchSpecimen } from '../hooks/useControls'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import SimpleTimeline from '../components/SimpleTimeline'
 import { getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
@@ -22,6 +22,7 @@ export default function ControlBatchDetail() {
   const { canWrite, isAdmin } = useUser()
   const batchId = id != null ? parseInt(id, 10) : NaN
   const summaryQuery = useControlBatchSummary(batchId)
+  const deleteSpecimen = useDeleteControlBatchSpecimen()
   const summaryStatus = fromQuery(summaryQuery)
   const summaryData = summaryQuery.data ?? null
   const [createSpecimenModalOpen, setCreateSpecimenModalOpen] = useState(false)
@@ -67,8 +68,7 @@ export default function ControlBatchDetail() {
     if (!summaryData) return
     if (!window.confirm('Are you sure you want to delete this specimen and all its containers? This action cannot be undone.')) return
     try {
-      await controlsApi.deleteSpecimenFromBatch(summaryData.batch.id, specimenId)
-      refreshSummary()
+      await deleteSpecimen.mutateAsync({ batchId: summaryData.batch.id, specimenId })
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to delete specimen')
     }

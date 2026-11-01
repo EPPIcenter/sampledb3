@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Modal } from '../ui'
 import ContainerRegistration, { type ContainerData } from './ContainerRegistration'
-import { specimensApi } from '../lib/api/specimens'
+import { useAddSpecimenContainer } from '../hooks/useContainers'
 import { flatContainerRegistrationToWriteInput } from '../lib/specimen-container-payload'
 import { specimenTypesApi } from '../lib/api/reference-data';
 import '../styles/subject-specimen.css'
@@ -11,7 +11,8 @@ interface AddContainerForSpecimenModalProps {
   onClose: () => void
   specimenId: number
   specimenTypeId: number
-  onSuccess: () => void
+  /** Called after the Container is saved; `useAddSpecimenContainer` has already refreshed the queries. */
+  onSuccess?: () => void
 }
 
 export default function AddContainerForSpecimenModal({
@@ -27,6 +28,7 @@ export default function AddContainerForSpecimenModal({
   const [error, setError] = useState<string | null>(null)
   const [allowedContainerTypes, setAllowedContainerTypes] = useState<string[]>([])
   const [allowedTypesLoading, setAllowedTypesLoading] = useState(false)
+  const addContainer = useAddSpecimenContainer()
 
   useEffect(() => {
     if (!isOpen || !specimenTypeId) return
@@ -56,8 +58,8 @@ export default function AddContainerForSpecimenModal({
     setError(null)
     setLoading(true)
     try {
-      await specimensApi.addContainer(specimenId, flatContainerRegistrationToWriteInput(containerData))
-      onSuccess()
+      await addContainer.mutateAsync({ specimenId, container: flatContainerRegistrationToWriteInput(containerData) })
+      onSuccess?.()
       onClose()
     } catch (err: unknown) {
       const message =

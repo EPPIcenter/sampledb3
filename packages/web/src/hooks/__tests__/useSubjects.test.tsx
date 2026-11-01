@@ -8,8 +8,20 @@ import {
   useSubjectSummary,
   useCreateSubject,
   useUpdateSubject,
+  useMergeSubjects,
+  subjectKeys,
 } from '../useSubjects'
+import { studyKeys } from '../useStudies'
+import { specimenKeys } from '../useSpecimens'
+import { collectionKeys } from '../useCollections'
+import { dashboardKeys } from '../useDashboard'
 import { subjectsApi } from '../../lib/api/subjects'
+import {
+  createInvalidationTestClient,
+  keysNotInvalidated,
+  observeQuery,
+  seedQueries,
+} from '../../__tests__/helpers/query-invalidation'
 
 // Mock the API module
 vi.mock('../../lib/api/subjects', async () => {
@@ -191,5 +203,68 @@ describe('useSubjects Hooks', () => {
   })
 })
 
+describe('useMergeSubjects', () => {
+  const studyPages = [
+    [...studyKeys.detail(1), 'subjects', { page: 1 }],
+    [...studyKeys.detail(1), 'summary'],
+    [...studyKeys.detail(1), 'timeline'],
+    subjectKeys.summary(20),
+    specimenKeys.list({}),
+    collectionKeys.cryovialBox(4),
+    dashboardKeys.count('subjects'),
+  ]
 
+  function setup() {
+    const queryClient = createInvalidationTestClient()
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    )
+    return { queryClient, wrapper }
+  }
 
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('invalidates the study Subjects, summary, timeline, target Subject and dashboard', async () => {
+    vi.mocked(subjectsApi.merge).mockResolvedValue({ success: true } as never)
+    const { queryClient, wrapper } = setup()
+    seedQueries(queryClient, studyPages)
+
+    const { result } = renderHook(() => useMergeSubjects(), { wrapper })
+    result.current.mutate({ targetId: 20, sourceId: 21 })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(subjectsApi.merge).toHaveBeenCalledWith(20, 21)
+    expect(keysNotInvalidated(queryClient, studyPages)).toEqual([])
+  })
+
+  it("marks the deleted source Subject's pages stale without refetching them", async () => {
+    vi.mocked(subjectsApi.merge).mockResolvedValue({ success: true } as never)
+    const { queryClient, wrapper } = setup()
+    const source = await observeQuery(queryClient, subjectKeys.summary(21))
+    const target = await observeQuery(queryClient, subjectKeys.summary(20))
+
+    const { result } = renderHook(() => useMergeSubjects(), { wrapper })
+    result.current.mutate({ targetId: 20, sourceId: 21 })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(target.queryFn).toHaveBeenCalledTimes(2)
+    expect(source.queryFn).toHaveBeenCalledTimes(1)
+    expect(queryClient.getQueryState(subjectKeys.summary(21))?.isInvalidated).toBe(true)
+    source.unsubscribe()
+    target.unsubscribe()
+  })
+
+  it('invalidates nothing when the merge fails', async () => {
+    vi.mocked(subjectsApi.merge).mockRejectedValue(new Error('Subjects are in different studies'))
+    const { queryClient, wrapper } = setup()
+    seedQueries(queryClient, studyPages)
+
+    const { result } = renderHook(() => useMergeSubjects(), { wrapper })
+    result.current.mutate({ targetId: 20, sourceId: 21 })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(keysNotInvalidated(queryClient, studyPages)).toEqual(studyPages)
+  })
+})

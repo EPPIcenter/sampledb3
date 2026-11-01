@@ -3,6 +3,7 @@ import { subjectsApi } from '../lib/api/subjects';
 import { studiesApi } from '../lib/api/studies';
 import type { StudySubject } from '../lib/api/types';
 import { useClickOutside } from '../hooks/useClickOutside'
+import { useMergeSubjects } from '../hooks/useSubjects'
 import { Modal } from '../ui'
 import { parseDisplayDate } from '../lib/date-utils'
 
@@ -38,6 +39,7 @@ function SubjectMergeModalContent({
   const [sourceSelectedIndex, setSourceSelectedIndex] = useState(-1)
   const [targetSelectedIndex, setTargetSelectedIndex] = useState(-1)
   const [specimenCounts, setSpecimenCounts] = useState<Map<number, number>>(new Map())
+  const mergeSubjects = useMergeSubjects()
   const sourceRef = useRef<HTMLDivElement>(null)
   const targetRef = useRef<HTMLDivElement>(null)
   const sourceResultsRef = useRef<HTMLUListElement>(null)
@@ -131,7 +133,7 @@ function SubjectMergeModalContent({
     try {
       setMerging(true)
       setError(null)
-      const response = await subjectsApi.merge(targetSubjectId, sourceSubjectId)
+      const response = await mergeSubjects.mutateAsync({ targetId: targetSubjectId, sourceId: sourceSubjectId })
       
       // Show success message
       const { specimensTransferred, specimensMerged, containersMerged, totalContainersTransferred } = response
