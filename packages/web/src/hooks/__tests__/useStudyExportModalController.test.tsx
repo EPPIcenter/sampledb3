@@ -8,23 +8,29 @@ vi.mock('../../lib/export-filter-csv', () => ({
   parseExportModalCsv: vi.fn(),
 }))
 
-vi.mock('../../lib/api/export', () => ({
-  exportApi: {
-    availableTypes: vi.fn(),
-    containersCount: vi.fn(),
-    containersCountByNames: vi.fn(),
-    containers: vi.fn(),
-    containersByNames: vi.fn(),
-    downloadEnvelope: vi.fn(),
-    downloadGetResponse: vi.fn(),
-  },
-}))
+vi.mock('../../lib/api/export', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('export', {
+    exportApi: {
+      availableTypes: vi.fn(),
+      containersCount: vi.fn(),
+      containersCountByNames: vi.fn(),
+      containers: vi.fn(),
+      containersByNames: vi.fn(),
+      downloadEnvelope: vi.fn(),
+      downloadGetResponse: vi.fn(),
+    },
+  })
+})
 
-vi.mock('../../lib/api/reference-data', () => ({
-  tagsApi: {
-    list: vi.fn(),
-  },
-}))
+vi.mock('../../lib/api/reference-data', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('reference-data', {
+    tagsApi: {
+      list: vi.fn(),
+    },
+  })
+})
 
 vi.mock('../useExportConfigurations', () => ({
   useExportConfigurations: () => ({
@@ -104,5 +110,52 @@ describe('useStudyExportModalController', () => {
     })
 
     expect(exportApi.containers).toHaveBeenCalled()
+  })
+
+  it('keeps the modal open and shows the error when an export fails', async () => {
+    vi.mocked(exportApi.containers).mockRejectedValue({ response: { data: { error: 'Failed to export containers' } } })
+    const onClose = vi.fn()
+
+    const { result } = renderHook(() =>
+      useStudyExportModalController({
+        studyCode: 'ST1',
+        isOpen: true,
+        onClose,
+      }),
+    )
+
+    await waitFor(() => expect(result.current.countPreview.count).toBe(3))
+
+    await act(async () => {
+      result.current.actionBar.onExport()
+      // Past the one-second close a successful export waits for.
+      await new Promise((resolve) => setTimeout(resolve, 1100))
+    })
+
+    expect(result.current.error).toBe('Failed to export containers')
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('closes the modal one second after a successful export', async () => {
+    vi.mocked(exportApi.containers).mockResolvedValue(new Blob(['csv']))
+    vi.mocked(exportApi.downloadGetResponse).mockImplementation(() => undefined)
+    const onClose = vi.fn()
+
+    const { result } = renderHook(() =>
+      useStudyExportModalController({
+        studyCode: 'ST1',
+        isOpen: true,
+        onClose,
+      }),
+    )
+
+    await waitFor(() => expect(result.current.countPreview.count).toBe(3))
+
+    await act(async () => {
+      result.current.actionBar.onExport()
+    })
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1), { timeout: 2000 })
+    expect(result.current.error).toBeNull()
   })
 })

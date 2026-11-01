@@ -27,6 +27,12 @@ import { exportSpecimensCsv } from '../lib/export/specimens-csv'
 import type { ExportFilters, MultiStudyExportEntry } from '../lib/export/types'
 import { createAuthMiddleware } from '../middleware/auth'
 import { idListQueryParam } from '../lib/query-params'
+import { keepNullsOnWire } from '../middleware/omit-on-wire'
+
+/** A POST export that returns JSON rows keeps its nulls, so every row has the same keys. */
+function keepNullsInJsonRows(c: Context, result: object): void {
+  if ('format' in result && result.format === 'json') keepNullsOnWire(c)
+}
 
 function parseTagIdsFromBody(body: unknown): number[] | undefined {
   if (!body || typeof body !== 'object' || !('tag_ids' in body)) return undefined
@@ -195,6 +201,7 @@ export function createExportRoutes(database: Database): Hono {
       }
 
       if (result.kind === 'json') {
+        keepNullsOnWire(c)
         c.header('Content-Type', 'application/json')
         c.header('Content-Disposition', `attachment; filename="${result.filename}"`)
         return c.json(result.json)
@@ -248,6 +255,7 @@ export function createExportRoutes(database: Database): Hono {
         return c.json(result)
       }
 
+      keepNullsInJsonRows(c, result)
       return c.json(result)
     } catch (error) {
       return handleExportFailure(c, 'Failed to export containers', error)
@@ -326,6 +334,7 @@ export function createExportRoutes(database: Database): Hono {
         dateTolerance: body.date_tolerance || 0,
       })
 
+      keepNullsInJsonRows(c, result)
       return c.json(result)
     } catch (error) {
       return handleExportFailure(c, 'Failed to export containers', error)
@@ -349,6 +358,7 @@ export function createExportRoutes(database: Database): Hono {
         userId: user?.id,
       })
 
+      keepNullsInJsonRows(c, result)
       return c.json(result)
     } catch (error) {
       return handleExportFailure(c, 'Failed to export containers', error)

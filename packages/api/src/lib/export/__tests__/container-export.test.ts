@@ -309,7 +309,7 @@ describe('Container export executors', () => {
       expect(byId.get(alphaTube.id)?.study_code).toBe('ALPHA')
       expect(byId.get(betaTube.id)?.study_code).toBe('BETA')
       expect(byId.get(controlTube.id)).toMatchObject({ control_batch_name: 'Batch 1' })
-      expect(byId.get(controlTube.id)?.study_code).toBeUndefined()
+      expect(byId.get(controlTube.id)?.study_code).toBeNull()
     })
 
     it('returns an empty export when no barcode matches', async () => {
