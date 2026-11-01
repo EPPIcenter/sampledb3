@@ -21,6 +21,7 @@ import {
   getQueryErrorMessage,
 } from '../ui'
 import '../styles/studies.css'
+import { displayDateTime } from '../lib/date-utils'
 
 type ViewMode = 'grid' | 'list'
 type SortOption = 'title' | 'date' | 'subjects' | 'specimens' | 'containers' | 'lead'
@@ -222,7 +223,7 @@ export default function Studies() {
           result = a.title.localeCompare(b.title)
           break
         case 'date':
-          result = new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
+          result = displayDateTime(b.lastUpdated) - displayDateTime(a.lastUpdated)
           break
         case 'lead':
           result = a.leadPerson.localeCompare(b.leadPerson)

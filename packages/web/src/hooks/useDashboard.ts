@@ -9,6 +9,7 @@ import { activityApi } from '../lib/api/search'
 import { statisticsApi, type StatisticsData } from '../lib/api/statistics'
 import { controlsApi } from '../lib/api/controls'
 import { qpcrExperimentsApi, type QpcrExperiment } from '../lib/api/qpcr'
+import { displayDateTime } from '../lib/date-utils'
 
 export type DashboardStats = {
   studies: number
@@ -151,7 +152,7 @@ export function useDashboardQpcr() {
       const res = await qpcrExperimentsApi.list({ limit: 5 })
       const all = res.experiments
       return [...all]
-        .sort((a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime())
+        .sort((a, b) => displayDateTime(b.lastUpdated) - displayDateTime(a.lastUpdated))
         .slice(0, 5)
     },
   })

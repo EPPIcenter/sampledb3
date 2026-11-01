@@ -6,6 +6,7 @@ import type { Tag, StorageType, Strain } from '../lib/api/reference-data';
 import { specimenTypesApi, tagsApi, storageTypesApi, strainsApi, unitsApi } from '../lib/api/reference-data';
 import ContainerTypesCell from '../components/ContainerTypesCell'
 import ContainerTypeToggle from '../components/ContainerTypeToggle'
+import { parseDisplayDate } from '../lib/date-utils'
 
 export type ReferenceDataType =
   | 'specimen-types'
@@ -94,7 +95,7 @@ export const referenceDataConfigs: ReferenceDataConfig[] = [
         {
           key: 'created',
           label: 'Created',
-          render: (value: string) => new Date(value).toLocaleDateString(),
+          render: (value: string) => parseDisplayDate(value).toLocaleDateString(),
         },
       ]
     },

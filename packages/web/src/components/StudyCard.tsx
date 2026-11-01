@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { formatDate } from '../lib/date-utils'
+import { formatDate, parseDisplayDate } from '../lib/date-utils'
 import type { Study, StudySummaryBasic } from '../lib/api/studies';interface StudySummaryData extends StudySummaryBasic {
   averageSpecimensPerSubject?: number
   studyDurationDays?: number | null
@@ -19,8 +19,8 @@ interface StudyCardProps {
 // Calculate study duration from date range
 const calculateDuration = (range: { earliest: string; latest: string } | null): number | null => {
   if (!range) return null
-  const start = new Date(range.earliest)
-  const end = new Date(range.latest)
+  const start = parseDisplayDate(range.earliest)
+  const end = parseDisplayDate(range.latest)
   const diffTime = Math.abs(end.getTime() - start.getTime())
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
 }
@@ -263,7 +263,7 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
       {/* Footer */}
       <div className="px-5 py-3 border-t rounded-b-xl mt-auto" style={{ borderColor: 'rgb(var(--app-border))', backgroundColor: 'rgb(var(--app-surface))' }}>
         <div className="flex items-center justify-between text-xs">
-          <span style={{ color: 'rgb(var(--app-text-muted))' }}>Updated {new Date(study.lastUpdated).toLocaleDateString()}</span>
+          <span style={{ color: 'rgb(var(--app-text-muted))' }}>Updated {parseDisplayDate(study.lastUpdated).toLocaleDateString()}</span>
           <Link
             to={`/studies/${study.id}`}
             onClick={(e) => e.stopPropagation()}

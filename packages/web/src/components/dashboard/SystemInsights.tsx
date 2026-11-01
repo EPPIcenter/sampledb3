@@ -5,6 +5,7 @@ import { StatisticsData } from '../../lib/api/statistics';
 import { SkeletonCard } from '../../ui'
 import { useTheme } from '../../contexts/ThemeContext'
 import { getAppChartColors } from '../../lib/chart-colors'
+import { parseDisplayDate, toLocalDateString } from '../../lib/date-utils'
 
 interface SystemInsightsProps {
   data: StatisticsData | null
@@ -64,11 +65,11 @@ export default function SystemInsights({ data, loading }: SystemInsightsProps) {
   
   // Get raw timeline data
   const rawTimelineData = data.specimens.collectionTimeline
-    .filter((item) => new Date(item.date) >= ninetyDaysAgo)
+    .filter((item) => parseDisplayDate(item.date) >= ninetyDaysAgo)
     .map((item) => ({
-      name: new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      name: parseDisplayDate(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       value: item.count,
-      date: new Date(item.date).getTime(),
+      date: parseDisplayDate(item.date).getTime(),
     }))
     .sort((a, b) => a.date - b.date)
   
@@ -80,7 +81,7 @@ export default function SystemInsights({ data, loading }: SystemInsightsProps) {
     rawTimelineData.forEach((item) => {
       const weekStart = new Date(item.date)
       weekStart.setDate(weekStart.getDate() - weekStart.getDay()) // Start of week
-      const weekKey = weekStart.toISOString().split('T')[0]
+      const weekKey = toLocalDateString(weekStart)
       
       const existing = weekMap.get(weekKey)
       if (existing) {

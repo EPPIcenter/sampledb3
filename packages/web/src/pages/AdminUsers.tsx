@@ -7,6 +7,7 @@ import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import { AsyncPresentation, Modal, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/admin.css'
 import { EMPTY_LIST } from '../lib/empty-list'
+import { parseDisplayDate } from '../lib/date-utils'
 
 interface CreateUserData {
   email: string
@@ -402,12 +403,12 @@ export default function AdminUsers() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm dashboard-stat-muted">
                     {user.createdAt
-                      ? new Date(user.createdAt).toLocaleDateString()
+                      ? parseDisplayDate(user.createdAt).toLocaleDateString()
                       : 'N/A'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm dashboard-stat-muted">
                     {user.lastLogin
-                      ? new Date(user.lastLogin).toLocaleDateString()
+                      ? parseDisplayDate(user.lastLogin).toLocaleDateString()
                       : 'Never'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
