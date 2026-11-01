@@ -1,5 +1,6 @@
-import { useQuery, type QueryClient } from '@tanstack/react-query'
-import { listTotal } from '../lib/api/list-total'
+import { useQueries, useQuery, type QueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { listTotal, type ListTotalParams, type PaginatedListBody } from '../lib/api/list-total'
+import { trendWindows } from '../utils/trends'
 import { studiesApi, type Study, type StudySummaryBasic } from '../lib/api/studies'
 import { specimensApi } from '../lib/api/specimens'
 import { subjectsApi } from '../lib/api/subjects'
@@ -10,13 +11,22 @@ import { statisticsApi, type StatisticsData } from '../lib/api/statistics'
 import { controlsApi } from '../lib/api/controls'
 import { qpcrExperimentsApi, type QpcrExperiment } from '../lib/api/qpcr'
 
-export type DashboardStats = {
-  studies: number
-  specimens: number
-  subjects: number
-  containers: number
-  locations: number
-}
+/** A count the dashboard shows on a stat tile. */
+export type DashboardMetric = 'studies' | 'specimens' | 'subjects' | 'containers' | 'locations'
+
+/** Metrics whose tile shows a 30-day trend. */
+export type DashboardTrendMetric = Extract<DashboardMetric, 'studies' | 'specimens' | 'subjects'>
+
+export const DASHBOARD_METRICS: readonly DashboardMetric[] = [
+  'studies',
+  'specimens',
+  'subjects',
+  'containers',
+  'locations',
+]
+
+/** Count of records created in each trend window. */
+export type DashboardTrendCounts = { current: number; previous: number }
 
 export type DashboardActivityItem = {
   id: number
@@ -35,8 +45,10 @@ export type DashboardSecondaryData = {
 
 export const dashboardKeys = {
   all: ['dashboard'] as const,
-  critical: () => [...dashboardKeys.all, 'critical'] as const,
+  counts: () => [...dashboardKeys.all, 'counts'] as const,
+  count: (metric: DashboardMetric) => [...dashboardKeys.counts(), metric] as const,
   trends: () => [...dashboardKeys.all, 'trends'] as const,
+  trend: (metric: DashboardTrendMetric) => [...dashboardKeys.trends(), metric] as const,
   secondary: () => [...dashboardKeys.all, 'secondary'] as const,
   qpcr: () => [...dashboardKeys.all, 'qpcr'] as const,
   summaries: (ids: number[]) =>
@@ -48,50 +60,50 @@ export function invalidateDashboardQueries(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: dashboardKeys.all })
 }
 
-export function useDashboardCritical() {
-  return useQuery({
-    queryKey: dashboardKeys.critical(),
-    queryFn: async (): Promise<{ stats: DashboardStats; fetchedAt: Date }> => {
-      const [studies, specimens, subjects, containers, locations] = await Promise.all([
-        listTotal((p) => studiesApi.list(undefined, p), 'studies'),
-        listTotal((p) => specimensApi.search(p), 'specimens'),
-        listTotal((p) => subjectsApi.list(p), 'subjects'),
-        listTotal((p) => containersApi.list(p), 'containers'),
-        listTotal(async (p) => {
-          const res = await locationsApi.list(1, p.limit)
-          return res
-        }, 'locations'),
-      ])
-      return {
-        stats: { studies, specimens, subjects, containers, locations },
-        fetchedAt: new Date(),
-      }
-    },
-  })
+const fetchMetricPage: Record<DashboardMetric, (params: ListTotalParams) => Promise<PaginatedListBody>> = {
+  studies: (p) => studiesApi.list(undefined, p),
+  specimens: (p) => specimensApi.search(p),
+  subjects: (p) => subjectsApi.list(p),
+  containers: (p) => containersApi.list(p),
+  locations: (p) => locationsApi.list(1, p.limit),
 }
 
-export function useDashboardTrendStats(enabled: boolean) {
+/** Total of one metric. A failed request rejects; it never reads as 0. */
+export function fetchDashboardCount(metric: DashboardMetric): Promise<number> {
+  return listTotal(fetchMetricPage[metric], metric)
+}
+
+/** Records of one metric created in the last 30 days and in the 30 days before. */
+export async function fetchDashboardTrend(
+  metric: DashboardTrendMetric,
+  now: Date = new Date(),
+): Promise<DashboardTrendCounts> {
+  const windows = trendWindows(now)
+  const [current, previous] = await Promise.all([
+    listTotal(fetchMetricPage[metric], metric, windows.current),
+    listTotal(fetchMetricPage[metric], metric, windows.previous),
+  ])
+  return { current, previous }
+}
+
+/** One query per stat tile, so each tile loads, fails, and retries on its own. */
+export function useDashboardCounts(): Record<DashboardMetric, UseQueryResult<number>> {
+  const results = useQueries({
+    queries: DASHBOARD_METRICS.map((metric) => ({
+      queryKey: dashboardKeys.count(metric),
+      queryFn: () => fetchDashboardCount(metric),
+    })),
+  })
+  return Object.fromEntries(DASHBOARD_METRICS.map((metric, i) => [metric, results[i]])) as Record<
+    DashboardMetric,
+    UseQueryResult<number>
+  >
+}
+
+export function useDashboardTrend(metric: DashboardTrendMetric, enabled: boolean) {
   return useQuery({
-    queryKey: dashboardKeys.trends(),
-    queryFn: async (): Promise<DashboardStats> => {
-      const thirtyDaysAgo = new Date()
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-      const createdTo = thirtyDaysAgo.toISOString().split('T')[0]
-
-      const [studies, specimens, subjects] = await Promise.all([
-        listTotal((p) => studiesApi.list(undefined, p), 'studies', { created_to: createdTo }),
-        listTotal((p) => specimensApi.search({ ...p, created_to: createdTo }), 'specimens'),
-        listTotal((p) => subjectsApi.list(p), 'subjects'),
-      ])
-
-      return {
-        studies,
-        specimens,
-        subjects,
-        containers: 0,
-        locations: 0,
-      }
-    },
+    queryKey: dashboardKeys.trend(metric),
+    queryFn: () => fetchDashboardTrend(metric),
     enabled,
     staleTime: 5 * 60 * 1000,
   })
