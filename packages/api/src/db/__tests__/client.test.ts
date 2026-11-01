@@ -34,6 +34,7 @@ describe('Database Client', () => {
     db.exec(`CREATE TABLE static_well (id INTEGER PRIMARY KEY, collection_id INTEGER NOT NULL, position TEXT)`)
     db.exec(`CREATE TABLE study_subject (id INTEGER PRIMARY KEY, study_id INTEGER NOT NULL, name TEXT NOT NULL)`)
     db.exec(`CREATE TABLE sheet (id INTEGER PRIMARY KEY, name TEXT NOT NULL, box_id INTEGER, bag_id INTEGER)`)
+    db.exec(`CREATE TABLE specimen (id INTEGER PRIMARY KEY, specimen_type_id INTEGER NOT NULL, collection_date DATE)`)
     // Intentionally omit paper — migration 003 preflight creates legacy stub
     // Intentionally do NOT create error_logs
     const before = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='error_logs'").get()

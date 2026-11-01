@@ -125,6 +125,22 @@ describe('Export API', () => {
       expect(rowsAfter.length).toBe(rowsBefore.length)
     })
 
+    it.each([
+      ['date_from', 'garbage'],
+      ['date_to', '5/7/2024'],
+      ['date_from', '2024'],
+      ['created_from', 'yesterday'],
+    ])('returns 400 for %s=%s', async (param, value) => {
+      await seedTypedContainers('GDATE', { cryovial: false })
+
+      const res = await ctx.request(`/api/export/containers?study=GDATE&count_only=true&${param}=${encodeURIComponent(value)}`, {
+        method: 'GET',
+      })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ errorCode: 'VALIDATION_ERROR' })
+    })
+
     it('returns 401 when not authenticated', async () => {
       const res = await authenticatedRequest(ctx.createRequestApp(), '/api/export/containers?study=ST1', { method: 'GET' })
       expect(res.status).toBe(401)
@@ -442,6 +458,8 @@ describe('Export API', () => {
       ['an empty entry', { Subj1: {} }],
       ['a non-object map', 'Subj1'],
       ['a non-string date', { Subj1: { exact: 20240115 } }],
+      ['an exact date that is not YYYY-MM-DD', { Subj1: { exact: '1/15/2024' } }],
+      ['a range bound that is not a date', { Subj1: [{ from: 'garbage' }] }],
     ])('rejects %s with 400', async (_label, subjectDates) => {
       await seedSubjectWithSpecimen()
 
@@ -511,6 +529,27 @@ describe('Export API', () => {
       expect(data.filename).toMatch(/multi_study_export.*\.csv$/)
       expect(typeof data.data).toBe('string')
       expect(data.summary).toBeDefined()
+    })
+
+    it.each([
+      ['an entry collection_date', { collection_date: '1/15/2024' }, {}],
+      ['an entry date_to', { date_to: 'garbage' }, {}],
+      ['the global date_from', {}, { date_from: '2024' }],
+    ])('returns 400 for a malformed date in %s', async (_label, entryDates, globalDates) => {
+      const study = await createTestStudy(ctx.db, { title: 'Multi', shortCode: 'MULTI2' })
+      await createTestStudySubject(ctx.db, { studyId: study.id, name: 'Alice' })
+
+      const res = await ctx.request('/api/export/containers/multi-study', {
+        method: 'POST',
+        json: {
+          entries: [{ study_short_code: 'MULTI2', subject_name: 'Alice', ...entryDates }],
+          ...globalDates,
+          count_only: true,
+        },
+      })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ errorCode: 'VALIDATION_ERROR' })
     })
   })
 

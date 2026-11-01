@@ -387,6 +387,35 @@ export default function AdminDataIntegrityReport() {
       </IntegritySection>
 
       <IntegritySection
+        title="Collection date not ISO"
+        count={report.specimensWithNonIsoCollectionDate.length}
+        description="Specimens whose collection date is not a real date written YYYY-MM-DD. Date filters, exports and study summaries compare dates as text, so these Specimens are missed or misplaced. Correct the date by hand."
+      >
+        <div className="overflow-x-auto">
+          <table className="admin-table min-w-full">
+            <thead>
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Specimen ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Collection date</th>
+              </tr>
+            </thead>
+            <tbody className="bg-app-card divide-y divide-app-border">
+              {report.specimensWithNonIsoCollectionDate.map((s) => (
+                <tr key={s.id} className="hover:bg-app-surface">
+                  <td className="px-4 py-3 text-sm">
+                    <Link to={`/specimens/${s.id}`} className="text-[rgb(var(--app-accent))] hover:underline">
+                      {s.id}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm">{s.collectionDate}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </IntegritySection>
+
+      <IntegritySection
         title="Containers with no grid position"
         count={report.containersWithNoGridPosition.length}
         description="Tubes or wells in a collection with no well or slot assigned. Legacy rows are allowed; they do not occupy a grid position. Assign a position via edit or scan move when you know the well."

@@ -20,6 +20,7 @@ import {
   tag,
 } from '../db/schema'
 import { eq, inArray, sql } from 'drizzle-orm'
+import { isIsoCalendarDate } from './date-filters'
 
 export type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
 
@@ -341,6 +342,11 @@ export interface ContainerWithNoGridPositionItem {
   collectionId: number
 }
 
+export interface SpecimenWithNonIsoCollectionDateItem {
+  id: number
+  collectionDate: string
+}
+
 export interface IntegrityReport {
   emptyCollections: EmptyCollectionItem[]
   collectionsWithMissingLocation: CollectionWithMissingLocationItem[]
@@ -354,6 +360,7 @@ export interface IntegrityReport {
   duplicateBarcodes: DuplicateBarcodeItem[]
   locationPathInconsistencies: LocationPathInconsistencyItem[]
   containersWithNoGridPosition: ContainerWithNoGridPositionItem[]
+  specimensWithNonIsoCollectionDate: SpecimenWithNonIsoCollectionDateItem[]
 }
 
 /** Collections (plates, boxes, bags) whose locationId does not exist in location. */
@@ -520,6 +527,21 @@ export async function listContainersWithNoGridPosition(db: Database): Promise<Co
   return results
 }
 
+/**
+ * Specimens whose collection date is not a real YYYY-MM-DD date (issue #104). Dates are compared
+ * as strings, so such a Specimen falls outside date filters, selections and summaries.
+ */
+export async function listSpecimensWithNonIsoCollectionDate(db: Database): Promise<SpecimenWithNonIsoCollectionDateItem[]> {
+  const rows = await db
+    .select({ id: specimen.id, collectionDate: specimen.collectionDate })
+    .from(specimen)
+    .where(sql`${specimen.collectionDate} IS NOT NULL AND date(${specimen.collectionDate}) IS NOT ${specimen.collectionDate}`)
+    .orderBy(specimen.id)
+  return rows
+    .map((row) => ({ id: row.id, collectionDate: String(row.collectionDate) }))
+    .filter((row) => !isIsoCalendarDate(row.collectionDate))
+}
+
 /** Build full integrity report (all checks). */
 export async function getIntegrityReport(db: Database): Promise<IntegrityReport> {
   const [
@@ -535,6 +557,7 @@ export async function getIntegrityReport(db: Database): Promise<IntegrityReport>
     duplicateBarcodes,
     locationPathInconsistencies,
     containersWithNoGridPosition,
+    specimensWithNonIsoCollectionDate,
   ] = await Promise.all([
     listEmptyCollections(db),
     listCollectionsWithMissingLocation(db),
@@ -548,6 +571,7 @@ export async function getIntegrityReport(db: Database): Promise<IntegrityReport>
     listDuplicateBarcodes(db),
     listLocationPathInconsistencies(db),
     listContainersWithNoGridPosition(db),
+    listSpecimensWithNonIsoCollectionDate(db),
   ])
   return {
     emptyCollections,
@@ -562,5 +586,6 @@ export async function getIntegrityReport(db: Database): Promise<IntegrityReport>
     duplicateBarcodes,
     locationPathInconsistencies,
     containersWithNoGridPosition,
+    specimensWithNonIsoCollectionDate,
   }
 }

@@ -245,6 +245,7 @@ describe('Data audit API', () => {
         duplicateBarcodes: unknown[]
         locationPathInconsistencies: unknown[]
         containersWithNoGridPosition: unknown[]
+        specimensWithNonIsoCollectionDate: unknown[]
       }
       expect(Array.isArray(data.emptyCollections)).toBe(true)
       expect(Array.isArray(data.collectionsWithMissingLocation)).toBe(true)
@@ -258,6 +259,25 @@ describe('Data audit API', () => {
       expect(Array.isArray(data.duplicateBarcodes)).toBe(true)
       expect(Array.isArray(data.locationPathInconsistencies)).toBe(true)
       expect(Array.isArray(data.containersWithNoGridPosition)).toBe(true)
+      expect(Array.isArray(data.specimensWithNonIsoCollectionDate)).toBe(true)
+    })
+
+    it('flags specimens whose collection date is not YYYY-MM-DD', async () => {
+      const specType = await createTestSpecimenType(ctx.db, { name: 'STDate' })
+      const iso = await createTestSpecimen(ctx.db, specType.id, { collectionDate: '2024-05-07' })
+      const legacy = await createTestSpecimen(ctx.db, specType.id, { collectionDate: '5/7/24' })
+      const impossible = await createTestSpecimen(ctx.db, specType.id, { collectionDate: '2024-02-30' })
+      await createTestSpecimen(ctx.db, specType.id)
+
+      const res = await ctx.request('/api/admin/data-audit/integrity-report', { method: 'GET' })
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { specimensWithNonIsoCollectionDate: Array<{ id: number; collectionDate: string }> }
+      expect(data.specimensWithNonIsoCollectionDate).toEqual([
+        { id: legacy.id, collectionDate: '5/7/24' },
+        { id: impossible.id, collectionDate: '2024-02-30' },
+      ])
+      expect(data.specimensWithNonIsoCollectionDate.map((s) => s.id)).not.toContain(iso.id)
     })
 
     it('includes containers with missing specimen in report', async () => {
