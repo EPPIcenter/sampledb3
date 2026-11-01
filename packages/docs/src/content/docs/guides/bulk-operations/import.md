@@ -71,7 +71,7 @@ Column headers are case-insensitive. `Position`, `position`, `well_position`, an
 
 **Specimens Only or Combined, no containers:** `study_short_code`, `subject_name`, `specimen_type_name`. Optional `collection_date` as YYYY-MM-DD. US-style M/D/YYYY and YYYY/MM/DD are also accepted and stored as YYYY-MM-DD; impossible dates such as 2024-02-30 are rejected.
 
-**With containers:** the same columns, plus container fields for the selected type. Optional `comment` is stored on each container. Collection identifier must use the column for that type (`plate_name`, `box_name`, or `bag_name`) so it matches the templates.
+**With containers:** the same columns, plus container fields for the selected type. Optional `comment` is stored on each container. Collection identifier must use the column for that type (`plate_name`, `box_name`, or `bag_name`) so it matches the templates. A value in that column is always a name, whatever it looks like: `PLATE-001` creates a plate named `PLATE-001`. For plates and cryovial boxes, an optional `collection_barcode` column gives the collection's barcode; a new collection given only a barcode is named after it.
 
 - Micronix: `plate_name`, unique barcode, `position` (letter A-H plus two digits, for example `A01`).
 - Cryovial: `box_name`, `position`. Barcode is optional.
