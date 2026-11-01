@@ -15,7 +15,7 @@ import { dateRangeConditions } from '../lib/sql-helpers'
 import { timestampFilter } from '../lib/date-filters'
 import { z } from 'zod'
 import { resolveStudyByShortCode, resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from '../lib/identifier-resolution'
-import { validateSubjectName, validateStudyShortCode, validateSpecimenData, validateCollectionDate, validateContainerTypeForSpecimenType, validateUnitForContainerType } from '../lib/validation'
+import { subjectNameKey, validateSubjectName, validateStudyShortCode, validateSpecimenData, validateCollectionDate, validateContainerTypeForSpecimenType, validateUnitForContainerType } from '../lib/validation'
 import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } from '../lib/defaults'
 import { resolveCollection, resolveCollectionByName } from '../lib/collections/collection-resolve'
 import { findExistingStudySpecimen } from '../lib/specimen-helpers'
@@ -241,7 +241,7 @@ subjects.post('/bulk', memberMiddleware, async (c) => {
     const duplicateErrors: Array<{ index: number; error: string }> = []
     
     for (let i = 0; i < validSubjects.length; i++) {
-      const key = `${validSubjects[i].studyId}:${validSubjects[i].name}`
+      const key = subjectNameKey(validSubjects[i].studyId, validSubjects[i].name)
       if (seen.has(key)) {
         duplicateErrors.push({
           index: i,
@@ -325,7 +325,7 @@ subjects.post('/bulk/validate', memberMiddleware, async (c) => {
     }
     const seen = new Set<string>()
     for (let i = 0; i < validSubjects.length; i++) {
-      const key = `${validSubjects[i].studyId}:${validSubjects[i].name}`
+      const key = subjectNameKey(validSubjects[i].studyId, validSubjects[i].name)
       if (seen.has(key)) {
         errors.push({ index: i, message: `Duplicate subject name '${validSubjects[i].name}' in study` })
       }
@@ -417,28 +417,10 @@ subjects.put('/:id', memberMiddleware, async (c) => {
     const data = schema.parse(body)
     const trimmedName = data.name.trim()
     
-    // Validate name length
-    if (trimmedName.length === 0) {
-      return c.json({ error: 'Subject name cannot be empty' }, 400)
-    }
-    
-    if (trimmedName.length > 255) {
-      return c.json({ error: 'Subject name cannot exceed 255 characters' }, 400)
-    }
-    
-      // Check for duplicate name within the same study (excluding current subject)
-      if (trimmedName !== existingSubject.name) {
-        const duplicate = await dbInstance
-        .select({ id: studySubject.id })
-        .from(studySubject)
-        .where(and(
-          eq(studySubject.studyId, existingSubject.studyId),
-          eq(studySubject.name, trimmedName)
-        ) as any)
-        .get()
-      
-      if (duplicate) {
-        return c.json({ error: `Subject name '${trimmedName}' already exists in this study` }, 400)
+    if (trimmedName !== existingSubject.name) {
+      const nameValidation = await validateSubjectName(dbInstance, existingSubject.studyId, trimmedName, { excludeSubjectId: id })
+      if (!nameValidation.valid) {
+        throw new ValidationError(nameValidation.error ?? 'Invalid subject name')
       }
     }
     

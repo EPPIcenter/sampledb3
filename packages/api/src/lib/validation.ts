@@ -4,12 +4,16 @@ import { eq, and, like, sql } from 'drizzle-orm'
 import { resolveStudyByShortCode, resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from './identifier-resolution'
 
 /**
- * Validate that a subject name is unique within a study
+ * Validate that a subject name is unique within a study. Names compare ignoring case
+ * (CONTEXT.md, Subject), as the `study_subject_study_name_nocase_idx` index does, so a name that
+ * differs from an existing one only by case is refused. Pass `excludeSubjectId` when renaming,
+ * so a Subject may change the case of its own name.
  */
 export async function validateSubjectName(
   database: Database,
   studyId: number,
-  name: string
+  name: string,
+  options: { excludeSubjectId?: number } = {}
 ): Promise<{ valid: boolean; error?: string }> {
   const trimmedName = name.trim()
   
@@ -21,21 +25,37 @@ export async function validateSubjectName(
     return { valid: false, error: 'Subject name cannot exceed 255 characters' }
   }
   
-  // Check for existing subject with same name in same study
+  // COLLATE NOCASE matches the unique index, so this refuses exactly what the index would.
   const existing = await database
-    .select({ id: studySubject.id })
+    .select({ id: studySubject.id, name: studySubject.name })
     .from(studySubject)
     .where(and(
       eq(studySubject.studyId, studyId),
-      eq(studySubject.name, trimmedName)
-    ) as any)
+      sql`${studySubject.name} = ${trimmedName} COLLATE NOCASE`,
+      options.excludeSubjectId === undefined ? undefined : sql`${studySubject.id} != ${options.excludeSubjectId}`
+    ))
     .get()
   
   if (existing) {
-    return { valid: false, error: `Subject name '${trimmedName}' already exists in this study` }
+    return { valid: false, error: subjectNameTakenMessage(trimmedName, existing.name) }
   }
   
   return { valid: true }
+}
+
+/** The error for a Subject name the study already has, exactly or differing only by case. */
+export function subjectNameTakenMessage(name: string, existingName: string): string {
+  return name === existingName
+    ? `Subject name '${name}' already exists in this study`
+    : `Subject name '${name}' differs only by case from Subject '${existingName}' in this study. Subject names in a study ignore case.`
+}
+
+/**
+ * The key under which two Subject names in one study count as the same name. Folds ASCII letters
+ * only, as SQLite's NOCASE collation does.
+ */
+export function subjectNameKey(studyId: number, name: string): string {
+  return `${studyId}:${name.trim().replace(/[A-Z]/g, (letter) => letter.toLowerCase())}`
 }
 
 function isoDate(year: number, month: number, day: number): string | null {
