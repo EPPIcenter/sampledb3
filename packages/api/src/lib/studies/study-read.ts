@@ -37,13 +37,23 @@ export type GetStudySummariesResult = {
   summaries: StudySummary[]
 }
 
-/** List studies with optional search and pagination. */
+/**
+ * List studies with optional search and pagination. Search matches title, short code,
+ * lead person, or description, case-insensitively for ASCII letters.
+ */
 export async function listStudies(database: Database, params: ListStudiesParams): Promise<ListStudiesResult> {
   const { search, createdFrom, createdTo, page, limit } = params
   const offset = (page - 1) * limit
 
   const whereClause = and(
-    search ? or(likeContains(study.title, search), likeContains(study.shortCode, search)) : undefined,
+    search
+      ? or(
+          likeContains(study.title, search),
+          likeContains(study.shortCode, search),
+          likeContains(study.leadPerson, search),
+          likeContains(study.description, search),
+        )
+      : undefined,
     ...dateRangeConditions(study.created, createdFrom, createdTo),
   )
 

@@ -88,6 +88,73 @@ describe('Studies', () => {
     await waitFor(() => expect(typeFilter).toHaveValue('all'))
   })
 
+  describe('search', () => {
+    const studies: Study[] = [
+      { id: 1, title: 'Malaria cohort', shortCode: 'MAL01', isLongitudinal: false, leadPerson: 'Ada Lovelace', created: '2020-01-01T00:00:00Z', lastUpdated: '2024-01-01T00:00:00Z' },
+      { id: 2, title: 'Vector survey', shortCode: 'VEC02', isLongitudinal: false, leadPerson: 'Greenhouse lab', description: 'Household mosquito collections', created: '2020-01-01T00:00:00Z', lastUpdated: '2024-01-01T00:00:00Z' },
+      { id: 3, title: 'Serology', shortCode: 'SER03', isLongitudinal: false, leadPerson: 'Greenhouse Lab', created: '2020-01-01T00:00:00Z', lastUpdated: '2024-01-01T00:00:00Z' },
+    ]
+
+    // Stands in for the server, which matches title, short code, lead person, and description.
+    function serverSearch(search: string | undefined): Study[] {
+      if (!search) return studies
+      const text = search.toLowerCase()
+      return studies.filter((study) =>
+        [study.title, study.shortCode, study.leadPerson, study.description ?? ''].some((field) => field.toLowerCase().includes(text))
+      )
+    }
+
+    beforeEach(() => {
+      vi.mocked(studiesApi.list).mockImplementation((search) => {
+        const list = serverSearch(search)
+        return Promise.resolve({ studies: list, pagination: { page: 1, limit: 1000, total: list.length, totalPages: 1 } })
+      })
+    })
+
+    it('says which fields search matches', async () => {
+      const { default: Studies } = await import('../Studies')
+      await render(<Studies />)
+
+      expect(await screen.findByRole('textbox', { name: 'Search studies' })).toHaveAttribute(
+        'placeholder',
+        'Search by title, code, lead person, or description...'
+      )
+    })
+
+    it.each([
+      ['title', 'malaria', ['Malaria cohort']],
+      ['short code', 'VEC0', ['Vector survey']],
+      ['lead person', 'Greenhouse', ['Serology', 'Vector survey']],
+      ['description', 'mosquito', ['Vector survey']],
+    ])('shows the studies whose %s matches', async (_field, search, titles) => {
+      const user = userEvent.setup()
+      const { default: Studies } = await import('../Studies')
+      await render(<Studies />, { initialEntries: ['/studies?sort=title'] })
+
+      await user.type(await screen.findByRole('textbox', { name: 'Search studies' }), search)
+
+      await waitFor(() => expect(studiesApi.list).toHaveBeenCalledWith(search, expect.anything()))
+      await waitFor(() =>
+        expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(titles)
+      )
+    })
+
+    it('leaves matching to the server and does not filter its results again', async () => {
+      // A server match the page could not reproduce from the fields it holds.
+      vi.mocked(studiesApi.list).mockImplementation((search) => {
+        const list = search ? [studies[0]] : studies
+        return Promise.resolve({ studies: list, pagination: { page: 1, limit: 1000, total: list.length, totalPages: 1 } })
+      })
+      const { default: Studies } = await import('../Studies')
+      await render(<Studies />, { initialEntries: ['/studies?q=Tororo'] })
+
+      await waitFor(() =>
+        expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Malaria cohort'])
+      )
+      expect(studiesApi.list).toHaveBeenCalledWith('Tororo', expect.anything())
+    })
+  })
+
   describe('sorting', () => {
     function study(id: number, title: string, leadPerson: string, lastUpdated: string): Study {
       return {
