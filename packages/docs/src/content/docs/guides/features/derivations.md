@@ -48,6 +48,8 @@ CSV columns for the derived container:
 - Cryovial: `box_name` or `collection_barcode`, and `position`. `container_barcode` is optional.
 - Paper: `box_name` or `bag_name`, plus `sheet_name`. `sublabel` is optional.
 
+A plate or cryovial box that doesn't exist yet is created in the **Collections** step. One given only by `collection_barcode` is named after its barcode, as in bulk import, so either import finds it later by that barcode or by that name.
+
 For `derivation_type` in CSV, use the stored value: `aliquot` for Distribution, `dna_extraction` for DNA Extraction. The UI shows readable labels.
 
 Optional `quantity_used` and `reduce_parent_quantity` per row, or once in **Import settings**. `quantity_used` must be greater than 0 and `quantity` must be 0 or more. If you reduce quantity, the parent must have enough remaining for every row that draws from it, counted together; validation lists any row that would overdraw, and the import is rejected.

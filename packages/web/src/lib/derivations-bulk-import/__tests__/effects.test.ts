@@ -117,6 +117,66 @@ describe('createMissingCollections', () => {
     ])
   })
 
+  it('names a Collection given only a barcode after the barcode, as bulk import does', async () => {
+    const created: Array<{ name: string; locationId: number; barcode?: string }> = []
+    const events: DerivationsBulkEvent[] = []
+    const gateway = stubGateway({
+      createMicronixPlate: (input) => {
+        created.push(input)
+        return Promise.resolve()
+      },
+      createCryovialBox: (input) => {
+        created.push(input)
+        return Promise.resolve()
+      },
+    })
+
+    const result = await createMissingCollections(
+      [
+        missing({ name: undefined, barcode: 'PB-1', locationId: 7 }),
+        missing({ name: '', barcode: 'BX-1', containerType: 'cryovial_tube', locationId: 8 }),
+      ],
+      gateway,
+      (e) => events.push(e),
+    )
+
+    expect(result.allSuccess).toBe(true)
+    expect(created).toEqual([
+      { name: 'PB-1', locationId: 7, barcode: 'PB-1' },
+      { name: 'BX-1', locationId: 8, barcode: 'BX-1' },
+    ])
+    expect(events).toContainEqual({
+      type: 'COLLECTION_PATCHED',
+      index: 0,
+      patch: { status: 'success', name: 'PB-1' },
+    })
+  })
+
+  it('refuses to create a Collection with neither a name nor a barcode', async () => {
+    const created: string[] = []
+    const events: DerivationsBulkEvent[] = []
+    const gateway = stubGateway({
+      createMicronixPlate: (input) => {
+        created.push(input.name)
+        return Promise.resolve()
+      },
+    })
+
+    const result = await createMissingCollections(
+      [missing({ name: undefined, barcode: undefined, locationId: 7 })],
+      gateway,
+      (e) => events.push(e),
+    )
+
+    expect(result.allSuccess).toBe(false)
+    expect(created).toEqual([])
+    expect(events).toContainEqual({
+      type: 'COLLECTION_PATCHED',
+      index: 0,
+      patch: { status: 'error', error: 'A new collection needs a name or a barcode' },
+    })
+  })
+
   it('skips already-created entries', async () => {
     const created: string[] = []
     const gateway = stubGateway({

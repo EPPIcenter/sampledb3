@@ -29,7 +29,7 @@ import {
 } from '../lib/bulk-import-success-message'
 import LocationPicker from './LocationPicker'
 import '../styles/storage.css'
-import { parseCsv } from '@sampledb/contract'
+import { newCollectionName, parseCsv } from '@sampledb/contract'
 
 export type ImportType = LibImportType
 type Step = 'upload' | 'collections' | 'import'
@@ -327,9 +327,8 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
       try {
         const barcode = collection.barcode || collection.collectionBarcode || undefined
-        // A Collection the CSV gives only by barcode is named after it, as the import itself
-        // does. Every missing Collection has a name or a barcode.
-        const name = collection.name || collection.barcode || ''
+        // Every missing Collection has a name or a barcode.
+        const name = newCollectionName(collection) ?? ''
         const itemCollectionType = collection.collectionType ?? defaultCollectionType
 
         if (itemCollectionType === 'micronix_plate') {
