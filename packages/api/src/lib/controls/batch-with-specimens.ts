@@ -32,7 +32,8 @@ import { insertedRow } from '../inserted-row'
 export interface CreateBatchWithSpecimensRequest {
   batch: {
     controlDefinitionId: number
-    name: string
+    /** Omit to have the server generate a unique name from the definition and production date. */
+    name?: string
     productionDate?: string
     properties?: Record<string, unknown>
   }
@@ -386,7 +387,8 @@ export async function createBatchesWithSpecimens(
         const conflict = error instanceof Error ? sqliteConstraintConflict(error) : null
         const reason = conflict ?? (error instanceof Error ? error.message : String(error))
         const sentence = /[.!?]$/.test(reason) ? reason : `${reason}.`
-        const message = `Control batch ${index + 1} ('${data.batch.name}'): ${sentence} No control batches were created.`
+        const label = data.batch.name ? ` ('${data.batch.name}')` : ''
+        const message = `Control batch ${index + 1}${label}: ${sentence} No control batches were created.`
         if (conflict || error instanceof ConflictError) throw new ConflictError(message)
         throw new ValidationError(message)
       }

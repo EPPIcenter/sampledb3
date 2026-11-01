@@ -136,6 +136,11 @@ export type CreateBatchWithSpecimensRequest = {
   }>
 }
 
+/** One batch in a create-many request. Omit `batch.name` to have the server name it uniquely. */
+export type CreateManyBatchesItem = Omit<CreateBatchWithSpecimensRequest, 'batch'> & {
+  batch: Omit<CreateBatchWithSpecimensRequest['batch'], 'name'> & { name?: string }
+}
+
 export type CreateBatchWithSpecimensResponse = {
   batch: ControlBatch
   specimens: Array<{ id: number; specimenTypeName: string; containerCount: number; containerIds: number[] }>
@@ -166,7 +171,7 @@ export const controlsApi = {
   createBatchWithSpecimens: (data: CreateBatchWithSpecimensRequest) =>
     api.post<CreateBatchWithSpecimensResponse>('/blood-controls/batches/create-with-specimens', data),
   /** Create several batches (one per density) all-or-nothing. */
-  createBatchesWithSpecimens: (data: { batches: CreateBatchWithSpecimensRequest[] }) =>
+  createBatchesWithSpecimens: (data: { batches: CreateManyBatchesItem[] }) =>
     api.post<{ batches: CreateBatchWithSpecimensResponse[] }>('/blood-controls/batches/create-many-with-specimens', data),
   addSpecimensToBatch: (batchId: number, data: {
     specimens: Array<{
