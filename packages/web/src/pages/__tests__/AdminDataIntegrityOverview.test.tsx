@@ -17,6 +17,7 @@ function emptyIntegrityReport() {
     duplicateBarcodes: [],
     locationPathInconsistencies: [],
     containersWithNoGridPosition: [],
+    specimensWithNonIsoCollectionDate: [],
   }
 }
 
@@ -54,6 +55,20 @@ describe('AdminDataIntegrityOverview', () => {
     await render(<AdminDataIntegrityOverview />)
     await waitFor(() => {
       expect(screen.getByRole('link', { name: /integrity report/i })).toHaveTextContent('1')
+    })
+  })
+
+  it('counts specimens whose collection date is not ISO as integrity issues', async () => {
+    vi.mocked(adminApi.getIntegrityReport).mockResolvedValue({
+      ...emptyIntegrityReport(),
+      specimensWithNonIsoCollectionDate: [
+        { id: 1, collectionDate: '5/7/24' },
+        { id: 2, collectionDate: '9/14/2020' },
+      ],
+    })
+    await render(<AdminDataIntegrityOverview />)
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /integrity report/i })).toHaveTextContent('2')
     })
   })
 

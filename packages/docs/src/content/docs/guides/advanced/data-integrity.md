@@ -29,6 +29,7 @@ The **Integrity report** sub-page lists rows that failed one or more checks. Eac
 - **Storage container tag orphans.** Tag links that reference a deleted container or tag.
 - **Duplicate barcodes (micronix).** Micronix tubes that share the same barcode (schema expects unique barcodes). Duplicate barcodes on cryovial tubes are **not** treated as a data integrity issue.
 - **Location path inconsistencies.** Locations whose stored `path` does not match the path computed from the parent chain.
+- **Collection date not ISO.** Specimens whose collection date is not a real date written `YYYY-MM-DD`. Date filters, exports, and study summaries compare collection dates as text, so these Specimens are missed or placed in the wrong range. Correct the date in the database.
 - **Containers with no grid position.** Tubes or wells in a collection with no well or slot. Legacy rows are allowed and do **not** count toward the overview issue total. Assign a position via edit or scan move when the well is known.
 
 ## Empty collections

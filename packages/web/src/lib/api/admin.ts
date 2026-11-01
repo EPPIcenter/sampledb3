@@ -87,6 +87,11 @@ export interface ContainerWithNoGridPositionItem {
   collectionId: number
 }
 
+export interface SpecimenWithNonIsoCollectionDateItem {
+  id: number
+  collectionDate: string
+}
+
 export interface IntegrityReport {
   emptyCollections: EmptyCollectionItem[]
   collectionsWithMissingLocation: CollectionWithMissingLocationItem[]
@@ -100,6 +105,7 @@ export interface IntegrityReport {
   duplicateBarcodes: DuplicateBarcodeItem[]
   locationPathInconsistencies: LocationPathInconsistencyItem[]
   containersWithNoGridPosition: ContainerWithNoGridPositionItem[]
+  specimensWithNonIsoCollectionDate: SpecimenWithNonIsoCollectionDateItem[]
 }
 
 export interface CollectionWithMissingLocationItem {

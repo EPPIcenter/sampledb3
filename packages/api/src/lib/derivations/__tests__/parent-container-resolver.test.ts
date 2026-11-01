@@ -195,6 +195,38 @@ describe('resolveParentContainerId', () => {
     })
   })
 
+  describe('parent_collection_date', () => {
+    async function seedDatedPaperParent() {
+      const study = await createTestStudy(testDb, { title: 'Study', shortCode: 'STD2' })
+      const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'Subj-2' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'Whole Blood' })
+      const spec = await createTestSpecimen(testDb, specimenType.id, { studySubjectId: subject.id, collectionDate: '2024-05-07' })
+      const container = await createTestStorageContainer(testDb, { specimenId: spec.id })
+      await testDb.insert(paper).values({ id: container.id, sheetId: await createSheet(testDb), sublabel: 'Spot-B' })
+      return container.id
+    }
+
+    function datedRow(parentCollectionDate: string) {
+      return row({
+        parent_container_type: 'paper',
+        parent_study_short_code: 'STD2',
+        parent_subject_name: 'Subj-2',
+        parent_specimen_type_name: 'Whole Blood',
+        parent_collection_date: parentCollectionDate,
+      })
+    }
+
+    it.each(['2024-05-07', '5/7/2024'])('matches the stored date when written %s', async (date) => {
+      const containerId = await seedDatedPaperParent()
+      expect(await resolveParentContainerId(testDb, datedRow(date))).toBe(containerId)
+    })
+
+    it.each(['garbage', '5/7/24'])('rejects %s instead of matching nothing', async (date) => {
+      await seedDatedPaperParent()
+      await expect(resolveParentContainerId(testDb, datedRow(date))).rejects.toThrow(`Invalid parent_collection_date '${date}'`)
+    })
+  })
+
   it('throws when no parent identifier is provided', async () => {
     await expect(resolveParentContainerId(testDb, row({}))).rejects.toThrow(
       'Unable to resolve parent container',

@@ -39,7 +39,8 @@ export default function AdminDataIntegrityOverview() {
     report.derivationBrokenRefs.length +
     report.storageContainerTagOrphans.length +
     report.duplicateBarcodes.length +
-    report.locationPathInconsistencies.length
+    report.locationPathInconsistencies.length +
+    report.specimensWithNonIsoCollectionDate.length
     // containersWithNoGridPosition is informational and is not an integrity issue count
 
   return (

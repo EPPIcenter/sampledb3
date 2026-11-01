@@ -3,6 +3,7 @@ import { specimen, storageContainer, studySubject, study, specimenType, controlB
 import { eq, and, or, sql } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../constants'
 import { resolveContainerByBarcode } from '../identifier-resolution'
+import { collectionDateFilter, timestampFilter } from '../date-filters'
 import { dateToUpperBound } from '../sql-helpers'
 import { likeContains } from '../sql-like'
 
@@ -142,17 +143,21 @@ export async function listSpecimens(database: Database, query: ListSpecimensQuer
     }
   }
 
-  if (collectionDateFrom) {
-    conditions.push(sql`${specimen.collectionDate} >= ${collectionDateFrom}`)
+  const collectionFrom = collectionDateFilter('collection_date_from', collectionDateFrom)
+  const collectionTo = collectionDateFilter('collection_date_to', collectionDateTo)
+  const createdFromBound = timestampFilter('created_from', createdFrom)
+  const createdToBound = timestampFilter('created_to', createdTo)
+  if (collectionFrom) {
+    conditions.push(sql`${specimen.collectionDate} >= ${collectionFrom}`)
   }
-  if (collectionDateTo) {
-    conditions.push(sql`${specimen.collectionDate} <= ${collectionDateTo}`)
+  if (collectionTo) {
+    conditions.push(sql`${specimen.collectionDate} <= ${collectionTo}`)
   }
-  if (createdFrom) {
-    conditions.push(sql`${specimen.created} >= ${createdFrom}`)
+  if (createdFromBound) {
+    conditions.push(sql`${specimen.created} >= ${createdFromBound}`)
   }
-  if (createdTo) {
-    conditions.push(dateToUpperBound(specimen.created, createdTo))
+  if (createdToBound) {
+    conditions.push(dateToUpperBound(specimen.created, createdToBound))
   }
 
   if (barcode) {

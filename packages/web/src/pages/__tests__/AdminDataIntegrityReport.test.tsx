@@ -17,6 +17,7 @@ function emptyIntegrityReport() {
     duplicateBarcodes: [],
     locationPathInconsistencies: [],
     containersWithNoGridPosition: [],
+    specimensWithNonIsoCollectionDate: [],
   }
 }
 
@@ -54,6 +55,17 @@ describe('AdminDataIntegrityReport', () => {
       expect(screen.getByText('Containers with no grid position')).toBeInTheDocument()
       expect(screen.getByRole('link', { name: '42' })).toHaveAttribute('href', '/containers/42')
     })
+  })
+
+  it('shows specimens whose collection date is not ISO', async () => {
+    vi.mocked(adminApi.getIntegrityReport).mockResolvedValue({
+      ...emptyIntegrityReport(),
+      specimensWithNonIsoCollectionDate: [{ id: 143200, collectionDate: '9/14/20' }],
+    })
+    await render(<AdminDataIntegrityReport />)
+    expect(await screen.findByText('Collection date not ISO')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '143200' })).toHaveAttribute('href', '/specimens/143200')
+    expect(screen.getByText('9/14/20')).toBeInTheDocument()
   })
 
   it('shows retry when report load fails', async () => {

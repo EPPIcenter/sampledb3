@@ -14,6 +14,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm'
 import { validateContainerTypeForSpecimenType } from '../lib/validation'
 import { getDefaultUnit } from './defaults'
 import { utcNow } from './datetime'
+import { isIsoCalendarDate } from './date-filters'
 import { createContainerForSpecimen, pickContainerQuantity } from './container-creation'
 import { withWriteTransaction } from '../db/write-transaction'
 import { insertedRow } from './inserted-row'
@@ -66,6 +67,13 @@ async function findOrCreateDerivedSpecimen(
 
   if (!parentSpecimen) {
     throw new Error('Parent specimen not found')
+  }
+  // The child is the same collection event, so it takes the parent's date as stored. Refuse to
+  // copy a date that isn't YYYY-MM-DD rather than spread it to another Specimen (issue #104).
+  if (parentSpecimen.collectionDate != null && !isIsoCalendarDate(parentSpecimen.collectionDate)) {
+    throw new Error(
+      `Parent specimen ${parentSpecimen.id} has collection date '${parentSpecimen.collectionDate}', which is not YYYY-MM-DD. Correct it before deriving from it.`,
+    )
   }
 
   const type = await database

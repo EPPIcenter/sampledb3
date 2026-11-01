@@ -12,12 +12,25 @@ import {
 } from '../../db/schema'
 import type { DatabaseOrTransaction } from '../db-types'
 import { resolveContainerByBarcode } from '../identifier-resolution'
+import { parseCollectionDate } from '../validation'
 import type { DerivationCsvRow } from '../derivations-csv'
 
 function parseNumber(value?: string): number | undefined {
   if (value == null || value.trim() === '') return undefined
   const n = Number(value)
   return Number.isNaN(n) ? undefined : n
+}
+
+/**
+ * `parent_collection_date` as stored (YYYY-MM-DD), so a date typed M/D/YYYY still matches.
+ * Blank means no date filter; a value that isn't a date is an error rather than no match.
+ */
+function parentCollectionDate(row: DerivationCsvRow): string | undefined {
+  const raw = (row.parent_collection_date ?? '').trim()
+  if (raw === '') return undefined
+  const date = parseCollectionDate(raw)
+  if (!date) throw new Error(`Invalid parent_collection_date '${raw}'. Use YYYY-MM-DD (or M/D/YYYY).`)
+  return date
 }
 
 /**
@@ -56,6 +69,8 @@ export async function resolveParentContainerId(
     if (containerId != null) return containerId
     throw new Error(`Parent container barcode '${barcode}' not found`)
   }
+
+  const parentDate = parentCollectionDate(row)
 
   // 3. Control batch identification
   if (row.parent_control_batch_name || row.parent_control_batch_id) {
@@ -114,15 +129,12 @@ export async function resolveParentContainerId(
     const candidates = await database
       .select({ id: specimen.id })
       .from(specimen)
-      .where(row.parent_collection_date
-        ? and(where, eq(specimen.collectionDate, row.parent_collection_date.trim())) as any
-        : where,
-      )
+      .where(parentDate ? and(where, eq(specimen.collectionDate, parentDate)) as any : where)
 
     if (candidates.length === 0) {
       throw new Error(`No ${row.parent_specimen_type_name} specimen found in control batch '${row.parent_control_batch_name || row.parent_control_batch_id}'`)
     }
-    if (candidates.length > 1 && !row.parent_collection_date) {
+    if (candidates.length > 1 && !parentDate) {
       throw new Error(`Multiple ${row.parent_specimen_type_name} specimens found in batch; add parent_collection_date to disambiguate`)
     }
 
@@ -263,10 +275,7 @@ export async function resolveParentContainerId(
     const candidates = await database
       .select({ id: specimen.id })
       .from(specimen)
-      .where(row.parent_collection_date
-        ? and(where, eq(specimen.collectionDate, row.parent_collection_date.trim())) as any
-        : where,
-      )
+      .where(parentDate ? and(where, eq(specimen.collectionDate, parentDate)) as any : where)
 
     if (candidates.length === 0) {
       throw new Error('No matching parent specimen/paper container found for subject/specimen criteria')

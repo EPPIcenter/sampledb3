@@ -1,4 +1,5 @@
 import type { Context } from 'hono'
+import { collectionDateFilter, timestampFilter } from '../date-filters'
 import type { StatisticsFilters } from './types'
 
 /** Parse an integer id query value; anything else means no filter. */
@@ -8,7 +9,10 @@ function parseId(value: string | undefined): number | undefined {
   return isNaN(id) ? undefined : id
 }
 
-/** Parse dashboard statistics query parameters from a Hono request. */
+/**
+ * Parse dashboard statistics query parameters from a Hono request. A malformed date bound
+ * throws a `ValidationError` (400).
+ */
 export function parseStatisticsFilters(c: Context): StatisticsFilters {
   const tagIdsParam = c.req.queries('tag_ids') || c.req.queries('tag_ids[]')
   const tagIds = tagIdsParam?.map((id) => parseInt(id)).filter((id) => !isNaN(id))
@@ -20,9 +24,9 @@ export function parseStatisticsFilters(c: Context): StatisticsFilters {
     container_type: c.req.query('container_type'),
     tag_ids: tagIds,
     location_id: parseId(c.req.query('location_id')),
-    collection_date_from: c.req.query('collection_date_from'),
-    collection_date_to: c.req.query('collection_date_to'),
-    created_from: c.req.query('created_from'),
-    created_to: c.req.query('created_to'),
+    collection_date_from: collectionDateFilter('collection_date_from', c.req.query('collection_date_from')),
+    collection_date_to: collectionDateFilter('collection_date_to', c.req.query('collection_date_to')),
+    created_from: timestampFilter('created_from', c.req.query('created_from')),
+    created_to: timestampFilter('created_to', c.req.query('created_to')),
   }
 }

@@ -42,6 +42,12 @@ function createTablesForLaterMigrations(sqlite: Database): void {
     box_id INTEGER,
     bag_id INTEGER
   )`)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS specimen (
+    id INTEGER PRIMARY KEY,
+    study_subject_id INTEGER,
+    specimen_type_id INTEGER NOT NULL,
+    collection_date DATE
+  )`)
 }
 
 describe('schema evolution', () => {
@@ -293,6 +299,61 @@ describe('schema evolution', () => {
     sqlite.close()
   })
 
+  it('migration 008 rewrites M/D/YY and M/D/YYYY collection dates as YYYY-MM-DD', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (7)')
+    createTablesForLaterMigrations(sqlite)
+    const values: Array<[number, string | null]> = [
+      [1, '5/7/26'],
+      [2, '9/14/20'],
+      [3, '12/24/2024'],
+      [4, '07/04/2024'],
+      [5, '2023-08-21'],
+      [6, null],
+      [7, '   '],
+      [8, ' 3/17/22 '],
+      [9, '1970-01-01'],
+    ]
+    const insert = sqlite.prepare('INSERT INTO specimen (id, specimen_type_id, collection_date) VALUES (?, 1, ?)')
+    for (const [id, date] of values) insert.run(id, date)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    const rows = sqlite.prepare('SELECT collection_date AS date FROM specimen ORDER BY id').all() as Array<{ date: string | null }>
+    expect(rows.map((r) => r.date)).toEqual([
+      '2026-05-07',
+      '2020-09-14',
+      '2024-12-24',
+      '2024-07-04',
+      '2023-08-21',
+      null,
+      null,
+      '2022-03-17',
+      '1970-01-01',
+    ])
+    sqlite.close()
+  })
+
+  it.each(['13/2/2024', '2/30/2024', '2024-02-30', '5/7', '7 Apr 2024', '2024/05/07', '5/7/124'])(
+    'migration 008 aborts on a collection date it cannot read (%s) and changes nothing',
+    (bad) => {
+      const sqlite = new Database(testDbPath)
+      sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+      sqlite.exec('INSERT INTO schema_version (version) VALUES (7)')
+      createTablesForLaterMigrations(sqlite)
+      sqlite.exec(`INSERT INTO specimen (id, specimen_type_id, collection_date) VALUES (1, 1, '5/7/26')`)
+      sqlite.prepare('INSERT INTO specimen (id, specimen_type_id, collection_date) VALUES (2, 1, ?)').run(bad)
+
+      expect(() => evolveOperationalSchema(sqlite)).toThrow(/Cannot convert collection dates to YYYY-MM-DD/)
+      expect(getRecordedSchemaVersion(sqlite)).toBe(7)
+      const rows = sqlite.prepare('SELECT collection_date AS date FROM specimen ORDER BY id').all() as Array<{ date: string }>
+      expect(rows.map((r) => r.date)).toEqual(['5/7/26', bad])
+      sqlite.close()
+    },
+  )
+
   /** The CREATE TABLE text SQLite stored for qpcr_well_result. */
   function qpcrWellResultDdl(sqlite: Database): string {
     const row = sqlite.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='qpcr_well_result'").get() as
@@ -311,6 +372,7 @@ describe('schema evolution', () => {
     const migrated = new Database(testDbPath)
     migrated.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
     migrated.exec('INSERT INTO schema_version (version) VALUES (6)')
+    createTablesForLaterMigrations(migrated)
     evolveOperationalSchema(migrated)
     expect(getRecordedSchemaVersion(migrated)).toBe(CURRENT_SCHEMA_VERSION)
     expect(qpcrWellResultDdl(migrated)).toContain('CONSTRAINT qpcr_well_result_run_well_target_unique UNIQUE')
@@ -329,6 +391,7 @@ describe('schema evolution', () => {
       UNIQUE (qpcr_run_id, well_position, target_name)
     )`
     sqlite.exec(existing)
+    createTablesForLaterMigrations(sqlite)
 
     evolveOperationalSchema(sqlite)
 
