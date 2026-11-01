@@ -496,6 +496,28 @@ describe('Collections API', () => {
   })
 
   describe('POST /api/collections/sheets/move', () => {
+    it('moves a Sheet listed twice once and reports moved: 1', async () => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const loc = await createTestLocation(ctx.db, {
+        name: 'Loc',
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+      const boxA = await createTestBox(ctx.db, { name: 'BoxA', locationId: loc.id })
+      const boxB = await createTestBox(ctx.db, { name: 'BoxB', locationId: loc.id })
+      const moving = await createTestSheet(ctx.db, { name: 'Sheet-1', boxId: boxA.id })
+
+      const res = await ctx.request('/api/collections/sheets/move', {
+        method: 'POST',
+        json: { sheetIds: [moving.id, moving.id], targetCollectionId: boxB.id, targetCollectionType: 'box' },
+      })
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ success: true, moved: 1 })
+      const moved = await ctx.db.select().from(sheet).where(eq(sheet.id, moving.id)).get()
+      expect(moved?.boxId).toBe(boxB.id)
+    })
+
     it('returns a typed 409 when the target box already has a sheet with that name', async () => {
       const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
       const loc = await createTestLocation(ctx.db, {
