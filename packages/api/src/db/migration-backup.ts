@@ -26,23 +26,42 @@ function backupTimestamp(now: Date): string {
 }
 
 /**
- * Write a consistent copy of the database next to its file before migrations run, so a
- * migration that goes wrong can be undone without falling back to the last restic snapshot.
- * `VACUUM INTO` reads through the connection, so the copy includes pages still in the WAL.
- *
- * Returns the copy's path, or null for an in-memory database (there is no file to protect).
- * Throws MigrationBackupError when the copy can't be written; the caller must not migrate.
+ * Where to copy an on-disk database before changing it: next to its file, named
+ * `<database file>.<label>-<UTC timestamp>.bak`. Null for an in-memory database (there is no
+ * file to protect).
  */
-export function backupDatabaseBeforeMigrating(sqlite: Database, targetVersion: number): string | null {
+export function databaseCopyPath(sqlite: Database, label: string, now: Date = new Date()): string | null {
   const databasePath = sqlite.filename
   if (databasePath === '' || databasePath === ':memory:') {
     return null
   }
-  const backupPath = `${databasePath}.pre-v${targetVersion}-${backupTimestamp(new Date())}.bak`
+  return `${databasePath}.${label}-${backupTimestamp(now)}.bak`
+}
+
+/**
+ * Write a consistent copy of the database to `copyPath`. `VACUUM INTO` reads through the
+ * connection, so the copy includes pages still in the WAL. Throws the SQLite error on failure.
+ */
+export function writeDatabaseCopy(sqlite: Database, copyPath: string): void {
+  sqlite.prepare('VACUUM INTO ?').run(copyPath)
+}
+
+/**
+ * Write a copy of the database before migrations run, so a migration that goes wrong can be
+ * undone without falling back to the last restic snapshot.
+ *
+ * Returns the copy's path, or null for an in-memory database.
+ * Throws MigrationBackupError when the copy can't be written; the caller must not migrate.
+ */
+export function backupDatabaseBeforeMigrating(sqlite: Database, targetVersion: number): string | null {
+  const backupPath = databaseCopyPath(sqlite, `pre-v${targetVersion}`)
+  if (backupPath == null) {
+    return null
+  }
   try {
-    sqlite.prepare('VACUUM INTO ?').run(backupPath)
+    writeDatabaseCopy(sqlite, backupPath)
   } catch (error: unknown) {
-    throw new MigrationBackupError(databasePath, backupPath, error)
+    throw new MigrationBackupError(sqlite.filename, backupPath, error)
   }
   console.log(`💾 Backed up database before schema migration: ${backupPath}`)
   return backupPath

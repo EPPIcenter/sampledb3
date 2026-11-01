@@ -19,6 +19,13 @@ function emptyIntegrityReport() {
     containersWithNoGridPosition: [],
     specimensWithNonIsoCollectionDate: [],
     containersWithInvalidGridPosition: [],
+    duplicateSpecimenIdentities: [],
+    caseVariantSubjectNames: [],
+    caseVariantCollectionNames: [],
+    containersInDisallowedContainerType: [],
+    exhaustedContainersWithRemainingQuantity: [],
+    specimensWithPlaceholderCollectionDate: [],
+    specimensWithFutureCollectionDate: [],
   }
 }
 

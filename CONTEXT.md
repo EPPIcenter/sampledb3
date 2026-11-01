@@ -57,11 +57,15 @@ The top-level organizational unit for a research project, clinical trial, or oth
 _Avoid_: Project (unless referring to non-study work), trial (as a synonym for study)
 
 **Subject**:
-A participant or sample source within a study, identified by a unique name within that study.
+A participant or sample source within a study, identified by a unique name within that study. Names compare ignoring case (ASCII letters, as SQLite's `NOCASE` does): a study can't have both `ABC-1` and `abc-1`, and creating, renaming or importing a Subject whose name differs from an existing one only by case is refused. The write paths enforce it; there is no database index for it, because a database from before the rule may already hold such names, and an index would stop it from starting. The integrity report lists those pairs for an operator to merge or rename. Decided in issue #124 (decision 6).
 _Avoid_: Patient (unless the study is clinical and that is your org's term), donor (unless that is your org's term)
 
 **Specimen**:
 The collected unit — a registered biological material from a specific collection event. One collection event, one specimen record.
+
+**Specimen identity**:
+A Subject's Specimen is identified by its Subject, Specimen type and collection date: **Specimen registration** adds Containers to the Specimen with that combination instead of creating a second one. Existing duplicates stay as they are (issue #124, decision 7): no migration merges them or adds a unique index to an upgraded database, and the integrity report lists them. Migration 008 can create dated duplicates by converting legacy `M/D/YY` dates, and clearing a placeholder collection date can make a Specimen an undated duplicate of another. Known difference: fresh installs have the unique index `idx_specimen_study_subject_type_date` on (`study_subject_id`, `specimen_type_id`, `collection_date`) and upgraded databases do not. That index treats an empty collection date as distinct, so fresh installs also allow undated duplicates.
+_Avoid_: Assuming the database refuses a duplicate Specimen; on an upgraded database only registration's lookup prevents one.
 _Avoid_: Sample (as the domain term; see **Sample** below)
 
 **Sample**:
@@ -253,6 +257,10 @@ _Avoid_: Stuffing paper spot ids into `collection.barcode`; sending JSON `null` 
 **SampleDB**:
 The application — a specimen inventory and workflow system for research and clinical labs.
 _Avoid_: LIMS (unless describing the broader category externally), ELN, SRA submission system (not available today)
+
+**Data fix**:
+A one-time SQL change that one install's operator runs by hand against that install's database with `bun run data-fix` in `packages/api`, to carry out decisions about that install's own data. Unlike a numbered migration, it ships to no other install, so it may name that install's rows by id. The runner copies the database first, refuses a database below the current schema version, runs the fix in one transaction, and records it in `data_fix_log` so it runs only once. The EPPIcenter lab's fixes live in `ops/data-fixes/`.
+_Avoid_: Migration (for a change to one install's data); a migration changes every install's schema.
 
 ## Scope
 

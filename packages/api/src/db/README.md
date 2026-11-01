@@ -14,6 +14,28 @@ See [ADR 0003: SQLite schema evolution](../../../docs/adr/0003-sqlite-schema-evo
 6. Refresh `initial_schema.sql` so **new** empty databases match the latest shape (merge generated SQL; keep `INSERT INTO schema_version` at `CURRENT_SCHEMA_VERSION`). `__tests__/initial-schema-snapshot.test.ts` fails until the snapshot matches a database built by the migrations: columns, types, NOT NULL, defaults, indexes, and foreign keys.
 7. Extend the legacy fixtures if the migration touches a table they don't create. Older-version tests in `__tests__/schema-evolution.test.ts` build minimal databases through `createTablesForLaterMigrations`, and `__tests__/client.test.ts` creates its own tables inline; both must contain every table and column a later migration alters.
 
+## One-time data fixes
+
+A migration ships to every install and runs at startup, so it must be correct on any database: it may not name rows by id or carry out one lab's decisions about its own data, and it must not abort on data another install could legitimately hold. A change to one install's data is a **data fix** (CONTEXT.md) instead: a SQL file an operator runs by hand.
+
+```bash
+bun run data-fix <fix.sql> [--db=path/to/database.sqlite] [--dry-run]
+```
+
+`src/scripts/data-fix.ts` is the CLI; `runDataFix` in `data-fix.ts` does the work. It opens the file directly, not through `openOperationalDatabase`, because a data fix must not migrate the database, and it:
+
+1. refuses a database whose `schema_version` is not `CURRENT_SCHEMA_VERSION`;
+2. does nothing, and says so, if `data_fix_log` already records the fix's name with the same checksum, and refuses if the checksum differs;
+3. copies the database with `VACUUM INTO` (as `migration-backup.ts` does before migrations) to `<database file>.pre-data-fix-<name>-<UTC timestamp>.bak`;
+4. runs the statements (split on `--> statement-breakpoint`) in one `BEGIN IMMEDIATE` transaction, with foreign keys on, and records `(name, checksum, applied_at)` in `data_fix_log` in the same transaction;
+5. prints the rows each statement changed (`total_changes()`, so trigger and foreign-key changes count), labelled by the `--` comment just above it.
+
+`--dry-run` does steps 1, 2 and 4 in a transaction it rolls back, and writes no copy and no record.
+
+`data_fix_log` belongs to the runner, not the operational schema: it is created on the first fix and is absent from `schema.ts`, `initial_schema.sql`, and databases no fix ran on.
+
+**Fix files are site-specific.** `ops/data-fixes/` holds the EPPIcenter lab's fixes for its own database; other installs must not run them. Start each file with a header naming the database it is for, the decision it carries out, and a warning not to run it elsewhere. Guard it: check that the rows it changes are the ones that were reviewed, and abort (for example with a temp trigger that `RAISE(ABORT, …)`s, as `2026-11-01-eppicenter-legacy-cleanup.sql` does) when they are not. A test under `__tests__/data-fixes/` runs the lab's fix against a database seeded in production's shape. The operator steps are in the deployment guide in `packages/docs` (One-time data fixes).
+
 ## How evolution works
 
 | Database state | Behaviour |

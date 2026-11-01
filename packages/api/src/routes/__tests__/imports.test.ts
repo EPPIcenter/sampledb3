@@ -7,6 +7,7 @@ import {
 import { createImportsRoutes } from '../imports'
 import {
   createTestStudy,
+  createTestStudySubject,
   createTestSpecimenType,
   createTestLocation,
   createTestStorageType,
@@ -154,6 +155,52 @@ describe('Imports API', () => {
       const afterSpecimens = await ctx.db.select().from(specimen)
       expect(afterSubjects.length).toBe(beforeSubjects.length)
       expect(afterSpecimens.length).toBe(beforeSpecimens.length)
+    })
+
+    it('refuses a Subject name that differs from one the study has only by case, and imports nothing', async () => {
+      const studyRecord = await createTestStudy(ctx.db, { title: 'Case Import', shortCode: 'CASEIMP' })
+      await createTestStudySubject(ctx.db, { studyId: studyRecord.id, name: 'ABC-1' })
+      await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+
+      const res = await ctx.request('/api/imports/bulk-combined', {
+        method: 'POST',
+        json: {
+          studyShortCode: 'CASEIMP',
+          atomicMode: 'full_file',
+          subjects: [
+            { subjectName: 'NEW-1', specimens: [{ specimenTypeName: 'Whole Blood', collectionDate: '2025-01-01' }] },
+            { subjectName: 'abc-1', specimens: [{ specimenTypeName: 'Whole Blood', collectionDate: '2025-01-02' }] },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(400)
+      expect(JSON.stringify(await res.json())).toContain(
+        "Subject name 'abc-1' differs only by case from Subject 'ABC-1' in this study. Subject names in a study ignore case.",
+      )
+      expect((await ctx.db.select().from(studySubject)).map((s) => s.name)).toEqual(['ABC-1'])
+      expect(await ctx.db.select().from(specimen)).toHaveLength(0)
+    })
+
+    it('refuses two Subjects in one file whose names differ only by case', async () => {
+      await createTestStudy(ctx.db, { title: 'Case Import', shortCode: 'CASEIMP' })
+      await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+
+      const res = await ctx.request('/api/imports/bulk-combined', {
+        method: 'POST',
+        json: {
+          studyShortCode: 'CASEIMP',
+          atomicMode: 'full_file',
+          subjects: [
+            { subjectName: 'Pair-1', specimens: [{ specimenTypeName: 'Whole Blood', collectionDate: '2025-01-01' }] },
+            { subjectName: 'PAIR-1', specimens: [{ specimenTypeName: 'Whole Blood', collectionDate: '2025-01-02' }] },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(400)
+      expect(JSON.stringify(await res.json())).toContain("Subject name 'PAIR-1' differs only by case from Subject 'Pair-1'")
+      expect(await ctx.db.select().from(studySubject)).toHaveLength(0)
     })
 
     it('per_subject mode allows partial success and returns indexed errors', async () => {

@@ -3,7 +3,7 @@ title: Subjects and specimens
 description: Create subjects and register specimens one at a time
 ---
 
-A **subject** is a participant or sample source in a study. The name must be unique within that study. A **specimen** is the registered biological sample from one collection event. One subject can have many specimens. Each specimen belongs to one source, usually a subject.
+A **subject** is a participant or sample source in a study. The name must be unique within that study, ignoring case, so a study can't have both `ABC-1` and `abc-1`. A **specimen** is the registered biological sample from one collection event. One subject can have many specimens. Each specimen belongs to one source, usually a subject.
 
 This page covers one-at-a-time entry. For many rows, see [Bulk import](/docs/guides/bulk-operations/import/).
 

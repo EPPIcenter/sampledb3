@@ -136,6 +136,8 @@ ls -lh /var/lib/sampledb/*.bak
 rm /var/lib/sampledb/sampledb.sqlite.pre-v11-20261101T143005123Z.bak
 ```
 
+The [data fix runner](/docs/guides/advanced/deployment/#one-time-data-fixes) writes the same kind of copy, named `<file>.pre-data-fix-<fix name>-<UTC timestamp>.bak`, before it changes anything; keep and delete it the same way.
+
 To undo an upgrade with the copy, stop SampleDB, deploy the previous image (the new one would migrate the copy again), and follow step 5 below, using the `.bak` file in place of the restic restore. A restic backup taken while the copy exists may include it if your script backs up the whole directory; `ops/backup/backup-db-restic.sh` backs up only `DATABASE_PATH`.
 
 ## Restore runbook

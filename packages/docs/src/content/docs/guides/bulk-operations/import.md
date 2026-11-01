@@ -9,7 +9,7 @@ You can also open **Bulk import** from **More actions** on a study detail page. 
 
 ## Import types
 
-**Subjects Only.** Creates subjects in studies that already exist. Required columns: `study_short_code` and `subject_name`. Subject names must be unique within each study.
+**Subjects Only.** Creates subjects in studies that already exist. Required columns: `study_short_code` and `subject_name`. Subject names must be unique within each study, ignoring case: `ABC-1` and `abc-1` are the same name.
 
 **Specimens Only.** Adds specimens to subjects that already exist. You must select a **Container Type**. Choose **No Containers** to register specimens without creating containers. If a subject name is missing, that row fails so you do not create a near-duplicate subject.
 
@@ -98,6 +98,7 @@ In a longitudinal study, use one CSV row per collection. Each row creates a sepa
 - **Missing required columns.** Add the columns named in the error. For the collection identifier, use `plate_name` for micronix or static wells, `box_name` for cryovial tubes, or exactly one of `box_name` or `bag_name` for paper.
 - **Invalid study codes / Study not found.** Create the study first, or correct the code.
 - **Subject name already exists / Duplicate subject.** For Combined, existing subjects get new specimens. For Subjects Only, each name must be new in the study and unique in the batch.
+- **Subject name differs only by case.** Names compare ignoring case, so `abc-1` is refused when the study has `ABC-1`. Spell the name as the study already does, or choose a different name.
 - **Missing collections.** Assign locations on **Create Missing Collections**, or fix names and barcodes in the CSV.
 - **Location cannot contain collections.** Pick a location that is allowed to hold collections, such as a freezer or shelf configured for that.
 - **Position already used / duplicate position.** That well is taken in the plate or box, or the same position appears twice in the file for the same collection.
