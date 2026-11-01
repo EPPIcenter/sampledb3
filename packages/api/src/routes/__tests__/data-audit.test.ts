@@ -420,29 +420,32 @@ describe('Data audit API', () => {
       expect(match).toBeDefined()
     })
 
-    it('does not report duplicate cryovial barcodes as integrity issues', async () => {
+    it('reports tube barcodes duplicated across types, including case and whitespace variants', async () => {
       const storageType = await createTestStorageType(ctx.db, { name: 'Shelf', description: '' })
       const loc = await createTestLocation(ctx.db, { name: 'LocDup', storageTypeId: String(storageType.id), canContainCollections: true })
       const now = utcNow()
-      const [cvBox1] = await ctx.db.insert(cryovialBox).values({ name: `CryoDup1-${Date.now()}`, locationId: loc.id, created: now, lastUpdated: now }).returning()
-      const [cvBox2] = await ctx.db.insert(cryovialBox).values({ name: `CryoDup2-${Date.now()}`, locationId: loc.id, created: now, lastUpdated: now }).returning()
+      const [cvBox] = await ctx.db.insert(cryovialBox).values({ name: 'CryoDup', locationId: loc.id, created: now, lastUpdated: now }).returning()
+      const [plate] = await ctx.db.insert(micronixPlate).values({ name: 'PlateDup', locationId: loc.id, created: now, lastUpdated: now }).returning()
       const specType = await createTestSpecimenType(ctx.db, { name: 'STDup' })
-      const spec1 = await createTestSpecimen(ctx.db, specType.id)
-      const unit = await createTestUnit(ctx.db, { symbol: `uL-dup-${Date.now()}`, name: 'microliter', category: 'volume' })
-      const c1 = await createTestStorageContainer(ctx.db, { specimenId: spec1.id, unitId: unit.id })
-      const spec2 = await createTestSpecimen(ctx.db, specType.id)
-      const c2 = await createTestStorageContainer(ctx.db, { specimenId: spec2.id, unitId: unit.id })
-      const sharedBarcode = `DUP-${Date.now()}`
-      await ctx.db.insert(cryovialTube).values({ id: c1.id, collectionId: cvBox1!.id, barcode: sharedBarcode, position: null })
-      await ctx.db.insert(cryovialTube).values({ id: c2.id, collectionId: cvBox2!.id, barcode: sharedBarcode, position: null })
+      const spec = await createTestSpecimen(ctx.db, specType.id)
+      const unit = await createTestUnit(ctx.db, { symbol: 'uL-dup', name: 'microliter', category: 'volume' })
+      const container = () => createTestStorageContainer(ctx.db, { specimenId: spec.id, unitId: unit.id })
+      const [na1, na2, mx, cv, lone] = [await container(), await container(), await container(), await container(), await container()]
+      await ctx.db.insert(cryovialTube).values({ id: na1.id, collectionId: cvBox!.id, barcode: 'NA', position: null })
+      await ctx.db.insert(cryovialTube).values({ id: na2.id, collectionId: cvBox!.id, barcode: 'NA', position: null })
+      await ctx.db.insert(micronixTube).values({ id: mx.id, collectionId: plate!.id, barcode: 'CK3-3FR4', position: null })
+      await ctx.db.insert(cryovialTube).values({ id: cv.id, collectionId: cvBox!.id, barcode: 'ck3-3fr4 ', position: null })
+      await ctx.db.insert(cryovialTube).values({ id: lone.id, collectionId: cvBox!.id, barcode: 'LONE', position: null })
 
       const res = await ctx.request('/api/admin/data-audit/integrity-report', {
         method: 'GET',
       })
       expect(res.status).toBe(200)
-      const data = (await res.json()) as { duplicateBarcodes: Array<{ barcode: string; containerType: string }> }
-      const cryovialMatch = data.duplicateBarcodes.find((d) => d.barcode === sharedBarcode && d.containerType === 'cryovial_tube')
-      expect(cryovialMatch).toBeUndefined()
+      const data = (await res.json()) as { duplicateBarcodes: unknown[] }
+      expect(data.duplicateBarcodes).toEqual([
+        { barcode: 'CK3-3FR4', variants: ['CK3-3FR4', 'ck3-3fr4 '], containerTypes: ['cryovial_tube', 'micronix_tube'], ids: [mx.id, cv.id] },
+        { barcode: 'NA', variants: ['NA'], containerTypes: ['cryovial_tube'], ids: [na1.id, na2.id] },
+      ])
     })
 
     it('includes location path inconsistencies in report', async () => {

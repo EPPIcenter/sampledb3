@@ -17,6 +17,10 @@ import {
   createTestStudySubject,
   createTestBox,
   createTestSheet,
+  createTestCryovialBox,
+  createTestCryovialTube,
+  createTestMicronixTube,
+  createTestStorageContainer,
 } from '../../__tests__/helpers/factories'
 import { setScannerConfigurations } from '../../lib/settings'
 import { eq } from 'drizzle-orm'
@@ -167,6 +171,58 @@ describe('Collections API', () => {
         json: { mappings: [], moves: [] },
       })
       expect(res.status).toBe(401)
+    })
+  })
+
+  describe('ambiguous barcodes', () => {
+    /** A micronix tube on PLATE-A A01 and a cryovial tube in BOX-A A01, both barcoded SHARED. */
+    async function seedSharedBarcode() {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const loc = await createTestLocation(ctx.db, { name: 'Loc', storageTypeId: String(storageType.id), canContainCollections: true })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'PLATE-A', locationId: loc.id })
+      const cryoBox = await createTestCryovialBox(ctx.db, { name: 'BOX-A', locationId: loc.id })
+      const micronix = await createTestStorageContainer(ctx.db, {})
+      const cryovial = await createTestStorageContainer(ctx.db, { unitId: micronix.unitId, specimenId: micronix.specimenId })
+      await createTestMicronixTube(ctx.db, { containerId: micronix.id, collectionId: plate.id, barcode: 'SHARED', position: 'A01' })
+      await createTestCryovialTube(ctx.db, { containerId: cryovial.id, collectionId: cryoBox.id, barcode: 'SHARED', position: 'A01' })
+      return { micronix: micronix.id, cryovial: cryovial.id }
+    }
+
+    it('resolve returns no container and lists the candidates for a barcode on several Containers', async () => {
+      const { micronix, cryovial } = await seedSharedBarcode()
+
+      const res = await ctx.request('/api/collections/containers/resolve', {
+        method: 'POST',
+        json: { identifiers: [{ type: 'barcode', barcode: 'SHARED' }] },
+      })
+
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as {
+        containers: Array<{ container?: unknown; error: string; candidates: Array<{ containerId: number }> }>
+      }
+      expect(body.containers).toHaveLength(1)
+      expect(body.containers[0].container ?? null).toBeNull()
+      expect(body.containers[0].error).toMatch(/^Ambiguous barcode 'SHARED': it matches 2 containers/)
+      expect(body.containers[0].candidates.map((c) => c.containerId)).toEqual([micronix, cryovial])
+    })
+
+    it('move refuses the row instead of moving one of the tubes', async () => {
+      const { micronix } = await seedSharedBarcode()
+
+      const res = await ctx.request('/api/collections/containers/move', {
+        method: 'POST',
+        json: {
+          collectionType: 'micronix_plate',
+          mappings: [{ fromCollectionName: 'PLATE-A', toCollectionName: 'PLATE-A' }],
+          moves: [{ identifier: { type: 'barcode', barcode: 'SHARED' }, targetPosition: 'B01' }],
+        },
+      })
+
+      expect(res.status).toBe(400)
+      const body = (await res.json()) as { errors: Array<{ row: number; error: string }> }
+      expect(body.errors).toEqual([{ row: 1, error: expect.stringMatching(/^Ambiguous barcode 'SHARED'/) }])
+      const tube = await ctx.db.select().from(micronixTube).where(eq(micronixTube.id, micronix)).get()
+      expect(tube?.position).toBe('A01')
     })
   })
 

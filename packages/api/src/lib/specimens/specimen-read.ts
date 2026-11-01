@@ -1,8 +1,8 @@
 import type { Database } from '../../db/client'
 import { specimen, storageContainer, studySubject, study, specimenType, controlBatch } from '../../db/schema'
-import { eq, and, or, sql } from 'drizzle-orm'
+import { eq, and, or, sql, inArray } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../constants'
-import { resolveContainerByBarcode } from '../identifier-resolution'
+import { findContainersByBarcode } from '../identifier-resolution'
 import { dateToUpperBound } from '../sql-helpers'
 import { likeContains } from '../sql-like'
 
@@ -156,21 +156,18 @@ export async function listSpecimens(database: Database, query: ListSpecimensQuer
   }
 
   if (barcode) {
-    const containerId = await resolveContainerByBarcode(database, barcode)
-    if (containerId) {
-      const container = await database
-        .select({ specimenId: storageContainer.specimenId })
-        .from(storageContainer)
-        .where(eq(storageContainer.id, containerId))
-        .get()
-      if (container) {
-        conditions.push(eq(specimen.id, container.specimenId))
-      } else {
-        return emptyBarcodeResult()
-      }
-    } else {
-      return emptyBarcodeResult()
-    }
+    // Every Specimen with a Container carrying the barcode; cryovial barcodes repeat.
+    const containerIds = (await findContainersByBarcode(database, barcode)).map((match) => match.containerId)
+    if (containerIds.length === 0) return emptyBarcodeResult()
+    conditions.push(
+      inArray(
+        specimen.id,
+        database
+          .select({ specimenId: storageContainer.specimenId })
+          .from(storageContainer)
+          .where(inArray(storageContainer.id, containerIds)),
+      ),
+    )
   }
 
   if (search) {

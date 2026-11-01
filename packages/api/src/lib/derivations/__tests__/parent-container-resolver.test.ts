@@ -77,6 +77,21 @@ describe('resolveParentContainerId', () => {
       expect(id).toBe(container.id)
     })
 
+    it('refuses a barcode on several Containers and lists them, instead of picking one', async () => {
+      const location = await freezer(testDb)
+      const now = utcNow()
+      const [boxRow] = await testDb.insert(cryovialBox).values({ name: 'Box-NA', locationId: location.id, created: now, lastUpdated: now }).returning()
+      const first = await createTestStorageContainer(testDb)
+      const second = await createTestStorageContainer(testDb, { unitId: first.unitId, specimenId: first.specimenId })
+      await testDb.insert(cryovialTube).values({ id: first.id, collectionId: boxRow!.id, barcode: 'NA', position: 'A01' })
+      await testDb.insert(cryovialTube).values({ id: second.id, collectionId: boxRow!.id, barcode: 'NA', position: 'A02' })
+
+      await expect(resolveParentContainerId(testDb, row({ parent_container_barcode: ' NA ' }))).rejects.toThrow(
+        `Ambiguous barcode 'NA': it matches 2 containers (container ${first.id} (cryovial_tube in Box-NA A01), ` +
+          `container ${second.id} (cryovial_tube in Box-NA A02)). Identify the container by its id or position instead.`,
+      )
+    })
+
     it('throws when the barcode is not found', async () => {
       await expect(resolveParentContainerId(testDb, row({ parent_container_barcode: 'MISSING' }))).rejects.toThrow(
         "Parent container barcode 'MISSING' not found",

@@ -8,6 +8,12 @@ import {
   createTestSpecimenType,
   createTestStudy,
   createTestStudySubject,
+  createTestStorageType,
+  createTestLocation,
+  createTestCryovialBox,
+  createTestCryovialTube,
+  createTestStorageContainer,
+  createTestUnit,
 } from '../../../__tests__/helpers/factories'
 import { listSpecimens } from '../specimen-read'
 
@@ -51,6 +57,32 @@ describe('specimen-read', () => {
 
       const result = await listSpecimens(testDb, { study: 'STYA' })
       expect(result.specimens.every((s) => s.study?.shortCode === 'STYA')).toBe(true)
+    })
+
+    it('filters by barcode to every Specimen with a Container carrying it', async () => {
+      const study = await createTestStudy(testDb, { title: 'NA Study', shortCode: 'NAS' })
+      const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'Subj NA' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'Plasma' })
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'Freezer 1', storageTypeId: String(storageType.id) })
+      const cryoBox = await createTestCryovialBox(testDb, { name: 'BOX-NA', locationId: location.id })
+      const specimens = []
+      for (const [index, date] of ['2024-01-01', '2024-02-01', '2024-03-01'].entries()) {
+        const s = await createTestSpecimen(testDb, specimenType.id, { studySubjectId: subject.id, collectionDate: date })
+        specimens.push(s)
+        const container = await createTestStorageContainer(testDb, { specimenId: s.id, unitId: unit.id })
+        await createTestCryovialTube(testDb, {
+          containerId: container.id,
+          collectionId: cryoBox.id,
+          barcode: index < 2 ? 'NA' : 'OTHER',
+          position: `A0${index + 1}`,
+        })
+      }
+
+      const result = await listSpecimens(testDb, { barcode: 'NA' })
+
+      expect(result.specimens.map((s) => s.id).sort((a, b) => a - b)).toEqual([specimens[0].id, specimens[1].id])
     })
 
     it('returns empty result with default pagination for unknown barcode', async () => {

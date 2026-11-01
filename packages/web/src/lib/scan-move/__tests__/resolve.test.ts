@@ -78,6 +78,22 @@ describe('groupResolveResults', () => {
     expect(outcomes.flatMap((o) => o.errors)).toEqual([])
   })
 
+  it('reports an ambiguous barcode as an error on its row, not as a tube that could not be found', () => {
+    const error = "Ambiguous barcode 'BC2': it matches 2 containers (container 7 (micronix_tube in P1 A01), container 9 (cryovial_tube in B1 A01))."
+    const outcomes = groupResolveResults(
+      entries,
+      [
+        { identifier: 'BC1', container: containerInfo({ containerId: 1 }) },
+        { identifier: 'BC2', container: null, error },
+      ],
+      files,
+      micronixScanMoveVariant,
+    )
+    expect(outcomes[0].errors).toEqual([{ row: 2, error }])
+    expect(outcomes[0].unresolvedContainers).toEqual([])
+    expect(outcomes[0].resolvedContainers.map((r) => r.identifierKey)).toEqual(['BC1'])
+  })
+
   it('flags files whose containers are not in the variant collection type', () => {
     const outcomes = groupResolveResults(
       entries,

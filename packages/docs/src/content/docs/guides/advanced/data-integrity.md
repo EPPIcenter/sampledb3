@@ -27,7 +27,7 @@ The **Integrity report** sub-page lists rows that failed one or more checks. Eac
 - **Study subjects with missing study.** Study subjects that reference a deleted study.
 - **Derivation broken references.** container_derivation rows with missing parent or child container.
 - **Storage container tag orphans.** Tag links that reference a deleted container or tag.
-- **Duplicate barcodes (micronix).** Micronix tubes that share the same barcode (schema expects unique barcodes). Duplicate barcodes on cryovial tubes are **not** treated as a data integrity issue.
+- **Duplicate tube barcodes.** Micronix and cryovial tubes that share a barcode, comparing without case or surrounding spaces, so `CK3-3FR4` and `ck3-3fr4` count as one barcode. **Spellings** lists each stored form when they differ. Moves and derivations refuse to pick between these tubes, so identify them by container id or position.
 - **Location path inconsistencies.** Locations whose stored `path` does not match the path computed from the parent chain.
 - **Containers with no grid position.** Tubes or wells in a collection with no well or slot. Legacy rows are allowed and do **not** count toward the overview issue total. Assign a position via edit or scan move when the well is known.
 

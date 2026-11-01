@@ -322,9 +322,13 @@ export interface StorageContainerTagOrphanItem {
   tagId: number
 }
 
+/** Tubes whose barcodes are equal ignoring case and surrounding whitespace. */
 export interface DuplicateBarcodeItem {
+  /** The barcode as most of the group spells it. */
   barcode: string
-  containerType: 'micronix_tube'
+  /** Every stored spelling in the group; more than one means case or whitespace variants. */
+  variants: string[]
+  containerTypes: Array<'micronix_tube' | 'cryovial_tube'>
   ids: number[]
 }
 
@@ -456,20 +460,48 @@ export async function listStorageContainerTagOrphans(db: Database): Promise<Stor
     .map((l) => ({ storageContainerId: l.storageContainerId, tagId: l.tagId }))
 }
 
-/** Barcodes that appear more than once in micronix_tube (unique in schema; duplicate = integrity issue). Cryovial barcodes are not unique and are not treated as an integrity issue. */
+/**
+ * Tube barcodes on more than one tube, across micronix and cryovial tubes, comparing trimmed
+ * and case-folded values so `CK3-3FR4` and `ck3-3fr4 ` count as one barcode. Barcode lookups
+ * refuse to choose between such tubes, and new or changed tube barcodes can't add to them.
+ */
 export async function listDuplicateBarcodes(db: Database): Promise<DuplicateBarcodeItem[]> {
+  const rows = [
+    ...(await db.select({ id: micronixTube.id, barcode: micronixTube.barcode }).from(micronixTube)).map((row) => ({
+      ...row,
+      containerType: 'micronix_tube' as const,
+    })),
+    ...(await db
+      .select({ id: cryovialTube.id, barcode: cryovialTube.barcode })
+      .from(cryovialTube)
+      .where(sql`${cryovialTube.barcode} IS NOT NULL AND trim(${cryovialTube.barcode}) != ''`)).map((row) => ({
+      id: row.id,
+      barcode: row.barcode ?? '',
+      containerType: 'cryovial_tube' as const,
+    })),
+  ]
+  const groups = new Map<string, typeof rows>()
+  for (const row of rows) {
+    const key = row.barcode.trim().toLowerCase()
+    const group = groups.get(key) ?? []
+    group.push(row)
+    groups.set(key, group)
+  }
   const results: DuplicateBarcodeItem[] = []
-  const micronixRows = await db.select({ id: micronixTube.id, barcode: micronixTube.barcode }).from(micronixTube)
-  const micronixByBarcode = new Map<string, number[]>()
-  for (const row of micronixRows) {
-    const list = micronixByBarcode.get(row.barcode) ?? []
-    list.push(row.id)
-    micronixByBarcode.set(row.barcode, list)
+  for (const group of groups.values()) {
+    if (group.length < 2) continue
+    const spellings = new Map<string, number>()
+    for (const row of group) spellings.set(row.barcode, (spellings.get(row.barcode) ?? 0) + 1)
+    const variants = [...spellings.keys()].sort()
+    const barcode = [...spellings.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0]
+    results.push({
+      barcode,
+      variants,
+      containerTypes: [...new Set(group.map((row) => row.containerType))].sort(),
+      ids: group.map((row) => row.id).sort((a, b) => a - b),
+    })
   }
-  for (const [barcode, ids] of micronixByBarcode) {
-    if (ids.length > 1) results.push({ barcode, containerType: 'micronix_tube', ids })
-  }
-  return results
+  return results.sort((a, b) => a.barcode.localeCompare(b.barcode))
 }
 
 /** Locations whose stored path does not match the path computed from parent chain. */

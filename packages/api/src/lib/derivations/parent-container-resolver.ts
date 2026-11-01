@@ -25,7 +25,7 @@ function parseNumber(value?: string): number | undefined {
  *
  * Parents may be identified four ways, tried in order:
  * 1. explicit `parent_container_id`
- * 2. `parent_container_barcode` (any container subtype)
+ * 2. `parent_container_barcode` (any container subtype; a barcode on several Containers is an error)
  * 3. control-batch provenance (`parent_control_batch_name` / `_id` + specimen type)
  * 4. study-subject provenance (`parent_study_short_code` + `parent_subject_name` + specimen type)
  *
@@ -52,8 +52,9 @@ export async function resolveParentContainerId(
   // 2. Barcode across known subtypes
   if (row.parent_container_barcode) {
     const barcode = row.parent_container_barcode.trim()
-    const containerId = await resolveContainerByBarcode(database, barcode)
-    if (containerId != null) return containerId
+    // Throws AmbiguousBarcodeError rather than draw quantity from whichever match comes first.
+    const match = await resolveContainerByBarcode(database, barcode)
+    if (match) return match.containerId
     throw new Error(`Parent container barcode '${barcode}' not found`)
   }
 

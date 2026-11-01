@@ -167,7 +167,15 @@ export const collectionsApi = {
       | { type: 'position'; sourceCollectionName: string; sourcePosition: string }
     >
   }) =>
-    api.post<{ containers: Array<{ identifier: { type: string; value: string } | string; container: unknown }> }>('/collections/containers/resolve', data),
+    api.post<{
+      containers: Array<{
+        identifier: { type: string; value: string } | string
+        container: unknown
+        /** Set, with `container` null, when a barcode matches more than one Container. */
+        error?: string
+        candidates?: Array<{ containerId: number; containerType: string; barcode: string }>
+      }>
+    }>('/collections/containers/resolve', data),
   listCollectionsByType: (type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet') =>
     api.get<{ collections: Array<{ id: number; name: string; locationId?: number | null; itemCount?: number; location?: { id: number; path: string | null } | null }> }>(`/collections/list/${type}`),
   listAllCollections: () =>
