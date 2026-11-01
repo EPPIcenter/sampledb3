@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { SkeletonTable } from '../ui'
 import Pagination from './Pagination'
-import { compareBySortType, type SortType } from '../lib/sort-compare'
+import { compareBySortType, type SortDirection, type SortType } from '../lib/sort-compare'
 
 export interface Column<T> {
   key: keyof T | string
@@ -25,6 +25,20 @@ interface DataTableProps<T> {
     pageSize: number
     onPageChange: (page: number) => void
     showPagination?: boolean
+    /**
+     * Rows across all pages when the server pages the list. With it, `data` is the current
+     * page as the server returned it, and the table does not slice it.
+     */
+    totalItems?: number
+  }
+  /**
+   * Controlled sort for a list the server sorts. With it, the table shows `sort` and reports
+   * header clicks to `onChange`, and leaves `data` in the order it was given.
+   */
+  sort?: {
+    column: string | null
+    direction: SortDirection
+    onChange: (column: string, direction: SortDirection) => void
   }
   /** Optional class for the root wrapper (e.g. dashboard-card for themed pages). */
   className?: string
@@ -40,10 +54,14 @@ export default function DataTable<T extends { id: number }>({
   initialSortDirection = 'asc',
   density = 'normal',
   pagination,
+  sort,
   className,
 }: DataTableProps<T>) {
-  const [sortColumn, setSortColumn] = useState<keyof T | string | null>(initialSortColumn)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(initialSortDirection)
+  const [localSortColumn, setSortColumn] = useState<keyof T | string | null>(initialSortColumn)
+  const [localSortDirection, setSortDirection] = useState<SortDirection>(initialSortDirection)
+  const sortColumn = sort ? sort.column : localSortColumn
+  const sortDirection = sort ? sort.direction : localSortDirection
+  const serverPaged = pagination?.totalItems !== undefined
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null)
   const tableRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map())
@@ -51,29 +69,36 @@ export default function DataTable<T extends { id: number }>({
 
   const handleSort = (column: Column<T>) => {
     if (!column.sortType) return
-    
-    if (sortColumn === column.key) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortColumn(column.key)
-      setSortDirection('asc')
+
+    const direction: SortDirection = sortColumn === column.key && sortDirection === 'asc' ? 'desc' : 'asc'
+    if (sort) {
+      sort.onChange(String(column.key), direction)
+      return
     }
+    setSortColumn(column.key)
+    setSortDirection(direction)
   }
 
   const sortType = columns.find((column) => column.key === sortColumn)?.sortType
-  const sortedData =
-    sortColumn && sortType
-      ? [...data].sort((a, b) =>
-          compareBySortType(a[sortColumn as keyof T], b[sortColumn as keyof T], sortType, sortDirection)
-        )
-      : data
+  // A server-sorted list arrives in order; sort locally only when the table owns the sort.
+  const sortedData = useMemo(
+    () =>
+      !sort && sortColumn && sortType
+        ? [...data].sort((a, b) =>
+            compareBySortType(a[sortColumn as keyof T], b[sortColumn as keyof T], sortType, sortDirection)
+          )
+        : data,
+    [data, sort, sortColumn, sortType, sortDirection]
+  )
 
-  // Apply pagination if enabled
-  const paginatedData = pagination
-    ? sortedData.slice((pagination.page - 1) * pagination.pageSize, pagination.page * pagination.pageSize)
-    : sortedData
-  
-  const totalPages = pagination ? Math.ceil(sortedData.length / pagination.pageSize) : 1
+  // Apply pagination if enabled; a server-paged list is already one page.
+  const paginatedData =
+    pagination && !serverPaged
+      ? sortedData.slice((pagination.page - 1) * pagination.pageSize, pagination.page * pagination.pageSize)
+      : sortedData
+
+  const totalItems = pagination?.totalItems ?? sortedData.length
+  const totalPages = pagination ? Math.ceil(totalItems / pagination.pageSize) : 1
 
   // Reset selected row when data changes, sort changes, or page changes (during render to avoid extra pass)
   const resetDeps = [data.length, sortColumn, sortDirection, pagination?.page ?? 0]
@@ -240,7 +265,7 @@ export default function DataTable<T extends { id: number }>({
             currentPage={pagination.page}
             totalPages={totalPages}
             onPageChange={pagination.onPageChange}
-            totalItems={sortedData.length}
+            totalItems={totalItems}
             itemsPerPage={pagination.pageSize}
           />
         </div>

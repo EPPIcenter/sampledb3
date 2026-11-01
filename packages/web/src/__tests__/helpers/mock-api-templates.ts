@@ -126,7 +126,7 @@ export function dashboardPageMock(): MockApiOverrides {
       get: vi.fn().mockImplementation((url: string) => {
         const emptyList = { pagination: { total: 0 }, studies: [], specimens: [], subjects: [], containers: [], locations: [] }
         if (url === '/studies') return Promise.resolve({ studies: [], pagination: { total: 0 } })
-        if (url === '/specimens') return Promise.resolve({ specimens: [], pagination: { total: 0 } })
+        if (url === '/specimens') return Promise.resolve({ specimens: [], pagination: { page: 1, limit: 1, total: 0, totalPages: 0 } })
         if (url === '/subjects') return Promise.resolve({ subjects: [], pagination: { total: 0 } })
         if (url === '/containers') return Promise.resolve({ containers: [], pagination: { total: 0 } })
         if (url === '/locations') return Promise.resolve({ locations: [], pagination: { total: 0 } })
@@ -148,7 +148,7 @@ export function specimensPageMock(): MockApiOverrides {
   return {
     default: { get: vi.fn() },
     specimensApi: {
-      search: vi.fn().mockResolvedValue({ specimens: [] }),
+      search: vi.fn().mockResolvedValue({ specimens: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }),
     },
     specimenTypesApi: {
       list: vi.fn().mockResolvedValue({ data: [] }),

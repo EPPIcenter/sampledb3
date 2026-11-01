@@ -95,6 +95,59 @@ describe('Specimens API', () => {
     })
   })
 
+  describe('GET /api/specimens pagination and sort', () => {
+    it('returns the first page and a total when no page or limit is given', async () => {
+      const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })
+      for (let day = 1; day <= 60; day++) {
+        const date = new Date(Date.UTC(2024, 0, day)).toISOString().slice(0, 10)
+        await createTestSpecimen(ctx.db, type.id, { collectionDate: date })
+      }
+
+      const res = await ctx.request('/api/specimens')
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        specimens: unknown[]
+        pagination: { page: number; limit: number; total: number; totalPages: number }
+      }
+      expect(data.pagination.page).toBe(1)
+      expect(data.pagination.total).toBe(60)
+      expect(data.pagination.limit).toBeLessThan(60)
+      expect(data.specimens).toHaveLength(data.pagination.limit)
+      expect(data.pagination.totalPages).toBe(Math.ceil(60 / data.pagination.limit))
+    })
+
+    it('sorts the whole filtered set before paging', async () => {
+      const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })
+      for (const date of ['2024-03-01', '2021-01-01', '2024-12-31', '2023-06-15']) {
+        await createTestSpecimen(ctx.db, type.id, { collectionDate: date })
+      }
+
+      const res = await ctx.request(
+        `/api/specimens?specimen_type_id=${type.id}&sort=collection_date&order=asc&page=2&limit=2`,
+      )
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        specimens: Array<{ collectionDate: string }>
+        pagination: { total: number }
+      }
+      expect(data.specimens.map((s) => s.collectionDate)).toEqual(['2024-03-01', '2024-12-31'])
+      expect(data.pagination.total).toBe(4)
+    })
+
+    it.each([
+      ['sort=study', 'sort'],
+      ['sort=created&order=up', 'order'],
+    ])('returns 400 for %s', async (query, param) => {
+      const res = await ctx.request(`/api/specimens?${query}`)
+
+      expect(res.status).toBe(400)
+      const data = (await res.json()) as { error: string }
+      expect(data.error).toContain(`Invalid ${param}`)
+    })
+  })
+
   describe('POST /api/specimens/bulk', () => {
     let testStudy: Awaited<ReturnType<typeof createTestStudy>>
     let testSubject: Awaited<ReturnType<typeof createTestStudySubject>>
