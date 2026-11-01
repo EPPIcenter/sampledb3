@@ -14,8 +14,11 @@ import {
 } from '../db/schema'
 import { and, eq, sql } from 'drizzle-orm'
 import {
+  containerQuantityBoundsError,
   csvRowToContainerWriteInput,
   parseCsv as parseCsvCells,
+  quantityDrawError,
+  quantityUsedError,
   PAPER_DERIVATION_USE_SUBLABEL_NOT_CONTAINER_BARCODE,
   PAPER_DERIVATION_USE_SUBLABEL_NOT_POSITION,
   type ContainerCsvRow,
@@ -69,7 +72,6 @@ export interface BulkDerivationSettings {
   
   // Validation flags
   validateSourceSpecimenType?: boolean
-  validateParentQuantity?: boolean
 }
 
 export interface DerivationCsvRow {
@@ -174,6 +176,27 @@ function rowValueError(row: DerivationCsvRow): string | null {
     return `reduce_parent_quantity '${flag}' must be true or false`
   }
   return null
+}
+
+/** The quantity used a row draws from its Parent container, or undefined when it draws none. */
+function rowQuantityDraw(row: DerivationCsvRow, settings: BulkDerivationSettings | undefined): number | undefined {
+  const reduce = parseBoolean(row.reduce_parent_quantity) ?? settings?.reduceParentQuantity ?? true
+  return reduce ? rowQuantityUsed(row, settings) : undefined
+}
+
+function rowQuantityUsed(row: DerivationCsvRow, settings: BulkDerivationSettings | undefined): number | undefined {
+  return row.quantity_used ? parseNumber(row.quantity_used) : settings?.quantityUsed
+}
+
+/** A row's Child container quantity or quantity used out of bounds, before looking at the Parent container. */
+function rowQuantityError(row: DerivationCsvRow, settings: BulkDerivationSettings | undefined): string | null {
+  const quantity = row.quantity ? parseNumber(row.quantity) : settings?.quantity
+  if (quantity != null) {
+    const childError = containerQuantityBoundsError({ totalQuantity: quantity, remainingQuantity: quantity })
+    if (childError) return `Child container: ${childError}`
+  }
+  const quantityUsed = rowQuantityUsed(row, settings)
+  return quantityUsed == null ? null : quantityUsedError(quantityUsed)
 }
 
 function parseNumber(value?: string): number | undefined {
@@ -385,6 +408,8 @@ export async function validateDerivationsCsv(
   let invalidCount = 0
   let warningCount = 0
   let firstParentSpecimenTypeId: number | null = null
+  /** Parent container remaining quantity after the draws of earlier rows. */
+  const parentRemaining = new Map<number, number | null>()
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
@@ -490,28 +515,35 @@ export async function validateDerivationsCsv(
         }
       }
 
-      // Validate parent quantity if enabled
-      if (settings?.validateParentQuantity && parentContainerId) {
-        const parentContainer = await database
-          .select({ 
-            remainingQuantity: storageContainer.remainingQuantity,
-            unitId: storageContainer.unitId,
-          })
-          .from(storageContainer)
-          .where(eq(storageContainer.id, parentContainerId))
-          .get()
-        
-        if (parentContainer) {
-          const quantityUsed = row.quantity_used 
-            ? parseNumber(row.quantity_used) 
-            : settings.quantityUsed
-          
-          if (quantityUsed && parentContainer.remainingQuantity !== null && parentContainer.remainingQuantity < quantityUsed) {
-            validationRow.warnings = validationRow.warnings || []
-            validationRow.warnings.push(`Insufficient parent quantity: ${parentContainer.remainingQuantity} available, ${quantityUsed} requested`)
-            warningCount++
-          }
+      // Same bounds createDerivation enforces; rows drawing from one Parent container add up.
+      const quantityError = rowQuantityError(row, settings)
+      if (quantityError) {
+        validationRow.error = quantityError
+        validationRows.push(validationRow)
+        invalidCount++
+        continue
+      }
+      const draw = rowQuantityDraw(row, settings)
+      if (draw != null && parentContainerId) {
+        let remaining = parentRemaining.get(parentContainerId)
+        if (remaining === undefined) {
+          const parentContainer = await database
+            .select({ remainingQuantity: storageContainer.remainingQuantity })
+            .from(storageContainer)
+            .where(eq(storageContainer.id, parentContainerId))
+            .get()
+          remaining = parentContainer?.remainingQuantity ?? null
         }
+        const drawError = quantityDrawError(draw, remaining)
+        if (drawError) {
+          validationRow.error = parentRemaining.has(parentContainerId)
+            ? `${drawError} Earlier rows in this file draw from the same Parent container.`
+            : drawError
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+        parentRemaining.set(parentContainerId, remaining == null ? null : remaining - draw)
       }
 
       // Resolve collection and track status

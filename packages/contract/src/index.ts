@@ -81,3 +81,9 @@ export {
   PAPER_DERIVATION_USE_SUBLABEL_NOT_POSITION,
   type PaperInboundWriteFields,
 } from './paper-container-inbound'
+export {
+  containerQuantityBoundsError,
+  quantityDrawError,
+  quantityUsedError,
+  type ContainerQuantityBounds,
+} from './container-quantity'

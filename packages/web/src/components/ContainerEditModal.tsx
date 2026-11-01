@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { containerQuantityBoundsError } from '@sampledb/contract'
 import { tagsApi } from '../lib/api/reference-data';
 import type { Tag } from '../lib/api/reference-data';
 import { settingsApi } from '../lib/api/settings';
@@ -15,6 +16,8 @@ interface ContainerEditModalProps {
     id: number
     comment?: string | null
     remainingQuantity?: number
+    /** Upper bound for remaining quantity. */
+    totalQuantity?: number
     tags?: Array<{ id: number; name: string }>
     unit?: { id: number; symbol: string }
     containerType?: string
@@ -122,11 +125,14 @@ function ContainerEditModalForm({
           // Empty string - don't update (keep current value)
         } else {
           const quantity = parseFloat(formData.remainingQuantity)
-          if (!isNaN(quantity) && quantity >= 0) {
-            updateData.remainingQuantity = quantity
-          } else {
-            throw new Error('Remaining quantity must be a valid number >= 0')
+          if (isNaN(quantity)) {
+            throw new Error('Remaining quantity must be a number')
           }
+          const boundsError = containerQuantityBoundsError({ totalQuantity: container.totalQuantity, remainingQuantity: quantity })
+          if (boundsError) {
+            throw new Error(boundsError)
+          }
+          updateData.remainingQuantity = quantity
         }
       }
 
@@ -228,7 +234,8 @@ function ContainerEditModalForm({
               </div>
             )}
 
-            <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
+            {/* noValidate: the quantity bounds message comes from the shared rule, not the browser. */}
+            <form ref={formRef} onSubmit={handleSubmit} noValidate className="space-y-4">
               {canEditBarcode(container.containerType) && (
                 <div>
                   <label htmlFor="barcode" className="block text-sm font-medium text-app-text mb-1">
@@ -313,13 +320,16 @@ function ContainerEditModalForm({
                   id="remainingQuantity"
                   step="0.01"
                   min="0"
+                  max={container.totalQuantity}
                   value={formData.remainingQuantity}
                   onChange={(e) => setFormData({ ...formData, remainingQuantity: e.target.value })}
                   className="w-full px-3 py-2 border border-app-border rounded-md shadow-sm focus:ring-app-accent focus:border-app-accent"
                   disabled={loading}
                 />
                 <p className="mt-1 text-xs text-app-text-muted">
-                  Update the remaining quantity for this container
+                  {container.totalQuantity != null
+                    ? `Between 0 and the total quantity, ${container.totalQuantity}`
+                    : 'Update the remaining quantity for this container'}
                 </p>
               </div>
 

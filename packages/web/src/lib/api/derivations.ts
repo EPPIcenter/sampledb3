@@ -56,7 +56,6 @@ export interface BulkDerivationSettings {
   quantityUsed?: number
   reduceParentQuantity?: boolean
   validateSourceSpecimenType?: boolean
-  validateParentQuantity?: boolean
 }
 
 export interface CollectionStatus {

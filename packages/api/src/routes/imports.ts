@@ -31,7 +31,6 @@ const bulkDerivationSettingsSchema = z.object({
   quantityUsed: z.number().optional(),
   reduceParentQuantity: z.boolean().optional(),
   validateSourceSpecimenType: z.boolean().optional(),
-  validateParentQuantity: z.boolean().optional(),
 })
 
 // Bulk import container derivations from CSV
