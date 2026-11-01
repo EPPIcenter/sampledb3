@@ -14,8 +14,9 @@ import {
   updateLocationPath,
   getLocationStorageTypeId,
   getLocationHierarchyStats,
+  countCollectionsAtLocation,
 } from '../lib/location-helpers'
-import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
+import { ConflictError, handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
@@ -408,6 +409,16 @@ locations.put('/:id', adminMiddleware, async (c) => {
 
     if (!existing) {
       return c.json({ error: 'Location not found' }, 404)
+    }
+
+    // A Location that holds Collections must keep holding them (#133).
+    if (data.canContainCollections === false && existing.canContainCollections) {
+      const held = await countCollectionsAtLocation(database, id)
+      if (held > 0) {
+        throw new ConflictError(
+          `Cannot turn off "can contain collections": this location holds ${held} ${held === 1 ? 'collection' : 'collections'}. Move them to another location first.`,
+        )
+      }
     }
 
     // Validate parent if being changed

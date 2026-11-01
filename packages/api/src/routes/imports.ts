@@ -5,6 +5,7 @@ import { importDerivationsFromCsv, validateDerivationsCsv, type BulkDerivationSe
 import { runBulkCombinedImport, validateBulkCombinedPayload } from '../lib/bulk-combined-import'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
+import { derivationDateSchema } from '../lib/derivation-schemas'
 import {
   bulkCombinedRequestSchema,
   bulkCombinedValidateRequestSchema,
@@ -25,7 +26,8 @@ const bulkDerivationSettingsSchema = z.object({
   // '' means the column comes from the CSV per row, like the other settings.
   containerType: z.enum(['micronix_tube', 'cryovial_tube', 'paper', '']),
   protocol: z.string(),
-  derivationDate: z.string(),
+  // '' means each row gives its own derivation_date.
+  derivationDate: z.union([z.literal(''), derivationDateSchema]),
   quantity: z.number().optional(),
   unitSymbol: z.string().optional(),
   quantityUsed: z.number().optional(),

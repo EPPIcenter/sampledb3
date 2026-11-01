@@ -11,7 +11,7 @@ import {
   isEmptyOperationalDatabase,
 } from '../schema-evolution'
 import { openOperationalDatabase } from '../open'
-import { SchemaMigrationError, runSqlMigrationStatements } from '../migration-runner'
+import { SchemaMigrationError, listNumberedMigrations, runSqlMigration, runSqlMigrationStatements } from '../migration-runner'
 
 /** Tables that migrations 004+ alter, so older-version fixtures can migrate to current. */
 function createTablesForLaterMigrations(sqlite: Database): void {
@@ -60,7 +60,7 @@ function createTablesForLaterMigrations(sqlite: Database): void {
   ensureColumns(sqlite, 'specimen', ['control_batch_id INTEGER'])
   ensureColumns(sqlite, 'storage_container', ['specimen_id INTEGER'])
   ensureColumns(sqlite, 'storage_container_tag', ['storage_container_id INTEGER', 'tag_id INTEGER'])
-  ensureColumns(sqlite, 'control_batch', ['control_definition_id INTEGER'])
+  ensureColumns(sqlite, 'control_batch', ['control_definition_id INTEGER', 'properties TEXT'])
   ensureColumns(sqlite, 'location', ['parent_id INTEGER', 'path TEXT'])
   ensureColumns(sqlite, 'micronix_plate', ['location_id INTEGER'])
   ensureColumns(sqlite, 'cryovial_box', ['location_id INTEGER'])
@@ -547,6 +547,75 @@ describe('schema evolution', () => {
       sqlite.close()
     })
   }
+
+  /** A database at version 11 with control batches, ready for migration 012. */
+  function databaseBeforeMigration012(): Database {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (11)')
+    createTablesForLaterMigrations(sqlite)
+    const insert = sqlite.prepare('INSERT INTO control_batch (id, control_definition_id, properties) VALUES (?, 1, ?)')
+    const object = { legacy_study_id: 94, lead_person: 'Ann', nested: { strains: [1, 2] } }
+    insert.run(1, JSON.stringify(object))
+    insert.run(2, JSON.stringify(JSON.stringify(object)))
+    insert.run(3, null)
+    insert.run(4, JSON.stringify(JSON.stringify({})))
+    insert.run(5, '{}')
+    return sqlite
+  }
+
+  function storedProperties(sqlite: Database): Array<[number, string | null, string | null]> {
+    const rows = sqlite
+      .prepare(`SELECT id, properties, json_type(properties) AS type FROM control_batch ORDER BY id`)
+      .all() as Array<{ id: number; properties: string | null; type: string | null }>
+    return rows.map((r) => [r.id, r.properties, r.type])
+  }
+
+  const MIGRATED_PROPERTIES: Array<[number, string | null, string | null]> = [
+    [1, '{"legacy_study_id":94,"lead_person":"Ann","nested":{"strains":[1,2]}}', 'object'],
+    [2, '{"legacy_study_id":94,"lead_person":"Ann","nested":{"strains":[1,2]}}', 'object'],
+    [3, null, null],
+    [4, '{}', 'object'],
+    [5, '{}', 'object'],
+  ]
+
+  it('migration 012 stores double-encoded control batch properties once and leaves single-encoded ones alone', () => {
+    const sqlite = databaseBeforeMigration012()
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(storedProperties(sqlite)).toEqual(MIGRATED_PROPERTIES)
+    sqlite.close()
+  })
+
+  it('migration 012 changes nothing when run again', () => {
+    const sqlite = databaseBeforeMigration012()
+    evolveOperationalSchema(sqlite)
+    const migration = listNumberedMigrations().find((m) => m.version === 12)
+    expect(migration).toBeDefined()
+
+    runSqlMigration(sqlite, 12, migration!.path)
+
+    expect(storedProperties(sqlite)).toEqual(MIGRATED_PROPERTIES)
+    sqlite.close()
+  })
+
+  it('migration 012 leaves a JSON string property that does not hold an object as it is', () => {
+    const sqlite = databaseBeforeMigration012()
+    sqlite.prepare('INSERT INTO control_batch (id, control_definition_id, properties) VALUES (6, 1, ?)').run(JSON.stringify('not json {'))
+    sqlite.prepare('INSERT INTO control_batch (id, control_definition_id, properties) VALUES (7, 1, ?)').run(JSON.stringify('[1,2]'))
+
+    evolveOperationalSchema(sqlite)
+
+    const rows = storedProperties(sqlite)
+    expect(rows.slice(0, 5)).toEqual(MIGRATED_PROPERTIES)
+    expect(rows.slice(5)).toEqual([
+      [6, '"not json {"', 'text'],
+      [7, '"[1,2]"', 'text'],
+    ])
+    sqlite.close()
+  })
 
   it('fail-hard: invalid migration leaves schema_version unchanged', () => {
     const sqlite = new Database(testDbPath)

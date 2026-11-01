@@ -390,6 +390,32 @@ describe('derivations-csv', () => {
       expect(child?.position).toBe('B01')
     })
 
+    it('rejects a derivation_date that is not a date, in validation and on import', async () => {
+      const { parent } = await seedParent()
+      const perRow = { ...settings, derivationDate: '' }
+      const csv = [`${header},derivation_date`, `${parent.id},PlateDef,B01,C1,not a date`, `${parent.id},PlateDef,B02,C2,2025-01-16`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, perRow)
+      expect(result.rows.map((r) => r.valid)).toEqual([false, true])
+      expect(result.rows[0].error).toBe("derivation_date 'not a date' is not a date (use YYYY-MM-DD)")
+
+      const imported = await importDerivationsFromCsv(testDb, csv, { settings: perRow })
+      expect(imported.rows[0]?.success).toBe(false)
+      expect(imported.rows[0]?.error).toContain("derivation_date 'not a date' is not a date")
+      expect(await testDb.select().from(containerDerivation)).toHaveLength(0)
+    })
+
+    it('refuses a shared derivation date that is not a date and saves nothing', async () => {
+      const { parent } = await seedParent()
+      const csv = [header, `${parent.id},PlateDef,B01,C1`].join('\n')
+
+      const imported = await importDerivationsFromCsv(testDb, csv, { settings: { ...settings, derivationDate: '2025-02-30' } })
+
+      expect(imported.rows[0]?.success).toBe(false)
+      expect(imported.rows[0]?.error).toContain("'2025-02-30' is not a date")
+      expect(await testDb.select().from(containerDerivation)).toHaveLength(0)
+    })
+
     /** A cryovial tube with `barcode`, on the parent's Specimen. */
     async function addCryovial(seed: Awaited<ReturnType<typeof seedParent>>, barcode: string) {
       const cryoBox = await createTestCryovialBox(testDb, { name: 'BoxDef', locationId: seed.loc.id })

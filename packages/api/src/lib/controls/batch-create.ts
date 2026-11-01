@@ -49,7 +49,7 @@ export async function createBloodControlBatch(
         controlDefinitionId: definitionId,
         name: batchName,
         productionDate: input.productionDate || null,
-        properties: input.properties ? JSON.stringify(input.properties) : null,
+        properties: input.properties ?? null,
         createdBy: userId,
         updatedBy: userId,
       })
