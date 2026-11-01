@@ -1,6 +1,7 @@
 import { screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
-import { renderWithProviders } from '../../__tests__/helpers/render'
+import { renderWithProviders, render, within } from '../../__tests__/helpers/render'
+import userEvent from '@testing-library/user-event'
 import PlateScanValidation from '../PlateScanValidation'
 import { collectionsApi } from '../../lib/api/collections'
 import { settingsApi } from '../../lib/api/settings'
@@ -49,11 +50,13 @@ const mockValidateResult = {
     matched: 96,
     missingInScan: 0,
     extraInScan: 0,
+    unplacedInScan: 0,
     mismatch: 0,
     exhaustedCount: 0,
     taggedCount: 0,
   },
   wells: [],
+  unplaced: [],
 }
 
 describe('PlateScanValidation', () => {
@@ -275,5 +278,56 @@ describe('PlateScanValidation', () => {
     await waitFor(() => {
       expect(screen.getByText(/Cannot infer plate/i)).toBeInTheDocument()
     }, { timeout: 5000 })
+  })
+
+  it('shows scanned unplaced tubes as belonging to the plate, not as extras', async () => {
+    const user = userEvent.setup()
+    const csvContent = 'Well,Barcode\nA01,MT-PLACED\nB01,MT-NULL-1\nC01,MT-NULL-2'
+    const file = new File([csvContent], 'scan.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: async () => csvContent })
+    vi.mocked(collectionsApi.validatePlateScan).mockResolvedValue({
+      plate: { id: 1, name: 'PLATE1' },
+      summary: {
+        totalExpected: 4,
+        matched: 1,
+        missingInScan: 1,
+        extraInScan: 0,
+        unplacedInScan: 2,
+        mismatch: 0,
+        exhaustedCount: 0,
+        taggedCount: 0,
+      },
+      wells: [
+        { position: 'A01', scanBarcode: 'MT-PLACED', expectedBarcode: 'MT-PLACED', status: 'match', exhausted: false, tags: [], scanBarcodeOrigin: null },
+        { position: 'B01', scanBarcode: 'MT-NULL-1', expectedBarcode: null, status: 'unplaced_in_scan', exhausted: false, tags: [], scanBarcodeOrigin: { plateId: 1, plateName: 'PLATE1', position: '' } },
+        { position: 'C01', scanBarcode: 'MT-NULL-2', expectedBarcode: null, status: 'unplaced_in_scan', exhausted: false, tags: [], scanBarcodeOrigin: { plateId: 1, plateName: 'PLATE1', position: '' } },
+      ],
+      unplaced: [
+        { barcode: 'MT-NULL-1', storedPosition: null, scannedPosition: 'B01' },
+        { barcode: 'MT-NULL-2', storedPosition: null, scannedPosition: 'C01' },
+        { barcode: 'MT-BAD-POS', storedPosition: 'A1145868849', scannedPosition: null },
+      ],
+    })
+
+    const { container } = await render(<PlateScanValidation />)
+    await screen.findByRole('heading', { name: 'Validate Plate Scan' })
+    await user.click(screen.getByRole('radio', { name: /infer plate from scan/i }))
+    await user.upload(container.querySelector('input[type="file"]') as HTMLInputElement, file)
+    await screen.findByText('scan.csv')
+    await user.click(screen.getByRole('button', { name: /Validate scan/i }))
+
+    const unplacedHeading = await screen.findByRole('heading', { name: 'Unplaced tubes' })
+    const wellGrid = screen.getByRole('heading', { name: 'Well grid' }).parentElement!
+    const statuses = within(wellGrid).getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell')[4]!.textContent)
+    expect(statuses).toEqual(['Match', 'Unplaced in plate', 'Unplaced in plate'])
+    expect(within(wellGrid).queryByText('Extra in scan')).not.toBeInTheDocument()
+
+    const unplacedRows = within(unplacedHeading.parentElement!).getAllByRole('row').slice(1)
+    expect(unplacedRows.map((row) => within(row).getAllByRole('cell').map((c) => c.textContent))).toEqual([
+      ['MT-NULL-1', 'None', 'B01'],
+      ['MT-NULL-2', 'None', 'C01'],
+      ['MT-BAD-POS', 'A1145868849', 'Not in scan'],
+    ])
+    expect(screen.getByText(/3 tubes belong to this plate without a grid position; 2 found in the scan/)).toBeInTheDocument()
   })
 })

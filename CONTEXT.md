@@ -135,6 +135,10 @@ _Avoid_: Enrichment (implementation term); conflating placement with specimen or
 The well or slot of a tube or well **Container** in its plate or box (e.g. A01): a row letter plus a two-digit column, inside the **Collection**'s geometry (micronix plate A01–H12, cryovial box A01–J10). Every write that sets one normalizes `a1` to `A01` and rejects anything else. Legacy rows may still hold malformed positions. Optional: a tube or well may belong to a **Collection** with no grid position (legacy rows). At most one Container occupies a given grid position in a Collection; a missing position occupies no cell. Not applicable to **Paper**.
 _Avoid_: Well (as the domain term); treating a missing position as occupying a slot; requiring every tube to have a position before it can exist in a Collection
 
+**Unplaced container**:
+A tube or well **Container** that belongs to a plate or box but occupies no cell: it has no **Grid position**, or its stored position is not a cell of the Collection's grid (rows A–H, columns 1–12 on a micronix plate; rows A–J, columns 1–10 on a cryovial box). It still counts as part of the Collection. Plate and box pages list unplaced Containers in their own section, labelled with the stored value, and plate scan validation expects them rather than treating them as extras.
+_Avoid_: Empty (an empty cell holds no Container); treating an unplaced Container as missing from its Collection
+
 ### Export
 
 **Container selection**:

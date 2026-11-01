@@ -15,6 +15,8 @@ import {
 import { useTableViewConfigurations } from '../hooks/useTableViewConfigurations'
 import { Link } from 'react-router-dom'
 import CollectionDeleteDialog from '../components/CollectionDeleteDialog'
+import UnplacedContainersSection from '../components/UnplacedContainersSection'
+import { MICRONIX_PLATE_GRID } from '@sampledb/contract'
 import '../styles/storage.css'
 
 function statusColor(name: string): string {
@@ -59,12 +61,13 @@ export default function MicronixPlateDetail() {
     }
   }, [targetPosition, data])
 
-  const layout = useMemo(() => {
-    // Always return the full 96-well plate format (8 rows × 12 columns)
-    const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
-    const cols = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
-    return { rows, cols }
-  }, [])
+  const layout = useMemo(
+    () => ({
+      rows: [...MICRONIX_PLATE_GRID.rows],
+      cols: MICRONIX_PLATE_GRID.columns.map((column) => String(column)),
+    }),
+    [],
+  )
 
   const legend = useMemo(() => {
     if (!data?.wells) return { tags: [] as string[], statuses: [] as string[] }
@@ -122,6 +125,18 @@ export default function MicronixPlateDetail() {
         }
       })
     })
+    // Unplaced Containers follow the grid, labelled with their stored position.
+    for (const entry of data.unplaced as Array<CollectionTableEntry & { type?: string }>) {
+      rows.push(
+        buildCollectionTableRow({
+          position: entry.position ?? '',
+          barcode: entry.barcode,
+          containerType: entry.type ?? undefined,
+          container: entry.container ?? undefined,
+          context,
+        })
+      )
+    }
     return rows
   }, [data, layout])
 
@@ -169,7 +184,7 @@ export default function MicronixPlateDetail() {
     )
   }
 
-  const { plate, wells } = data
+  const { plate, wells, unplaced } = data
 
   const breadcrumbItems = [
     { label: 'Locations', to: '/locations' },
@@ -374,6 +389,7 @@ export default function MicronixPlateDetail() {
             }}
           />
           )}
+          {viewMode === 'grid' && <UnplacedContainersSection entries={unplaced} collectionLabel="plate" />}
           {viewMode === 'table' && (
             <CollectionTableWithExport
               columns={tableColumns}

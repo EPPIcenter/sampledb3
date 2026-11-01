@@ -15,6 +15,8 @@ import {
 import { useTableViewConfigurations } from '../hooks/useTableViewConfigurations'
 import { Link } from 'react-router-dom'
 import CollectionDeleteDialog from '../components/CollectionDeleteDialog'
+import UnplacedContainersSection from '../components/UnplacedContainersSection'
+import { CRYOVIAL_BOX_GRID } from '@sampledb/contract'
 import '../styles/storage.css'
 
 function statusColor(name: string): string {
@@ -59,29 +61,14 @@ export default function CryovialBoxDetail() {
     }
   }, [targetPosition, data])
 
-  const layout = useMemo(() => {
-    if (!data?.positions) return null
-    const positions = Object.keys(data.positions)
-    const rowSet = new Set<string>()
-    const colSet = new Set<string>()
-
-    positions.forEach((pos) => {
-      if (!pos) return
-      const match = pos.match(/^([A-Z]+)(\d+)$/i)
-      if (match) {
-        rowSet.add(match[1].toUpperCase())
-        colSet.add(String(parseInt(match[2], 10)))
-      }
-    })
-
-    const rows = Array.from(rowSet).sort()
-    const cols = Array.from(colSet)
-      .map((c) => parseInt(c, 10))
-      .sort((a, b) => a - b)
-      .map((n) => String(n))
-
-    return { rows, cols }
-  }, [data])
+  // The grid always shows the whole box (rows A–J, columns 1–10), whatever it holds.
+  const layout = useMemo(
+    () => ({
+      rows: [...CRYOVIAL_BOX_GRID.rows],
+      cols: CRYOVIAL_BOX_GRID.columns.map((column) => String(column)),
+    }),
+    [],
+  )
 
   const legend = useMemo(() => {
     if (!data?.positions) return { tags: [] as string[], statuses: [] as string[] }
@@ -108,7 +95,7 @@ export default function CryovialBoxDetail() {
   }, [data])
 
   const tableRows = useMemo(() => {
-    if (!layout || !data?.positions) return []
+    if (!data?.positions) return []
     const positions = data.positions as Record<string, (CollectionTableEntry & { kind?: string })[]>
     const box = data.box
     const context = { collectionName: box.name, locationPath: box.locationPath ?? undefined }
@@ -130,6 +117,18 @@ export default function CryovialBoxDetail() {
         })
       })
     })
+    // Unplaced Containers follow the grid, labelled with their stored position.
+    for (const entry of data.unplaced as Array<CollectionTableEntry & { kind?: string }>) {
+      rows.push(
+        buildCollectionTableRow({
+          position: entry.position ?? '',
+          barcode: entry.barcode,
+          containerType: entry.kind ?? undefined,
+          container: entry.container ?? undefined,
+          context,
+        })
+      )
+    }
     return rows
   }, [data, layout])
 
@@ -178,7 +177,7 @@ export default function CryovialBoxDetail() {
     )
   }
 
-  const { box, positions } = data
+  const { box, positions, unplaced } = data
 
   const breadcrumbItems = [
     { label: 'Locations', to: '/locations' },
@@ -215,8 +214,7 @@ export default function CryovialBoxDetail() {
         )}
       </div>
 
-      {layout && (
-        <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-2">
+      <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-2">
           <div className="flex items-start justify-between mb-3 gap-4 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-lg font-semibold storage-section-title">Box Layout</h2>
@@ -389,6 +387,7 @@ export default function CryovialBoxDetail() {
             }}
           />
           )}
+          {viewMode === 'grid' && <UnplacedContainersSection entries={unplaced} collectionLabel="box" />}
           {viewMode === 'table' && (
             <CollectionTableWithExport
               columns={tableColumns}
@@ -397,7 +396,6 @@ export default function CryovialBoxDetail() {
             />
           )}
         </div>
-      )}
       </div>
       <CollectionDeleteDialog
         isOpen={showDeleteCollection}

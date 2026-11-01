@@ -89,3 +89,11 @@ export {
   type GridGeometry,
   type GridPositionResult,
 } from './grid-position'
+export {
+  CRYOVIAL_BOX_GRID,
+  MICRONIX_PLATE_GRID,
+  gridCellKey,
+  gridCellKeys,
+  gridPositionKey,
+  type CollectionGrid,
+} from './collection-grid'
