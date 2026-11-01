@@ -65,6 +65,13 @@ function createTablesForLaterMigrations(sqlite: Database): void {
   ensureColumns(sqlite, 'micronix_plate', ['location_id INTEGER'])
   ensureColumns(sqlite, 'cryovial_box', ['location_id INTEGER'])
   ensureColumns(sqlite, 'bag', ['location_id INTEGER'])
+  // Migration 013 reads or changes these columns.
+  ensureColumns(sqlite, 'study_subject', ['last_updated TEXT'])
+  ensureColumns(sqlite, 'specimen', ['last_updated TEXT'])
+  ensureColumns(sqlite, 'storage_container', ['comment TEXT', 'remaining_quantity REAL', 'last_updated TEXT'])
+  ensureColumns(sqlite, 'micronix_plate', ['name TEXT'])
+  ensureColumns(sqlite, 'container_derivation', ['parent_container_id INTEGER', 'child_container_id INTEGER'])
+  ensureColumns(sqlite, 'qpcr_experiment_well', ['storage_container_id INTEGER', 'specimen_id INTEGER'])
   // Before version 3, migration 003 renames barcode to sublabel (and its preflight creates the
   // table if missing), so only a database already past 003 gets paper in its later shape.
   const version = hasSchemaVersionTable(sqlite) ? getRecordedSchemaVersion(sqlite) : null
@@ -282,13 +289,13 @@ describe('schema evolution', () => {
     sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
     sqlite.exec('INSERT INTO schema_version (version) VALUES (4)')
     createTablesForLaterMigrations(sqlite)
-    sqlite.exec(`INSERT INTO study_subject (id, study_id, name) VALUES (1, 1, ' S1 '), (2, 1, 's1'), (3, 2, 'S1')`)
+    sqlite.exec(`INSERT INTO study_subject (id, study_id, name) VALUES (1, 1, ' S1 '), (2, 1, 'S2'), (3, 2, 'S1')`)
 
     evolveOperationalSchema(sqlite)
 
     expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
     const names = sqlite.prepare('SELECT name FROM study_subject ORDER BY id').all() as Array<{ name: string }>
-    expect(names.map((r) => r.name)).toEqual(['S1', 's1', 'S1'])
+    expect(names.map((r) => r.name)).toEqual(['S1', 'S2', 'S1'])
     expect(() => sqlite.exec(`INSERT INTO study_subject (id, study_id, name) VALUES (4, 1, 'S1')`)).toThrow(/UNIQUE/)
     sqlite.close()
   })
@@ -348,7 +355,7 @@ describe('schema evolution', () => {
       [6, null],
       [7, '   '],
       [8, ' 3/17/22 '],
-      [9, '1970-01-01'],
+      [9, '1970-01-02'],
     ]
     const insert = sqlite.prepare('INSERT INTO specimen (id, specimen_type_id, collection_date) VALUES (?, 1, ?)')
     for (const [id, date] of values) insert.run(id, date)
@@ -366,7 +373,7 @@ describe('schema evolution', () => {
       null,
       null,
       '2022-03-17',
-      '1970-01-01',
+      '1970-01-02',
     ])
     sqlite.close()
   })

@@ -110,6 +110,8 @@ export const studySubject = sqliteTable('study_subject', {
   studyIdIdx: index('study_subject_study_id_idx').on(table.studyId),
   nameIdx: index('study_subject_name_idx').on(table.name),
   studyNameUniq: uniqueIndex('study_subject_study_name_idx').on(table.studyId, table.name),
+  // Subject names are unique within a Study ignoring case (CONTEXT.md, Subject; migration 013).
+  studyNameNocaseUniq: uniqueIndex('study_subject_study_name_nocase_idx').on(table.studyId, sql`${table.name} COLLATE NOCASE`),
 }))
 
 // Control Production Hierarchy
