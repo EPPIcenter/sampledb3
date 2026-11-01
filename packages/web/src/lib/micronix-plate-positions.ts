@@ -2,24 +2,17 @@
  * Well position utilities for micronix plates (96-well: A01–H12), on the shared Grid position
  * rule from `@sampledb/contract`.
  */
-import { GRID_GEOMETRY, parseGridPosition } from '@sampledb/contract'
-
-const { rows: PLATE_ROWS, columns: PLATE_COLUMNS } = GRID_GEOMETRY.micronix_plate
+import { gridCellKeys, gridPositionKey } from '@sampledb/contract'
 
 /** Set of all 96 well positions for a standard micronix plate (8×12). */
-export const MICRONIX_WELL_POSITIONS_96: Set<string> = new Set(
-  Array.from({ length: PLATE_ROWS }, (_, r) =>
-    Array.from({ length: PLATE_COLUMNS }, (_, c) => `${String.fromCharCode(65 + r)}${String(c + 1).padStart(2, '0')}`),
-  ).flat(),
-)
+export const MICRONIX_WELL_POSITIONS_96: Set<string> = new Set(gridCellKeys('micronix_plate'))
 
 /**
  * Normalize well position to A01 style (row A–H, column 01–12).
  * Returns normalized position or null if invalid.
  */
 export function normalizeWellPosition(pos: string): string | null {
-  const parsed = parseGridPosition(pos, 'micronix_plate')
-  return parsed.ok ? parsed.position : null
+  return gridPositionKey(pos, 'micronix_plate')
 }
 
 export interface FullPlateValidationResult {

@@ -1,8 +1,9 @@
 /** Which Collection each container type goes in, and the table behind each type. One place. */
+import type { GridCollectionType } from '@sampledb/contract'
 import { bag, box, cryovialBox, cryovialTube, micronixPlate, micronixTube, staticWell } from '../../db/schema'
 
 export type GridContainerType = 'micronix_tube' | 'cryovial_tube' | 'static_well'
-export type GridCollectionType = 'micronix_plate' | 'cryovial_box'
+export type { GridCollectionType }
 export type ParentCollectionType = 'box' | 'bag'
 
 /** The plate or box a tube or well goes in. */

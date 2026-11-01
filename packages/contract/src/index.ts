@@ -83,17 +83,14 @@ export {
 } from './paper-container-inbound'
 export {
   GRID_GEOMETRY,
+  gridAxes,
+  gridCellKey,
+  gridCellKeys,
+  gridPositionKey,
   gridPositionRange,
+  isStoredGridPosition,
   parseGridPosition,
   type GridCollectionType,
   type GridGeometry,
   type GridPositionResult,
 } from './grid-position'
-export {
-  CRYOVIAL_BOX_GRID,
-  MICRONIX_PLATE_GRID,
-  gridCellKey,
-  gridCellKeys,
-  gridPositionKey,
-  type CollectionGrid,
-} from './collection-grid'

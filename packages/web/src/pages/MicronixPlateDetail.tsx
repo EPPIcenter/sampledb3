@@ -16,7 +16,7 @@ import { useTableViewConfigurations } from '../hooks/useTableViewConfigurations'
 import { Link } from 'react-router-dom'
 import CollectionDeleteDialog from '../components/CollectionDeleteDialog'
 import UnplacedContainersSection from '../components/UnplacedContainersSection'
-import { MICRONIX_PLATE_GRID } from '@sampledb/contract'
+import { gridAxes } from '@sampledb/contract'
 import '../styles/storage.css'
 
 function statusColor(name: string): string {
@@ -62,10 +62,10 @@ export default function MicronixPlateDetail() {
   }, [targetPosition, data])
 
   const layout = useMemo(
-    () => ({
-      rows: [...MICRONIX_PLATE_GRID.rows],
-      cols: MICRONIX_PLATE_GRID.columns.map((column) => String(column)),
-    }),
+    () => {
+      const { rows, columns } = gridAxes('micronix_plate')
+      return { rows, cols: columns.map((column) => String(column)) }
+    },
     [],
   )
 

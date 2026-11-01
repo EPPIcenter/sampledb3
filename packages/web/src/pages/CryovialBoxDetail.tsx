@@ -16,7 +16,7 @@ import { useTableViewConfigurations } from '../hooks/useTableViewConfigurations'
 import { Link } from 'react-router-dom'
 import CollectionDeleteDialog from '../components/CollectionDeleteDialog'
 import UnplacedContainersSection from '../components/UnplacedContainersSection'
-import { CRYOVIAL_BOX_GRID } from '@sampledb/contract'
+import { gridAxes } from '@sampledb/contract'
 import '../styles/storage.css'
 
 function statusColor(name: string): string {
@@ -63,10 +63,10 @@ export default function CryovialBoxDetail() {
 
   // The grid always shows the whole box (rows A–J, columns 1–10), whatever it holds.
   const layout = useMemo(
-    () => ({
-      rows: [...CRYOVIAL_BOX_GRID.rows],
-      cols: CRYOVIAL_BOX_GRID.columns.map((column) => String(column)),
-    }),
+    () => {
+      const { rows, columns } = gridAxes('cryovial_box')
+      return { rows, cols: columns.map((column) => String(column)) }
+    },
     [],
   )
 

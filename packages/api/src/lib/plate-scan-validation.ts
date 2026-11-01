@@ -8,7 +8,7 @@ import {
   tag,
 } from '../db/schema'
 import { eq, inArray } from 'drizzle-orm'
-import { MICRONIX_PLATE_GRID, gridCellKeys, gridPositionKey } from '@sampledb/contract'
+import { gridCellKeys, gridPositionKey } from '@sampledb/contract'
 import { getScannerConfigurationById } from './settings'
 import { parsePlateCSV, normalizeWellPosition } from './plate-csv'
 
@@ -278,7 +278,7 @@ export async function validatePlateScan(
   const unplacedByBarcode = new Map<string, Omit<ExpectedWell, 'barcode'> & { barcode: string; storedPosition: string | null; containerId: number }>()
 
   for (const t of tubes) {
-    const pos = gridPositionKey(t.position, MICRONIX_PLATE_GRID)
+    const pos = gridPositionKey(t.position, 'micronix_plate')
     if (pos != null && !expectedByPosition.has(pos)) {
       expectedByPosition.set(pos, { position: pos, containerId: t.id, barcode: t.barcode, remainingQuantity: null, tags: [] })
     } else {
@@ -292,7 +292,7 @@ export async function validatePlateScan(
     }
   }
   for (const w of wells) {
-    const pos = gridPositionKey(w.position, MICRONIX_PLATE_GRID)
+    const pos = gridPositionKey(w.position, 'micronix_plate')
     if (pos != null && !expectedByPosition.has(pos)) {
       expectedByPosition.set(pos, { position: pos, containerId: w.id, barcode: null, remainingQuantity: null, tags: [] })
     }
@@ -336,7 +336,7 @@ export async function validatePlateScan(
     if (barcode.trim() !== '') allPositions.add(pos)
     else if (expectedByPosition.has(pos)) allPositions.add(pos)
   }
-  const sortedPositions = gridCellKeys(MICRONIX_PLATE_GRID).filter((p) => allPositions.has(p))
+  const sortedPositions = gridCellKeys('micronix_plate').filter((p) => allPositions.has(p))
   const rest = [...allPositions].filter((p) => !sortedPositions.includes(p)).sort()
   const positionOrder = [...sortedPositions, ...rest]
 

@@ -12,7 +12,7 @@ import {
   sheet,
   location,
 } from '../../db/schema'
-import { CRYOVIAL_BOX_GRID, MICRONIX_PLATE_GRID, gridPositionKey } from '@sampledb/contract'
+import { gridPositionKey } from '@sampledb/contract'
 import { formatLocationPath } from '../container-enrichment'
 import { enrichPaperContainers, enrichStorageContainers } from './container-detail'
 
@@ -69,7 +69,7 @@ export async function getMicronixPlateDetail(database: Database, id: number) {
   const wellsByPosition: Record<string, PlateEntry> = {}
   const unplaced: PlateEntry[] = []
   for (const entry of [...tubeEntries, ...wellEntries]) {
-    const key = gridPositionKey(entry.position, MICRONIX_PLATE_GRID)
+    const key = gridPositionKey(entry.position, 'micronix_plate')
     if (key != null && !(key in wellsByPosition)) wellsByPosition[key] = entry
     else unplaced.push(entry)
   }
@@ -104,7 +104,7 @@ export async function getCryovialBoxDetail(database: Database, id: number) {
   const positions: Record<string, typeof tubeEntries> = {}
   const unplaced: typeof tubeEntries = []
   for (const entry of tubeEntries) {
-    const key = gridPositionKey(entry.position, CRYOVIAL_BOX_GRID)
+    const key = gridPositionKey(entry.position, 'cryovial_box')
     if (key == null) unplaced.push(entry)
     else (positions[key] ??= []).push(entry)
   }

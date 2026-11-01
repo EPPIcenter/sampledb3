@@ -14,7 +14,7 @@ import { eq, and, isNull } from 'drizzle-orm'
 import { resolveCollection, resolveSheetsByName, type CollectionType } from './collections/collection-resolve'
 import { checkGridPositionOccupancy } from './container-occupancy'
 import { normalizePosition } from './normalize-position'
-import { parseGridPosition } from '@sampledb/contract'
+import { parseGridPosition, type GridCollectionType } from '@sampledb/contract'
 import type { ContainerSubtype } from './container-placement'
 
 /** Staging prefix for position updates so swaps on one plate do not violate UNIQUE(collection_id, position) mid-transaction. */
@@ -67,9 +67,6 @@ export interface MoveResult {
   moved: number
   errors?: ValidationError[]
 }
-
-/** Collections whose containers sit at grid positions. */
-type GridCollectionType = 'cryovial_box' | 'micronix_plate'
 
 /**
  * Resolve container by position and collection
