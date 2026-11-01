@@ -57,15 +57,15 @@ The top-level organizational unit for a research project, clinical trial, or oth
 _Avoid_: Project (unless referring to non-study work), trial (as a synonym for study)
 
 **Subject**:
-A participant or sample source within a study, identified by a unique name within that study. Names compare ignoring case (ASCII letters, as SQLite's `NOCASE` does): a study can't have both `ABC-1` and `abc-1`, and creating, renaming or importing a Subject whose name differs from an existing one only by case is refused. The unique index `study_subject_study_name_nocase_idx` enforces it. Decided in issue #124 (decision 6), where the two legacy CTRL pairs were merged by migration 013.
+A participant or sample source within a study, identified by a unique name within that study. Names compare ignoring case (ASCII letters, as SQLite's `NOCASE` does): a study can't have both `ABC-1` and `abc-1`, and creating, renaming or importing a Subject whose name differs from an existing one only by case is refused. The write paths enforce it; there is no database index for it, because a database from before the rule may already hold such names, and an index would stop it from starting. The integrity report lists those pairs for an operator to merge or rename. Decided in issue #124 (decision 6).
 _Avoid_: Patient (unless the study is clinical and that is your org's term), donor (unless that is your org's term)
 
 **Specimen**:
 The collected unit — a registered biological material from a specific collection event. One collection event, one specimen record.
 
 **Specimen identity**:
-A Subject's Specimen is identified by its Subject, Specimen type and collection date: **Specimen registration** adds Containers to the Specimen with that combination instead of creating a second one. Existing duplicates stay as they are (issue #124, decision 7): the lab chose no merges and no new unique index on production. On the 2026-10-31 production snapshot that leaves 15 dated pairs, which migration 008 created by converting legacy `M/D/YY` dates, and undated groups: 98 before migration 013, and 502 after it cleared the placeholder collection dates (decision 1), because a Specimen dated `1970-01-01` now shares an empty date with its undated twin. The integrity report lists them all. Known difference: fresh installs have the unique index `idx_specimen_study_subject_type_date` on (`study_subject_id`, `specimen_type_id`, `collection_date`) and production does not. That index treats an empty collection date as distinct, so fresh installs also allow undated duplicates.
-_Avoid_: Assuming the database refuses a duplicate Specimen; on production only registration's lookup prevents one.
+A Subject's Specimen is identified by its Subject, Specimen type and collection date: **Specimen registration** adds Containers to the Specimen with that combination instead of creating a second one. Existing duplicates stay as they are (issue #124, decision 7): no migration merges them or adds a unique index to an upgraded database, and the integrity report lists them. Migration 008 can create dated duplicates by converting legacy `M/D/YY` dates, and clearing a placeholder collection date can make a Specimen an undated duplicate of another. Known difference: fresh installs have the unique index `idx_specimen_study_subject_type_date` on (`study_subject_id`, `specimen_type_id`, `collection_date`) and upgraded databases do not. That index treats an empty collection date as distinct, so fresh installs also allow undated duplicates.
+_Avoid_: Assuming the database refuses a duplicate Specimen; on an upgraded database only registration's lookup prevents one.
 _Avoid_: Sample (as the domain term; see **Sample** below)
 
 **Sample**:

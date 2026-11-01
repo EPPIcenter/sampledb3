@@ -588,7 +588,6 @@ describe('Data audit API', () => {
     })
 
     it('lists Subjects in one Study whose names differ only by case', async () => {
-      ctx.sqlite.exec('DROP INDEX study_subject_study_name_nocase_idx')
       const ctrl = await createTestStudy(ctx.db, { title: 'Controls', shortCode: 'CTRL' })
       const other = await createTestStudy(ctx.db, { title: 'Other', shortCode: 'OTH' })
       const upper = await createTestStudySubject(ctx.db, { studyId: ctrl.id, name: '3D7_10K' })

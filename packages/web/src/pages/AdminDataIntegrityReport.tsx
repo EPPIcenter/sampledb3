@@ -364,7 +364,7 @@ export default function AdminDataIntegrityReport() {
       <IntegritySection
         title="Duplicate Specimens"
         count={report.duplicateSpecimenIdentities.length}
-        description="Specimens of one Subject with the same Specimen type and collection date, which registration would treat as one collection event. The lab chose to keep the legacy groups (issue #124); new registrations add Containers to the existing Specimen instead."
+        description="Specimens of one Subject with the same Specimen type and collection date, which registration would treat as one collection event. Existing groups are listed for review; new registrations add Containers to the existing Specimen instead."
       >
         <div className="overflow-x-auto">
           <table className="admin-table min-w-full">

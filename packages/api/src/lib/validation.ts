@@ -5,8 +5,9 @@ import { resolveStudyByShortCode, resolveSubjectByNameAndStudy, resolveSpecimenT
 
 /**
  * Validate that a subject name is unique within a study. Names compare ignoring case
- * (CONTEXT.md, Subject), as the `study_subject_study_name_nocase_idx` index does, so a name that
- * differs from an existing one only by case is refused. Pass `excludeSubjectId` when renaming,
+ * (CONTEXT.md, Subject), as SQLite's NOCASE collation does, so a name that differs from an
+ * existing one only by case is refused. No database index enforces this (existing installs may
+ * hold such names, which the integrity report lists), so every write path must check here. Pass `excludeSubjectId` when renaming,
  * so a Subject may change the case of its own name.
  */
 export async function validateSubjectName(
@@ -25,7 +26,7 @@ export async function validateSubjectName(
     return { valid: false, error: 'Subject name cannot exceed 255 characters' }
   }
   
-  // COLLATE NOCASE matches the unique index, so this refuses exactly what the index would.
+  // COLLATE NOCASE folds ASCII letters only, as foldNameCase does for batch checks.
   const existing = await database
     .select({ id: studySubject.id, name: studySubject.name })
     .from(studySubject)

@@ -365,7 +365,7 @@ export interface ContainerWithInvalidGridPositionItem {
 
 /**
  * Subject Specimens that share a Subject, Specimen type and collection date (CONTEXT.md,
- * Specimen identity). The lab chose to keep the legacy groups (issue #124, decision 7).
+ * Specimen identity). Existing groups stay until someone merges them by hand.
  */
 export interface DuplicateSpecimenIdentityItem {
   studyId: number
@@ -820,8 +820,8 @@ export async function listExhaustedContainersWithRemainingQuantity(db: Database)
 }
 
 /**
- * Collection dates the legacy application stored for "unknown". Migration 013 cleared them
- * (issue #124, decision 1); the report flags any that come back.
+ * Dates commonly stored for an unknown collection date: the Unix epoch, the spreadsheet zero
+ * date, and two fill-in values legacy tools used. A real collection is rarely on one of them.
  */
 export const PLACEHOLDER_COLLECTION_DATES = ['1970-01-01', '1999-09-09', '1899-12-30', '1111-01-01'] as const
 
@@ -837,7 +837,7 @@ export async function listSpecimensWithPlaceholderCollectionDate(db: Database): 
 
 /**
  * Specimens with a YYYY-MM-DD collection date after today on the server. New dates in the future
- * are refused on write; the lab corrects the legacy ones by hand (issue #124, decision 2).
+ * are refused on write; ones stored earlier are corrected by hand.
  */
 export async function listSpecimensWithFutureCollectionDate(db: Database): Promise<SpecimenCollectionDateItem[]> {
   const rows = await db
