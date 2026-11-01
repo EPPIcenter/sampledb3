@@ -385,6 +385,9 @@ export async function createTestStudySubject(
   return result
 }
 
+// Numbers the Studies createTestSpecimen makes, so two made in the same millisecond can't share a title.
+let defaultSpecimenStudyCount = 0
+
 /**
  * Create a test specimen (for testing specimen type "in use")
  */
@@ -398,9 +401,10 @@ export async function createTestSpecimen(
 
   // Default to study subject if neither provided
   if (!studySubjectId && !controlBatchId) {
+    defaultSpecimenStudyCount += 1
     const testStudy = await createTestStudy(db, {
-      title: `Study ${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      shortCode: `ST${Date.now()}-${Math.floor(Math.random() * 1000)}`
+      title: `Default specimen study ${defaultSpecimenStudyCount}`,
+      shortCode: `DSS${defaultSpecimenStudyCount}`,
     });
     const testSubject = await createTestStudySubject(db, {
       studyId: testStudy.id,
