@@ -107,6 +107,20 @@ describe('timestamp bounds against stored timestamps', () => {
         { date: '2024-02', count: 1 },
       ])
     })
+
+    it('buckets a collection date written M/D/YYYY by its own month east of UTC (#107)', async () => {
+      process.env.TZ = 'Pacific/Auckland'
+      try {
+        const type = await createTestSpecimenType(db, { name: 'Blood' })
+        const legacy = await createTestSpecimen(db, type.id, { collectionDate: '5/1/2024' })
+
+        const result = await computeSpecimenAggregates(db, [legacy], {})
+
+        expect(result.collectionTimeline).toEqual([{ date: '2024-05', count: 1 }])
+      } finally {
+        process.env.TZ = 'America/Los_Angeles'
+      }
+    })
   })
 
   describe('created_from / created_to filters', () => {

@@ -262,6 +262,69 @@ describe('Studies API (list, get, create, update)', () => {
   })
 
   describe('GET /api/studies/:id/summary', () => {
+    type SummaryBody = {
+      summary: {
+        collectionDateRange: { earliest: string; latest: string } | null
+        studyDurationDays: number | null
+        collectionTimeline: Array<{ date: string; count: number }>
+        enrollmentTimeline: Array<{ date: string; count: number }>
+      }
+    }
+
+    async function subjectEnrolledAt(studyId: number, name: string, created: string) {
+      return createTestStudySubject(ctx.db, { studyId, name, created })
+    }
+
+    it('buckets the enrollment timeline by day (#107)', async () => {
+      const studyRecord = await createTestStudy(ctx.db, { title: 'Enrollment', shortCode: 'ENR01' })
+      await subjectEnrolledAt(studyRecord.id, 'A', '2024-03-01 08:00:00')
+      await subjectEnrolledAt(studyRecord.id, 'B', '2024-03-01 08:00:01')
+      await subjectEnrolledAt(studyRecord.id, 'C', '2024-03-01T23:59:59Z')
+      await subjectEnrolledAt(studyRecord.id, 'D', '2024-03-02 00:00:00')
+
+      const res = await ctx.request(`/api/studies/${studyRecord.id}/summary`)
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as SummaryBody
+      expect(data.summary.enrollmentTimeline).toEqual([
+        { date: '2024-03-01', count: 3 },
+        { date: '2024-03-02', count: 1 },
+      ])
+    })
+
+    it('reports collection dates in date order across mixed years (#107)', async () => {
+      const studyRecord = await createTestStudy(ctx.db, { title: 'Mixed', shortCode: 'MIX02' })
+      const subject = await subjectEnrolledAt(studyRecord.id, 'A', '2023-01-01 09:00:00')
+      const type = await createTestSpecimenType(ctx.db, { name: 'Blood' })
+      const addSpecimen = ctx.sqlite.prepare(
+        "INSERT INTO specimen (study_subject_id, specimen_type_id, collection_date, created, last_updated) VALUES (?, ?, ?, '2024-01-01', '2024-01-01')",
+      )
+      const second = await subjectEnrolledAt(studyRecord.id, 'B', '2023-01-01 17:00:00')
+      // As text, '12/1/2024' sorts first and '2023-06-01' last.
+      for (const date of ['12/1/2024', '2/1/2023', '2023-06-01']) {
+        addSpecimen.run(subject!.id, type.id, date)
+      }
+      addSpecimen.run(second!.id, type.id, '2023-02-01')
+
+      const res = await ctx.request(`/api/studies/${studyRecord.id}/summary`)
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as SummaryBody
+      expect(data.summary.collectionDateRange).toEqual({ earliest: '2023-02-01', latest: '2024-12-01' })
+      expect(data.summary.studyDurationDays).toBe(669)
+      expect(data.summary.collectionTimeline).toEqual([
+        { date: '2023-02-01', count: 2 },
+        { date: '2023-06-01', count: 1 },
+        { date: '2024-12-01', count: 1 },
+      ])
+      expect(data.summary.enrollmentTimeline).toEqual([{ date: '2023-01-01', count: 2 }])
+
+      const timeline = await ctx.request(`/api/studies/${studyRecord.id}/timeline`)
+      expect(timeline.status).toBe(200)
+      const timelineData = (await timeline.json()) as { dateRange: { earliest: string; latest: string } | null }
+      expect(timelineData.dateRange).toEqual({ earliest: '2023-02-01', latest: '2024-12-01' })
+    })
+
     it('handles studies with more specimens than SQLite allows as bound parameters', async () => {
       const studyRecord = await createTestStudy(ctx.db, { title: 'Big Study', shortCode: 'BIG01' })
       const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })

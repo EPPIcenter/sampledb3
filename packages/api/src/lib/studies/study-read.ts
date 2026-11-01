@@ -4,6 +4,7 @@ import { study, studySubject } from '../../db/schema'
 import { and, eq, inArray, or, sql } from 'drizzle-orm'
 import { SQL_IN_CHUNK_SIZE, dateRangeConditions } from '../sql-helpers'
 import { likeContains } from '../sql-like'
+import { collectionDateRangeOf } from './study-dates'
 
 export type ListStudiesParams = {
   search?: string
@@ -194,17 +195,7 @@ export async function getStudySummaries(
     const totalSpecimens = studySpecimens.length
     const totalContainers = containerCounts[id] || 0
 
-    const collectionDates = (studySpecimens
-      .map((s) => s.collectionDate)
-      .filter(Boolean) as string[])
-      .sort()
-
-    const collectionDateRange = collectionDates.length > 0
-      ? {
-          earliest: collectionDates[0],
-          latest: collectionDates[collectionDates.length - 1],
-        }
-      : null
+    const collectionDateRange = collectionDateRangeOf(studySpecimens.map((s) => s.collectionDate))
 
     summaries.push({
       studyId: id,
