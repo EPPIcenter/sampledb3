@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { cache, cacheKeys } from '../lib/cache'
 import { createCrudRoutes } from '../lib/crud-routes'
 import type { Database } from '../db/client'
 import { 
@@ -188,6 +189,8 @@ export function createSpecimenTypesRoutes(database: Database): Hono {
     checkInUse: checkSpecimenTypeInUse,
     onCreateDefaults,
     onUpdateDefaults,
+    // The dashboard statistics cache the Specimen type list (lib/statistics/specimen-aggregates.ts).
+    afterWrite: () => cache.delete(cacheKeys.specimenTypes),
   })
 
   // Additional routes for container type relationships
