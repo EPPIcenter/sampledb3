@@ -393,7 +393,7 @@ export default function AdminDataIntegrityReport() {
       <IntegritySection
         title="Collection date not ISO"
         count={report.specimensWithNonIsoCollectionDate.length}
-        description="Specimens whose collection date is not a real date written YYYY-MM-DD. Date filters, exports and study summaries compare dates as text, so these Specimens are missed or misplaced. Correct the date by hand."
+        description="Specimens whose collection date is not a real date written YYYY-MM-DD. Date filters, exports and study summaries can't read such a date, so they leave these Specimens out. Correct the date of each Specimen listed."
       >
         <div className="overflow-x-auto">
           <table className="admin-table min-w-full">
