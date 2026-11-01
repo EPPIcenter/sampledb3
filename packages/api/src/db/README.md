@@ -32,7 +32,7 @@ Migration `001` is **only** for legacy files; fresh installs from the snapshot s
 
 ## Opening a database
 
-Use `openOperationalDatabase(optionalPath?)` from the client module. It resolves the file path, enables WAL, turns on foreign keys, runs schema evolution, and returns Drizzle + raw `bun:sqlite` handles. Importing the client module does **not** open a connection.
+Use `openOperationalDatabase(optionalPath?)` from the client module. It resolves the file path, enables WAL, turns on foreign keys, runs schema evolution (backing up the file first when a migration is pending, see Failures), and returns Drizzle + raw `bun:sqlite` handles. Importing the client module does **not** open a connection.
 
 The rules for transactions, DDL, and which entry point to open a database with are under Database in `CODING_STANDARDS.md`.
 
@@ -66,4 +66,21 @@ When you add a multi-statement write, use `withWriteTransaction` instead of addi
 
 ## Failures
 
-Each migration runs in a transaction. On failure, the transaction rolls back, `schema_version` is unchanged, and startup throws `SchemaMigrationError` with the migration number. Restore from backup or fix the database manually; there are no down-migrations.
+Each migration runs in a transaction. On failure, the transaction rolls back, `schema_version` is unchanged, and startup throws `SchemaMigrationError` with the migration number. There are no down-migrations, so a migration that succeeds but leaves bad data can only be undone from a copy.
+
+### Backup before migrating
+
+Before the first migration changes an existing file (a numbered migration, or the legacy baseline `001`), `openOperationalDatabase` writes a copy next to it with `VACUUM INTO`, which includes pages still in the WAL:
+
+```
+<database file>.pre-v<CURRENT_SCHEMA_VERSION>-<UTC timestamp>.bak
+e.g. sampledb.sqlite.pre-v11-20261101T143005123Z.bak
+```
+
+The version in the name is the one the migrations move to; the copy itself holds the version it had before. `migration-backup.ts` writes it, and `evolveOperationalSchema` calls it when passed `{ backupBeforeMigrating: true }`.
+
+- No copy when nothing is pending, when the file was empty (the snapshot path), or for `:memory:`.
+- `openOperationalDatabase` skips the copy under `NODE_ENV=test`; pass `{ backupBeforeMigrating: true }` to force it.
+- If the copy can't be written (read-only directory, full disk), startup throws `MigrationBackupError` before any migration runs, and the database is unchanged.
+
+Copies are never deleted automatically. The deployment guide in `packages/docs` says when to remove them.

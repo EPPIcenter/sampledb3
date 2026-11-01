@@ -120,6 +120,24 @@ fly ssh console -a YOUR_APP -C 'f=$(mktemp) && sqlite3 /data/sampledb.sqlite ".b
 
 For lower RPO on Fly, consider **Litestream** (or similar) to object storage in addition to periodic restic snapshots.
 
+## Copy before schema migrations
+
+Restic snapshots run on a schedule, so the newest one may be hours old when you upgrade. To cover upgrades, SampleDB copies the database itself when it starts on a database whose schema is older than the new version, before it changes anything:
+
+- **Where:** next to the database file, named `<file>.pre-v<version>-<UTC timestamp>.bak`, for example `/var/lib/sampledb/sampledb.sqlite.pre-v11-20261101T143005123Z.bak` (Docker bind mount) or `/data/sampledb.sqlite.pre-v11-….bak` (fly.io). `<version>` is the schema version the upgrade moves to; the copy holds the version from before the upgrade.
+- **When:** only when a migration is pending. Restarting on the same version writes nothing. The startup log prints the path.
+- **Space:** the copy is about the size of the database, so the directory needs free space for it.
+- **If it fails:** startup stops with `Could not back up … before running schema migrations` and leaves the database unchanged. Make the directory writable or free space, then start again.
+
+SampleDB never deletes these copies. Keep the newest one until you've checked the upgraded app (log in, open a recent study and its containers) and the next restic backup has run, then delete it:
+
+```bash
+ls -lh /var/lib/sampledb/*.bak
+rm /var/lib/sampledb/sampledb.sqlite.pre-v11-20261101T143005123Z.bak
+```
+
+To undo an upgrade with the copy, stop SampleDB, deploy the previous image (the new one would migrate the copy again), and follow step 5 below, using the `.bak` file in place of the restic restore. A restic backup taken while the copy exists may include it if your script backs up the whole directory; `ops/backup/backup-db-restic.sh` backs up only `DATABASE_PATH`.
+
 ## Restore runbook
 
 Use this when recovering from corruption, bad migration, or lost host.

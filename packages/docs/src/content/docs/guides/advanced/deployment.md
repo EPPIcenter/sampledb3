@@ -48,6 +48,8 @@ The database lives at `$HOST_DATA_DIR/sampledb.sqlite` on the host, so your back
 
 **After deploys:** the browser UI is notified when a new build is on the server via `GET /api/app-version` (and `X-App-Build-Id`). Long‑lived tabs re-check on a timer and when the tab is focused, so users are prompted to refresh instead of running an old client against a new API. Local development uses a default `local-dev` id so the banner does not appear during `vite` dev.
 
+**Upgrades and schema migrations:** when a new image starts on a database with an older schema, it first copies the database next to it (for example `$HOST_DATA_DIR/sampledb.sqlite.pre-v11-20261101T143005123Z.bak`), then migrates. If the copy can't be written, the app stops without migrating. Copies are not deleted automatically; see [Copy before schema migrations](/docs/guides/advanced/backup-and-restore/#copy-before-schema-migrations) for when to remove them.
+
 For existing databases created before the error-logging feature, the `error_logs` table is created automatically on startup when missing. No manual migration is needed.
 
 ### Seeding a demo database (Docker)
