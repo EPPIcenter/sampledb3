@@ -64,7 +64,7 @@ Micronix barcodes must be unique across the system. Paper uses **sheet name** an
 
 Open **Browse Data → Collections**. Tabs: **All**, **Micronix Plates**, **Cryovial Boxes**, **Boxes**, **Bags**. See [Browsing collections](/docs/guides/features/browse-collections/).
 
-Plate pages include a grid of occupied and empty wells. Box and bag pages list sheets. Every collection type has a **Table** view and **Export CSV**, which downloads the rows currently shown.
+Micronix plate and cryovial box pages include a grid of occupied and empty cells. The grid always shows the whole plate (A–H, 1–12) or box (A–J, 1–10). Tubes that belong to the plate or box but have no position, or a stored position that is not a cell of the grid, appear below the grid in an **Unplaced** section, labelled with the stored value. Box and bag pages list sheets. Every collection type has a **Table** view and **Export CSV**, which downloads the rows currently shown; on plates and boxes this includes unplaced tubes after the grid rows.
 
 ## Delete a collection
 

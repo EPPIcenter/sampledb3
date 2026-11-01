@@ -81,3 +81,11 @@ export {
   PAPER_DERIVATION_USE_SUBLABEL_NOT_POSITION,
   type PaperInboundWriteFields,
 } from './paper-container-inbound'
+export {
+  CRYOVIAL_BOX_GRID,
+  MICRONIX_PLATE_GRID,
+  gridCellKey,
+  gridCellKeys,
+  gridPositionKey,
+  type CollectionGrid,
+} from './collection-grid'
