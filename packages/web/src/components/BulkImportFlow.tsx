@@ -16,8 +16,7 @@ import {
   getBulkImportOptionalFields,
   parseBulkImportCSV,
   mapBulkImportRowsToPayload,
-  getBulkImportRowCollectionName,
-  getBulkImportRowCollectionCheck,
+  getBulkImportRowCollectionRef,
   type CSVRow,
   type BulkImportValidationError,
   type ImportType as LibImportType,
@@ -171,9 +170,6 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     }
   }
 
-  const getRowCollectionName = (row: CSVRow) =>
-    getBulkImportRowCollectionName(row, containerType)
-
   const downloadTemplate = () => {
     if (templateSpecimenTypes.isError) {
       return
@@ -271,19 +267,10 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         const collectionType = getCollectionType()
         if (collectionType || containerType === 'paper') {
           try {
-            const missing = await fetchBulkImportMissingCollections(
-              containerType === 'paper'
-                ? {
-                    rows,
-                    getRowCollectionCheck: (row) =>
-                      getBulkImportRowCollectionCheck(row, containerType),
-                  }
-                : {
-                    rows,
-                    collectionType: collectionType!,
-                    getRowCollectionName,
-                  }
-            )
+            const missing = await fetchBulkImportMissingCollections({
+              rows,
+              getRowCollectionRef: (row) => getBulkImportRowCollectionRef(row, containerType),
+            })
             setMissingCollections(missing)
 
             if (missing.length > 0) {
@@ -339,8 +326,10 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       setMissingCollections([...updated])
 
       try {
-        const name = collection.name || (collection.barcode ? `Collection-${collection.barcode}` : `Collection-${Date.now()}`)
-        const barcode = collection.barcode || collection.collectionBarcode
+        const barcode = collection.barcode || collection.collectionBarcode || undefined
+        // A Collection the CSV gives only by barcode is named after it, as the import itself
+        // does. Every missing Collection has a name or a barcode.
+        const name = collection.name || collection.barcode || ''
         const itemCollectionType = collection.collectionType ?? defaultCollectionType
 
         if (itemCollectionType === 'micronix_plate') {
@@ -667,7 +656,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                         <tr>
                           {Object.keys(preview[0] ?? {}).map((key) => {
                             const required = getRequiredFields()
-                            const isRequired = required.includes(key)
+                            const isRequired = required.some((field) => field.split(' or ').includes(key))
                             return (
                               <th key={key} className={`px-4 py-2 text-left border-b text-app-text font-medium border-app-border ${isRequired ? 'bg-app-trend-down/10' : ''}`}>
                                 {key}
@@ -754,7 +743,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                           <p className="text-sm text-app-text-muted">Barcode: {collection.barcode || collection.collectionBarcode}</p>
                         )}
                         {!collection.name && (collection.barcode || collection.collectionBarcode) && (
-                          <p className="text-xs text-app-text-muted mt-1">A name will be generated from the barcode</p>
+                          <p className="text-xs text-app-text-muted mt-1">Named after its barcode</p>
                         )}
                       </div>
                       {collection.status === 'success' && <span className="text-app-trend-up text-sm font-medium">✓ Created</span>}

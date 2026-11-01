@@ -18,9 +18,11 @@ export interface BulkImportValidationError {
 
 export type ImportType = 'subjects' | 'specimens' | 'combined'
 
+export type BulkImportCollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+
 export function getBulkImportCollectionType(
   containerType: ContainerType | 'none' | ''
-): 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | null {
+): BulkImportCollectionType | null {
   switch (containerType) {
     case 'micronix_tube':
     case 'static_well':
@@ -52,7 +54,8 @@ export function getBulkImportRequiredFields(opts: {
   const containerFields: Record<ContainerType, string[]> = {
     micronix_tube: ['plate_name', 'barcode', 'position'],
     cryovial_tube: ['box_name', 'position'],
-    paper: ['box_name', 'bag_name', 'sheet_name'],
+    // A paper row names its box or its bag, never both.
+    paper: ['box_name or bag_name', 'sheet_name'],
     static_well: ['plate_name', 'position'],
   }
   return [...base, ...containerFields[containerType]]
@@ -137,23 +140,38 @@ export function getBulkImportRowCollectionName(
   return t || undefined
 }
 
-/** Per-row collection check for missing-collection resolution (supports mixed box/bag paper rows). */
-export function getBulkImportRowCollectionCheck(
+/**
+ * The Collection a row places its container in. `name` comes from the name column
+ * (plate_name, box_name, or bag_name) and `barcode` from collection_barcode; a value is
+ * never reclassified by its shape.
+ */
+export interface BulkImportCollectionRef {
+  type: BulkImportCollectionType
+  name?: string
+  barcode?: string
+}
+
+/** Per-row Collection reference for missing-collection resolution (supports mixed box/bag paper rows). */
+export function getBulkImportRowCollectionRef(
   row: CSVRow,
   containerType: ContainerType | 'none' | ''
-): { identifier: string; type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' } | undefined {
+): BulkImportCollectionRef | undefined {
   if (containerType === 'paper') {
     const parent = resolveBulkImportPaperParent(row)
     if (!parent || 'error' in parent) return undefined
-    return {
-      identifier: parent.collectionName,
-      type: parent.parentCollectionType,
-    }
+    return { type: parent.parentCollectionType, name: parent.collectionName }
   }
-  const collectionType = getBulkImportCollectionType(containerType)
+  const type = getBulkImportCollectionType(containerType)
+  if (!type) return undefined
   const name = getBulkImportRowCollectionName(row, containerType)
-  if (!collectionType || !name) return undefined
-  return { identifier: name, type: collectionType }
+  // Only plates and cryovial boxes carry barcodes.
+  const barcode = trimCell(row.collection_barcode) || undefined
+  if (!name && !barcode) return undefined
+  return {
+    type,
+    ...(name ? { name } : {}),
+    ...(barcode ? { barcode } : {}),
+  }
 }
 
 function getRowCollectionName(

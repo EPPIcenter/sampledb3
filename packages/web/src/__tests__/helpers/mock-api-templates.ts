@@ -506,11 +506,20 @@ export function bulkImportFlowMock(): MockApiOverrides {
       bulkCombinedValidate: vi.fn().mockResolvedValue({ valid: true, errors: [] }),
     },
     collectionsApi: {
-      check: vi.fn().mockResolvedValue({ results: [] }),
+      // One result per Collection checked, as the API returns; every Collection exists.
+      check: vi.fn((data: { collections: Array<{ identifier: string; type: string }> }) =>
+        Promise.resolve({
+          results: data.collections.map((c) => ({ ...c, exists: true, id: 1 })),
+        }),
+      ),
       listMicronixPlates: vi.fn().mockResolvedValue([]),
       listCryovialBoxes: vi.fn().mockResolvedValue([]),
       listBoxes: vi.fn().mockResolvedValue([]),
       listBags: vi.fn().mockResolvedValue([]),
+      createMicronixPlate: vi.fn(),
+      createCryovialBox: vi.fn(),
+      createBox: vi.fn(),
+      createBag: vi.fn(),
     },
   }
 }
