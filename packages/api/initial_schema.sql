@@ -175,6 +175,7 @@ CREATE TABLE IF NOT EXISTS storage_container_tag (
   tag_id INTEGER NOT NULL REFERENCES tag(id),
   PRIMARY KEY (storage_container_id, tag_id)
 );--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS storage_container_tag_tag_id_idx ON storage_container_tag(tag_id);--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS location (
   id INTEGER PRIMARY KEY,
   parent_id INTEGER REFERENCES location(id),
@@ -211,6 +212,8 @@ CREATE TABLE IF NOT EXISTS micronix_tube (
   position TEXT
 );--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS micronix_tube_collection_position_idx ON micronix_tube(collection_id, position) WHERE position IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS micronix_tube_collection_id_idx ON micronix_tube(collection_id);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS micronix_tube_barcode_folded_idx ON micronix_tube(lower(trim(barcode)));--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS cryovial_box (
   id INTEGER PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES location(id),
@@ -229,6 +232,9 @@ CREATE TABLE IF NOT EXISTS cryovial_tube (
   position TEXT
 );--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS cryovial_tube_collection_position_idx ON cryovial_tube(collection_id, position) WHERE position IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS cryovial_tube_collection_id_idx ON cryovial_tube(collection_id);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS cryovial_tube_barcode_idx ON cryovial_tube(barcode);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS cryovial_tube_barcode_folded_idx ON cryovial_tube(lower(trim(barcode)));--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS box (
   id INTEGER PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES location(id),
@@ -263,17 +269,21 @@ CREATE TABLE IF NOT EXISTS sheet (
          (box_id IS NULL AND bag_id IS NULL))
 );--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS sheet_box_name_idx ON sheet(box_id, name) WHERE box_id IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS sheet_bag_id_idx ON sheet(bag_id);--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS paper (
   id INTEGER PRIMARY KEY REFERENCES storage_container(id),
   sheet_id INTEGER NOT NULL REFERENCES sheet(id),
   sublabel TEXT
 );--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS paper_sheet_id_sublabel_idx ON paper(sheet_id, sublabel);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS paper_sublabel_idx ON paper(sublabel);--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS static_well (
   id INTEGER PRIMARY KEY REFERENCES storage_container(id),
   collection_id INTEGER NOT NULL REFERENCES micronix_plate(id),
   position TEXT
 );--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS static_well_collection_position_idx ON static_well(collection_id, position) WHERE position IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS static_well_collection_id_idx ON static_well(collection_id);--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS strain (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
@@ -287,7 +297,7 @@ CREATE TABLE IF NOT EXISTS storage_type (
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER NOT NULL
 );--> statement-breakpoint
-INSERT INTO schema_version (version) VALUES (10);--> statement-breakpoint
+INSERT INTO schema_version (version) VALUES (11);--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT NOT NULL,
   user_id INTEGER REFERENCES users(id),

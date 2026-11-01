@@ -7,6 +7,7 @@ import {
   CURRENT_SCHEMA_VERSION,
   evolveOperationalSchema,
   getRecordedSchemaVersion,
+  hasSchemaVersionTable,
   isEmptyOperationalDatabase,
 } from '../schema-evolution'
 import { openOperationalDatabase } from '../open'
@@ -54,6 +55,34 @@ function createTablesForLaterMigrations(sqlite: Database): void {
     user_id INTEGER NOT NULL REFERENCES users(id),
     expires_at INTEGER NOT NULL
   )`)
+  // Migration 011 indexes these columns. Some tests create a bare `study (id)` first.
+  ensureColumns(sqlite, 'study', ['title TEXT', 'short_code TEXT'])
+  ensureColumns(sqlite, 'specimen', ['control_batch_id INTEGER'])
+  ensureColumns(sqlite, 'storage_container', ['specimen_id INTEGER'])
+  ensureColumns(sqlite, 'storage_container_tag', ['storage_container_id INTEGER', 'tag_id INTEGER'])
+  ensureColumns(sqlite, 'control_batch', ['control_definition_id INTEGER'])
+  ensureColumns(sqlite, 'location', ['parent_id INTEGER', 'path TEXT'])
+  ensureColumns(sqlite, 'micronix_plate', ['location_id INTEGER'])
+  ensureColumns(sqlite, 'cryovial_box', ['location_id INTEGER'])
+  ensureColumns(sqlite, 'bag', ['location_id INTEGER'])
+  // Before version 3, migration 003 renames barcode to sublabel (and its preflight creates the
+  // table if missing), so only a database already past 003 gets paper in its later shape.
+  const version = hasSchemaVersionTable(sqlite) ? getRecordedSchemaVersion(sqlite) : null
+  if (version != null && version >= 3) ensureColumns(sqlite, 'paper', ['sheet_id INTEGER', 'sublabel TEXT'])
+}
+
+/** Create `table` with `columns`, or add the ones an existing `table` lacks. */
+function ensureColumns(sqlite: Database, table: string, columns: string[]): void {
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS ${table} (id INTEGER PRIMARY KEY)`)
+  const existing = new Set(
+    sqlite
+      .query<{ name: string }, []>(`SELECT name FROM pragma_table_info('${table}')`)
+      .all()
+      .map((row) => row.name),
+  )
+  for (const column of columns) {
+    if (!existing.has(column.split(' ')[0])) sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column}`)
+  }
 }
 
 describe('schema evolution', () => {
