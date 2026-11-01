@@ -240,23 +240,23 @@ export default function StudyDetail() {
   }
 
   const subjectColumns: Column<StudySubject>[] = [
-    { key: 'name', label: 'Name', sortable: true },
+    { key: 'name', label: 'Name', sortType: 'text' },
     {
       key: 'specimenCount',
       label: 'Specimens',
-      sortable: true,
+      sortType: 'number',
       render: (value) => (value ?? 0).toLocaleString(),
     },
     {
       key: 'created',
       label: 'Created',
-      sortable: true,
+      sortType: 'date',
       render: (value) => new Date(value as string).toLocaleDateString(),
     },
     {
       key: 'lastUpdated',
       label: 'Last Updated',
-      sortable: true,
+      sortType: 'date',
       render: (value) => new Date(value as string).toLocaleDateString(),
     },
   ]

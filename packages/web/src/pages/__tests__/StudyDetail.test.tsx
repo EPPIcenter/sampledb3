@@ -1,14 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '../../__tests__/helpers/render'
+import userEvent from '@testing-library/user-event'
+import { render, screen, waitFor, within } from '../../__tests__/helpers/render'
 import { DateFilterProvider } from '../../contexts/DateFilterContext'
 import StudyDetail from '../StudyDetail'
+
+const routerState = vi.hoisted(() => ({ search: '' }))
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
   return {
     ...actual,
     useParams: () => ({ id: '1' }),
-    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+    useSearchParams: () => [new URLSearchParams(routerState.search), vi.fn()],
   }
 })
 
@@ -47,6 +50,7 @@ import { studiesApi } from '../../lib/api/studies'
 
 describe('StudyDetail page', () => {
   beforeEach(() => {
+    routerState.search = ''
     vi.mocked(api.get).mockResolvedValue({ pagination: { total: 0 } })
     vi.mocked(studiesApi.get).mockResolvedValue({
       study: {
@@ -112,4 +116,40 @@ describe('StudyDetail page', () => {
       expect(studiesApi.get).toHaveBeenCalled()
     }
   )
+
+  it('sorts Subjects by name naturally, lowest names first', async () => {
+    // Names drawn from study 70: numeric names and alphanumeric ones.
+    const names = ['140', '80', '116', '29PH', '10', '1', '100', '350', '2', '3CDX']
+    vi.mocked(studiesApi.getSubjects).mockResolvedValue({
+      subjects: names.map((name, i) => ({
+        id: i + 1,
+        studyId: 1,
+        name,
+        specimenCount: 1,
+        created: '2024-01-01T00:00:00Z',
+        lastUpdated: '2024-01-01T00:00:00Z',
+      })),
+    })
+    routerState.search = 'tab=subjects'
+    const user = userEvent.setup()
+    await render(
+      <DateFilterProvider>
+        <StudyDetail />
+      </DateFilterProvider>
+    )
+
+    const nameHeader = await screen.findByRole('columnheader', { name: 'Name' })
+    await screen.findByRole('cell', { name: '3CDX' })
+    await user.click(nameHeader)
+
+    const shownNames = () =>
+      screen
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => within(row).getAllByRole('cell')[0].textContent)
+    expect(shownNames()).toEqual(['1', '2', '3CDX', '10', '29PH', '80', '100', '116', '140', '350'])
+
+    await user.click(nameHeader)
+    expect(shownNames()[0]).toBe('350')
+  })
 })
