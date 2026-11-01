@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData, type QueryClient } from '@tanstack/react-query'
 import { specimensApi, type SpecimenListParams } from '../lib/api/specimens'
 import { containersApi } from '../lib/api/containers'
 import { subjectsApi } from '../lib/api/subjects'
@@ -97,13 +97,15 @@ export function invalidateSpecimenQueries(
   }
 }
 
-export function useSpecimens(filters?: SpecimenListParams) {
+/**
+ * One page of specimens and the pagination totals. The previous page stays on screen while
+ * the next page, sort, or filter loads.
+ */
+export function useSpecimens(params: SpecimenListParams) {
   return useQuery({
-    queryKey: specimenKeys.list(filters),
-    queryFn: async () => {
-      const res = await specimensApi.search(filters)
-      return res.specimens
-    },
+    queryKey: specimenKeys.list(params),
+    queryFn: () => specimensApi.search(params),
+    placeholderData: keepPreviousData,
   })
 }
 

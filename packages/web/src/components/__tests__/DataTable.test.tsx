@@ -199,4 +199,49 @@ describe('DataTable', () => {
       expect(columnValues(0)).toEqual(subjects.map((s) => s.name))
     })
   })
+
+  describe('server-paged and server-sorted lists', () => {
+    const page2: TestItem[] = [
+      { id: 53, name: 'Item 53', value: 3 },
+      { id: 51, name: 'Item 51', value: 1 },
+      { id: 52, name: 'Item 52', value: 2 },
+    ]
+
+    function names(): string[] {
+      return screen
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => within(row).getAllByRole('cell')[1].textContent)
+    }
+
+    it('shows the given page as is and counts pages from totalItems', async () => {
+      await render(
+        <DataTable
+          data={page2}
+          columns={columns}
+          pagination={{ page: 2, pageSize: 3, onPageChange: vi.fn(), totalItems: 8 }}
+        />
+      )
+
+      expect(names()).toEqual(['Item 53', 'Item 51', 'Item 52'])
+      expect(screen.getByText(/Showing/)).toHaveTextContent('Showing 4 to 6 of 8 results')
+    })
+
+    it('reports a header click to sort.onChange and leaves the rows in server order', async () => {
+      const user = userEvent.setup()
+      const onChange = vi.fn()
+      const { rerender } = await render(
+        <DataTable data={page2} columns={columns} sort={{ column: null, direction: 'asc', onChange }} />
+      )
+
+      await user.click(screen.getByRole('columnheader', { name: 'Name' }))
+      expect(onChange).toHaveBeenLastCalledWith('name', 'asc')
+      expect(names()).toEqual(['Item 53', 'Item 51', 'Item 52'])
+
+      rerender(<DataTable data={page2} columns={columns} sort={{ column: 'name', direction: 'asc', onChange }} />)
+      await user.click(screen.getByRole('columnheader', { name: 'Name' }))
+      expect(onChange).toHaveBeenLastCalledWith('name', 'desc')
+      expect(names()).toEqual(['Item 53', 'Item 51', 'Item 52'])
+    })
+  })
 })

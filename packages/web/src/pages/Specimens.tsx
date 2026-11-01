@@ -4,7 +4,8 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import SpecimenFilter, { type SpecimenFilters } from '../components/SpecimenFilter'
 import { useUser } from '../contexts/UserContext'
 import { useSpecimens } from '../hooks/useSpecimens'
-import type { SpecimenListParams } from '../lib/api/specimens'
+import type { SpecimenListParams, SpecimenSortColumn } from '../lib/api/specimens'
+import type { SortDirection } from '../lib/sort-compare'
 import type { Specimen } from '../lib/api/types'
 import {
   AsyncPresentation,
@@ -22,6 +23,16 @@ type SpecimenListRow = Specimen & {
   studySubject?: { name: string }
   controlBatch?: { name: string }
 }
+
+const PAGE_SIZE = 50
+
+/** The table columns the API can sort the whole list by, and the `sort` value for each. */
+const SERVER_SORT_COLUMNS: Record<string, SpecimenSortColumn> = {
+  collectionDate: 'collection_date',
+  created: 'created',
+}
+
+type TableSort = { column: string; direction: SortDirection }
 
 function filtersToParams(filters: SpecimenFilters): SpecimenListParams {
   return {
@@ -54,7 +65,8 @@ export default function Specimens() {
   const { canWrite } = useUser()
   const [searchParams, setSearchParams] = useSearchParams()
   const [page, setPage] = useState(1)
-  const pageSize = 50
+  // Null: the API's default order, newest created first.
+  const [sort, setSort] = useState<TableSort | null>(null)
 
   // The URL is the source of truth, so "Clear Filters" and back/forward update the table.
   const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams])
@@ -63,10 +75,25 @@ export default function Specimens() {
     setPage(1)
   }, [searchParams])
 
-  const listParams = useMemo(() => filtersToParams(filters), [filters])
+  // The server filters, sorts, and pages, so sorting and filters cover every page.
+  const listParams = useMemo<SpecimenListParams>(
+    () => ({
+      ...filtersToParams(filters),
+      page,
+      limit: PAGE_SIZE,
+      ...(sort ? { sort: SERVER_SORT_COLUMNS[sort.column], order: sort.direction } : {}),
+    }),
+    [filters, page, sort]
+  )
   const specimensQuery = useSpecimens(listParams)
 
-  const specimens = (specimensQuery.data ?? []) as SpecimenListRow[]
+  const specimens = (specimensQuery.data?.specimens ?? []) as SpecimenListRow[]
+  const total = specimensQuery.data?.pagination.total ?? 0
+
+  const handleSortChange = (column: string, direction: SortDirection) => {
+    setSort({ column, direction })
+    setPage(1)
+  }
   const listStatus = fromQuery(specimensQuery, {
     isEmpty: specimensQuery.isSuccess && specimens.length === 0,
   })
@@ -215,9 +242,15 @@ export default function Specimens() {
               emptyMessage="No specimens found"
               pagination={{
                 page,
-                pageSize,
+                pageSize: PAGE_SIZE,
                 onPageChange: setPage,
                 showPagination: true,
+                totalItems: total,
+              }}
+              sort={{
+                column: sort?.column ?? null,
+                direction: sort?.direction ?? 'asc',
+                onChange: handleSortChange,
               }}
               className="dashboard-card overflow-hidden"
             />

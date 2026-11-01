@@ -48,17 +48,18 @@ describe('useSpecimens Hooks', () => {
   })
 
   describe('useSpecimens', () => {
-    it('should fetch and return specimens', async () => {
+    it('returns one page of specimens with the pagination totals', async () => {
       const mockData = {
         specimens: [
           { id: 1, specimenTypeId: 1, created: '2024-01-01', lastUpdated: '2024-01-01' },
           { id: 2, specimenTypeId: 1, created: '2024-01-01', lastUpdated: '2024-01-01' },
         ],
+        pagination: { page: 1, limit: 2, total: 9, totalPages: 5 },
       }
 
       vi.mocked(specimensApi.search).mockResolvedValue(mockData)
 
-      const { result } = renderHook(() => useSpecimens(), {
+      const { result } = renderHook(() => useSpecimens({ page: 1, limit: 2 }), {
         wrapper: createWrapper(),
       })
 
@@ -66,16 +67,40 @@ describe('useSpecimens Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(result.current.data).toEqual(mockData.specimens)
-      expect(specimensApi.search).toHaveBeenCalledWith(undefined)
+      expect(result.current.data).toEqual(mockData)
+      expect(specimensApi.search).toHaveBeenCalledWith({ page: 1, limit: 2 })
+    })
+
+    it('keeps the previous page on screen while the next page loads', async () => {
+      const page1 = {
+        specimens: [{ id: 1, specimenTypeId: 1, created: '2024-01-01', lastUpdated: '2024-01-01' }],
+        pagination: { page: 1, limit: 1, total: 2, totalPages: 2 },
+      }
+      let resolvePage2: (value: typeof page1) => void = () => {}
+      vi.mocked(specimensApi.search)
+        .mockResolvedValueOnce(page1)
+        .mockReturnValueOnce(new Promise((resolve) => (resolvePage2 = resolve)))
+
+      const { result, rerender } = renderHook(({ page }) => useSpecimens({ page, limit: 1 }), {
+        wrapper: createWrapper(),
+        initialProps: { page: 1 },
+      })
+      await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+      rerender({ page: 2 })
+
+      await waitFor(() => expect(result.current.isPlaceholderData).toBe(true))
+      expect(result.current.data).toEqual(page1)
+      resolvePage2({ ...page1, pagination: { ...page1.pagination, page: 2 } })
+      await waitFor(() => expect(result.current.data?.pagination.page).toBe(2))
     })
 
     it('should pass filters to search', async () => {
-      const mockData = { specimens: [] }
+      const mockData = { specimens: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }
 
       vi.mocked(specimensApi.search).mockResolvedValue(mockData)
 
-      const filters = { source_type: 'subject', study: 'ST1' }
+      const filters = { source_type: 'subject', study: 'ST1', page: 1, limit: 50 }
       const { result } = renderHook(() => useSpecimens(filters), {
         wrapper: createWrapper(),
       })

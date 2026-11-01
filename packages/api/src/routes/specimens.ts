@@ -42,6 +42,8 @@ specimens.get('/', authMiddleware, async (c) => {
       search: c.req.query('search'),
       page: c.req.query('page'),
       limit: c.req.query('limit'),
+      sort: c.req.query('sort'),
+      order: c.req.query('order'),
     }))
   } catch (error) {
     return handleRouteError(error, c)
