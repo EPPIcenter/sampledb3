@@ -140,4 +140,74 @@ describe('ContainerEditModal', () => {
     await waitFor(() => expect(onSuccess).toHaveBeenCalled())
     expect(containersApi.update).toHaveBeenCalledWith(8, { barcode: 'CRYO-2' })
   })
+
+  describe('remaining quantity bounds', () => {
+    async function renderQuantity(onSuccess = vi.fn()) {
+      await render(
+        <ContainerEditModal
+          isOpen
+          onClose={() => {}}
+          onSuccess={onSuccess}
+          container={{ id: 94, containerType: 'static_well', remainingQuantity: 4, totalQuantity: 10 }}
+        />,
+      )
+      return onSuccess
+    }
+
+    async function saveRemaining(value: string) {
+      const user = userEvent.setup()
+      const input = screen.getByLabelText(/Remaining Quantity/)
+      await user.clear(input)
+      await user.type(input, value)
+      await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    }
+
+    it('shows the total as the upper bound', async () => {
+      await renderQuantity()
+
+      expect(screen.getByLabelText(/Remaining Quantity/)).toHaveAttribute('max', '10')
+      expect(screen.getByText('Between 0 and the total quantity, 10')).toBeInTheDocument()
+    })
+
+    it('shows an error and does not save a remaining quantity greater than total', async () => {
+      const onSuccess = await renderQuantity()
+
+      await saveRemaining('11')
+
+      expect(await screen.findByText('Remaining quantity (11) cannot exceed total quantity (10).')).toBeInTheDocument()
+      expect(containersApi.update).not.toHaveBeenCalled()
+      expect(onSuccess).not.toHaveBeenCalled()
+    })
+
+    it('shows an error and does not save a negative remaining quantity', async () => {
+      await renderQuantity()
+
+      await saveRemaining('-5')
+
+      expect(await screen.findByText('Remaining quantity must be 0 or more (got -5).')).toBeInTheDocument()
+      expect(containersApi.update).not.toHaveBeenCalled()
+    })
+
+    it('saves a remaining quantity equal to total', async () => {
+      const onSuccess = await renderQuantity()
+
+      await saveRemaining('10')
+
+      await waitFor(() => expect(onSuccess).toHaveBeenCalled())
+      expect(containersApi.update).toHaveBeenCalledWith(94, { remainingQuantity: 10 })
+    })
+
+    it('shows the API bounds error', async () => {
+      vi.mocked(containersApi.update).mockRejectedValue(
+        Object.assign(new Error('Request failed with status code 400'), {
+          response: { status: 400, data: { error: 'Remaining quantity (8) cannot exceed total quantity (7).' } },
+        }),
+      )
+      await renderQuantity()
+
+      await saveRemaining('8')
+
+      expect(await screen.findByText('Remaining quantity (8) cannot exceed total quantity (7).')).toBeInTheDocument()
+    })
+  })
 })

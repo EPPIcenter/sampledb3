@@ -100,3 +100,9 @@ export {
   type GridGeometry,
   type GridPositionResult,
 } from './grid-position'
+export {
+  containerQuantityBoundsError,
+  quantityDrawError,
+  quantityUsedError,
+  type ContainerQuantityBounds,
+} from './container-quantity'

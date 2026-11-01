@@ -3,6 +3,7 @@
  * every problem. Reads only; the write step trusts the plan.
  */
 import { and, eq, isNull } from 'drizzle-orm'
+import { containerQuantityBoundsError } from '@sampledb/contract'
 import type { Database } from '../../db/client'
 import {
   controlBatch,
@@ -246,6 +247,10 @@ async function planContainer(
     totalQuantity = input.totalQuantity ?? (await getDefaultTotalQuantity(database, containerType))
     remainingQuantity =
       input.remainingQuantity ?? input.totalQuantity ?? (await getDefaultRemainingQuantity(database, containerType))
+    const quantityError = containerQuantityBoundsError({ totalQuantity, remainingQuantity })
+    if (quantityError) {
+      problems.push({ field: totalQuantity < 0 ? 'totalQuantity' : 'remainingQuantity', message: quantityError })
+    }
   } catch (error) {
     problems.push({ field: 'unitId', message: error instanceof Error ? error.message : 'Container defaults are not configured' })
   }

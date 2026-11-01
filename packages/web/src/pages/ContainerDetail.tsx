@@ -702,6 +702,7 @@ export default function ContainerDetail() {
             id: container.id!,
             comment: container.comment,
             remainingQuantity: container.remainingQuantity ?? undefined,
+            totalQuantity: container.totalQuantity ?? undefined,
             tags: container.tags,
             unit: container.unit,
             containerType: effectiveContainerType,

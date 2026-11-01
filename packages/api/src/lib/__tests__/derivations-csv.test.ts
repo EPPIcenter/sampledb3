@@ -423,6 +423,78 @@ describe('derivations-csv', () => {
       expect(after?.remainingQuantity).toBe(10)
     })
 
+    it('rejects a quantity used of 0 or less, with the row', async () => {
+      const { parent } = await seedParent()
+      const csv = [`${header},quantity_used`, `${parent.id},PlateDef,B01,C1,0`, `${parent.id},PlateDef,B02,C2,-100`].join('\n')
+
+      const validation = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(validation.rows.map((r) => r.error)).toEqual([
+        'Quantity used must be greater than 0 (got 0).',
+        'Quantity used must be greater than 0 (got -100).',
+      ])
+
+      const result = await importDerivationsFromCsv(testDb, csv, { settings })
+
+      expect(result.rows.find((r) => !r.success && r.index === 0)?.error).toBe(
+        'Row 1: Quantity used must be greater than 0 (got 0). No derivations were created; please fix the error and try again.',
+      )
+      const after = await testDb.select().from(storageContainer).where(eq(storageContainer.id, parent.id)).get()
+      expect(after?.remainingQuantity).toBe(10)
+    })
+
+    it('rejects a shared quantity used of 0 or less', async () => {
+      const { parent } = await seedParent()
+      const csv = [header, `${parent.id},PlateDef,B01,C1`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, { ...settings, quantityUsed: -1 })
+
+      expect(result.rows[0].error).toBe('Quantity used must be greater than 0 (got -1).')
+    })
+
+    it('rejects a negative Child container quantity', async () => {
+      const { parent } = await seedParent()
+      const csv = [`${header},quantity`, `${parent.id},PlateDef,B01,C1,-2`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows[0].error).toBe('Child container: Total quantity must be 0 or more (got -2).')
+    })
+
+    it('rejects rows that together draw more than the Parent container holds', async () => {
+      const { parent } = await seedParent()
+      const csv = [
+        `${header},quantity_used`,
+        `${parent.id},PlateDef,B01,C1,6`,
+        `${parent.id},PlateDef,B02,C2,4`,
+        `${parent.id},PlateDef,B03,C3,1`,
+      ].join('\n')
+
+      const validation = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(validation.rows.map((r) => r.valid)).toEqual([true, true, false])
+      expect(validation.rows[2].error).toBe(
+        "Quantity used (1) exceeds the Parent container's remaining quantity (0). Earlier rows in this file draw from the same Parent container.",
+      )
+
+      const result = await importDerivationsFromCsv(testDb, csv, { settings })
+
+      expect(result.rows.find((r) => r.index === 2)?.error).toBe(
+        "Row 3: Quantity used (1) exceeds the Parent container's remaining quantity (0). No derivations were created; please fix the error and try again.",
+      )
+      const after = await testDb.select().from(storageContainer).where(eq(storageContainer.id, parent.id)).get()
+      expect(after?.remainingQuantity).toBe(10)
+    })
+
+    it('rejects a single row drawing more than the Parent container holds', async () => {
+      const { parent } = await seedParent()
+      const csv = [`${header},quantity_used`, `${parent.id},PlateDef,B01,C1,11`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows[0].error).toBe("Quantity used (11) exceeds the Parent container's remaining quantity (10).")
+    })
+
     it('rejects paper rows whose box does not exist', async () => {
       const { parent } = await seedParent()
       const csv = ['parent_container_id,container_type,box_name,sheet_name,sublabel', `${parent.id},paper,No Such Box,Sheet-1,S1`].join('\n')

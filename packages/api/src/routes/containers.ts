@@ -3,6 +3,7 @@ import type { Database } from '../db/client'
 import { storageContainer, micronixTube, cryovialTube, paper, staticWell, tag, storageContainerTag } from '../db/schema'
 import { eq, and, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
+import { containerQuantityBoundsError } from '@sampledb/contract'
 import { validatePage, validateLimit } from '../lib/constants'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
@@ -217,13 +218,21 @@ containers.patch('/:id', memberMiddleware, async (c) => {
     const userId = c.get('user')?.id
 
     const updated = await withWriteTransaction(database, async (tx) => {
-      const container = await tx.select({ id: storageContainer.id }).from(storageContainer).where(eq(storageContainer.id, id)).get()
+      const container = await tx
+        .select({ id: storageContainer.id, totalQuantity: storageContainer.totalQuantity })
+        .from(storageContainer)
+        .where(eq(storageContainer.id, id))
+        .get()
       if (!container) {
         throw new NotFoundError('Container', id)
       }
       const containerType = await containerSubtypeOf(tx, id)
 
       // Check everything before the first write.
+      if (remainingQuantity !== undefined) {
+        const quantityError = containerQuantityBoundsError({ totalQuantity: container.totalQuantity, remainingQuantity })
+        if (quantityError) throw new ValidationError(quantityError)
+      }
       if (unitId !== undefined && containerType) {
         const validation = await validateUnitForContainerType(tx, containerType, unitId)
         if (!validation.valid) {

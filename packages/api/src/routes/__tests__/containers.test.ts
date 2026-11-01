@@ -602,4 +602,60 @@ describe('Containers API', () => {
       expect(logsAfter.at(-1)?.message).toBe('enrichment failed')
     })
   })
+
+  describe('PATCH /api/containers/:id keeps remaining quantity within bounds', () => {
+    /** A Container with total 10 and remaining 4. */
+    async function seedQuantityContainer() {
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+      const specimenId = (await createTestSpecimen(ctx.db, specimenType.id)).id
+      const container = await createTestStorageContainer(ctx.db, { specimenId })
+      await ctx.db
+        .update(storageContainer)
+        .set({ totalQuantity: 10, remainingQuantity: 4, comment: 'original' })
+        .where(eq(storageContainer.id, container.id))
+      return container.id
+    }
+
+    async function remainingOf(id: number) {
+      return (await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, id)).get())?.remainingQuantity
+    }
+
+    it('returns 400 for a negative remaining quantity and leaves the Container unchanged', async () => {
+      const id = await seedQuantityContainer()
+
+      const res = await ctx.request(`/api/containers/${id}`, { method: 'PATCH', json: { comment: 'changed', remainingQuantity: -5 } })
+
+      expect(res.status).toBe(400)
+      const body = (await res.json()) as { error: string; errorCode: string }
+      expect(body.errorCode).toBe('VALIDATION_ERROR')
+      expect(body.error).toBe('Remaining quantity must be 0 or more (got -5).')
+      expect(await remainingOf(id)).toBe(4)
+      const row = await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, id)).get()
+      expect(row?.comment).toBe('original')
+    })
+
+    it('returns 400 for a remaining quantity greater than total', async () => {
+      const id = await seedQuantityContainer()
+
+      const res = await ctx.request(`/api/containers/${id}`, { method: 'PATCH', json: { remainingQuantity: 1e9 } })
+
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toBe(
+        'Remaining quantity (1000000000) cannot exceed total quantity (10).',
+      )
+      expect(await remainingOf(id)).toBe(4)
+    })
+
+    it('saves a remaining quantity of 0 and one equal to total', async () => {
+      const id = await seedQuantityContainer()
+
+      const zero = await ctx.request(`/api/containers/${id}`, { method: 'PATCH', json: { remainingQuantity: 0 } })
+      expect(zero.status).toBe(200)
+      expect(await remainingOf(id)).toBe(0)
+
+      const full = await ctx.request(`/api/containers/${id}`, { method: 'PATCH', json: { remainingQuantity: 10 } })
+      expect(full.status).toBe(200)
+      expect(await remainingOf(id)).toBe(10)
+    })
+  })
 })
