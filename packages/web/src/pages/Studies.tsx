@@ -17,6 +17,7 @@ import {
   getQueryErrorMessage,
 } from '../ui'
 import '../styles/studies.css'
+import { displayDateTime } from '../lib/date-utils'
 
 type ViewMode = 'grid' | 'list'
 type SortOption = 'title' | 'date' | 'subjects' | 'specimens' | 'containers' | 'lead'
@@ -42,7 +43,7 @@ function compareStudiesAscending(a: StudyWithSummary, b: StudyWithSummary, sortB
     case 'lead':
       return compareText(a.leadPerson, b.leadPerson)
     case 'date':
-      return new Date(a.lastUpdated).getTime() - new Date(b.lastUpdated).getTime()
+      return displayDateTime(a.lastUpdated) - displayDateTime(b.lastUpdated)
     case 'subjects':
       return (a.summary?.totalSubjects || 0) - (b.summary?.totalSubjects || 0)
     case 'specimens':

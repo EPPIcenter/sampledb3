@@ -4,6 +4,7 @@ import { studiesApi } from '../lib/api/studies';
 import type { StudySubject } from '../lib/api/types';
 import { useClickOutside } from '../hooks/useClickOutside'
 import { Modal } from '../ui'
+import { parseDisplayDate } from '../lib/date-utils'
 
 interface SubjectMergeModalProps {
   isOpen: boolean
@@ -315,7 +316,7 @@ function SubjectMergeModalContent({
                             Specimens: <span className="font-medium">{sourceSpecimenCount ?? '...'}</span>
                           </div>
                           <div className="text-app-text-muted text-xs mt-1">
-                            Created: {new Date(sourceSubject.created).toLocaleDateString()}
+                            Created: {parseDisplayDate(sourceSubject.created).toLocaleDateString()}
                           </div>
                         </div>
                       )}
@@ -442,7 +443,7 @@ function SubjectMergeModalContent({
                             Specimens: <span className="font-medium">{targetSpecimenCount ?? '...'}</span>
                           </div>
                           <div className="text-app-text-muted text-xs mt-1">
-                            Created: {new Date(targetSubject.created).toLocaleDateString()}
+                            Created: {parseDisplayDate(targetSubject.created).toLocaleDateString()}
                           </div>
                         </div>
                       )}

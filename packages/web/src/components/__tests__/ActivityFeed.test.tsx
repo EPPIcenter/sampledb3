@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen } from '../../__tests__/helpers/render'
 import ActivityFeed from '../dashboard/ActivityFeed'
 
@@ -45,5 +45,36 @@ describe('ActivityFeed', () => {
     const { container } = await render(<ActivityFeed activities={activities} />)
     const html = container.innerHTML
     expect(html).not.toMatch(/#\d+/)
+  })
+})
+
+describe('ActivityFeed server timestamps', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    // 6:20 PM PDT on Oct 31, 2026 (vitest.config.ts runs in America/Los_Angeles)
+    vi.setSystemTime(new Date('2026-11-01T01:20:02Z'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('reads a timestamp just after midnight UTC as UTC: today, minutes ago', async () => {
+    await render(
+      <ActivityFeed
+        activities={[{ id: 1, type: 'study', timestamp: '2026-11-01 01:10:02', label: 'Study A updated' }]}
+      />,
+    )
+    expect(screen.getByText('Today')).toBeInTheDocument()
+    expect(screen.getByText('10 minutes ago')).toBeInTheDocument()
+  })
+
+  it('never shows a negative age for a timestamp ahead of the browser clock', async () => {
+    await render(
+      <ActivityFeed
+        activities={[{ id: 1, type: 'study', timestamp: '2026-11-01 01:20:40', label: 'Study A updated' }]}
+      />,
+    )
+    expect(screen.getByText('Just now')).toBeInTheDocument()
   })
 })

@@ -8,6 +8,7 @@ import Pagination from '../components/Pagination'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import { Modal, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/admin.css'
+import { formatDateTime } from '../lib/date-utils'
 
 export default function AdminErrorLogs() {
   const queryClient = useQueryClient()
@@ -161,7 +162,7 @@ export default function AdminErrorLogs() {
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString()
+    return formatDateTime(dateString)
   }
 
   if (listStatus === 'error') {

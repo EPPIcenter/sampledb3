@@ -13,6 +13,7 @@ import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '
 import ContentCard from '../components/ContentCard'
 import '../styles/storage.css'
 import { EMPTY_LIST } from '../lib/empty-list'
+import { parseDisplayDate } from '../lib/date-utils'
 
 interface LocationContents {
   micronixPlates?: any[]
@@ -177,14 +178,14 @@ export default function LocationDetail() {
         <div className="storage-card p-4">
           <h2 className="text-sm font-medium mb-1" style={{ color: 'rgb(var(--app-text-muted))' }}>Created</h2>
           <p className="text-lg font-semibold" style={{ color: 'rgb(var(--app-text))' }}>
-            {new Date(location.created).toLocaleDateString()}
+            {parseDisplayDate(location.created).toLocaleDateString()}
           </p>
         </div>
 
         <div className="storage-card p-4">
           <h2 className="text-sm font-medium mb-1" style={{ color: 'rgb(var(--app-text-muted))' }}>Last Updated</h2>
           <p className="text-lg font-semibold" style={{ color: 'rgb(var(--app-text))' }}>
-            {new Date(location.lastUpdated).toLocaleDateString()}
+            {parseDisplayDate(location.lastUpdated).toLocaleDateString()}
           </p>
         </div>
       </div>

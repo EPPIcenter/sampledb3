@@ -35,6 +35,7 @@ import {
 } from '../ui'
 import { TUTORIAL_SHORT_CODE_PREFIX } from '../lib/constants'
 import '../styles/studies.css'
+import { parseDisplayDate } from '../lib/date-utils'
 
 export default function StudyDetail() {
   const { id } = useParams<{ id: string }>()
@@ -251,13 +252,13 @@ export default function StudyDetail() {
       key: 'created',
       label: 'Created',
       sortType: 'date',
-      render: (value) => new Date(value as string).toLocaleDateString(),
+      render: (value) => parseDisplayDate(value as string).toLocaleDateString(),
     },
     {
       key: 'lastUpdated',
       label: 'Last Updated',
       sortType: 'date',
-      render: (value) => new Date(value as string).toLocaleDateString(),
+      render: (value) => parseDisplayDate(value as string).toLocaleDateString(),
     },
   ]
 
