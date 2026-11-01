@@ -106,3 +106,4 @@ export {
   quantityUsedError,
   type ContainerQuantityBounds,
 } from './container-quantity'
+export { newCollectionName, type NewCollectionIdentifiers } from './collection-name'

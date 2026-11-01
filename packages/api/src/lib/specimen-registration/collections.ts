@@ -4,7 +4,7 @@
  * same Collection; nothing is created unless nothing matches and a location is given.
  */
 import { and, eq } from 'drizzle-orm'
-import type { ContainerWriteInput } from '@sampledb/contract'
+import { newCollectionName, type ContainerWriteInput } from '@sampledb/contract'
 import type { Database } from '../../db/client'
 import { sheet } from '../../db/schema'
 import { GRID_COLLECTION_TABLES, PARENT_COLLECTION_TABLES, type GridCollectionType, type ParentCollectionType } from './tables'
@@ -173,7 +173,7 @@ export class CollectionPlanner {
     if (collection.locationId == null) {
       return { error: 'Collection not found and no location provided' }
     }
-    const newName = name ?? barcode
+    const newName = newCollectionName(collection)
     if (!newName) {
       return { error: `A new ${label.toLowerCase()} needs a name or a barcode.` }
     }

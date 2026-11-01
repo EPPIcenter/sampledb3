@@ -22,7 +22,6 @@ export {
   fileLoadedEvent,
   fileReadErrorEvent,
   validateDerivationsCsv,
-  collectionNameForCreate,
   createOneMissingCollection,
   createMissingCollections,
   importDerivationsCsv,

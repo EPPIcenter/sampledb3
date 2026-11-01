@@ -1,3 +1,4 @@
+import { newCollectionName } from '@sampledb/contract'
 import type { BulkDerivationSettings } from '../api/derivations'
 import { nextStepAfterValidate } from './collections'
 import { parseFullCsv } from './csv'
@@ -36,22 +37,18 @@ export async function validateDerivationsCsv(
   }
 }
 
-export function collectionNameForCreate(
-  coll: MissingDerivationCollection,
-  now = Date.now(),
-): string {
-  return coll.name || (coll.barcode ? `Collection-${coll.barcode}` : `Collection-${now}`)
-}
-
 export async function createOneMissingCollection(
   gateway: DerivationsBulkGateway,
   coll: MissingDerivationCollection,
-  now = Date.now(),
 ): Promise<{ name: string } | { error: string }> {
   if (!coll.locationId) {
     return { error: 'Location is required' }
   }
-  const name = collectionNameForCreate(coll, now)
+  // Named as bulk import and Specimen registration name it: after its barcode when it has no name.
+  const name = newCollectionName(coll)
+  if (!name) {
+    return { error: 'A new collection needs a name or a barcode' }
+  }
   try {
     const input = { name, locationId: coll.locationId, barcode: coll.barcode }
     if (coll.containerType === 'micronix_tube') {
@@ -74,7 +71,6 @@ export async function createMissingCollections(
   missing: MissingDerivationCollection[],
   gateway: DerivationsBulkGateway,
   emit: (event: DerivationsBulkEvent) => void,
-  now = Date.now(),
 ): Promise<{ allSuccess: boolean }> {
   if (missing.length === 0) return { allSuccess: true }
 
@@ -83,7 +79,7 @@ export async function createMissingCollections(
     const coll = missing[i]
     if (coll.status === 'success') continue
     emit({ type: 'COLLECTION_PATCHED', index: i, patch: { status: 'creating' } })
-    const result = await createOneMissingCollection(gateway, coll, now)
+    const result = await createOneMissingCollection(gateway, coll)
     if ('name' in result) {
       emit({ type: 'COLLECTION_PATCHED', index: i, patch: { status: 'success', name: result.name } })
     } else {

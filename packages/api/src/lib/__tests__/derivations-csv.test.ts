@@ -10,8 +10,11 @@ import {
   specimen,
   studySubject,
   micronixTube,
+  micronixPlate,
 } from '../../db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, or } from 'drizzle-orm'
+import { newCollectionName } from '@sampledb/contract'
+import { runBulkCombinedImport } from '../bulk-combined-import'
 import {
   createTestStudy,
   createTestStudySubject,
@@ -560,6 +563,118 @@ describe('derivations-csv', () => {
       const result = await validateDerivationsCsv(testDb, csv, { ...settings, containerType: '' })
 
       expect(result.rows[0].error).toBe('box_name or bag_name is required for paper')
+    })
+  })
+
+  describe('Collections named by barcode across imports', () => {
+    let testDb: Database
+    let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
+
+    beforeEach(async () => {
+      const setup = await setupTestDatabase()
+      testDb = setup.db
+      sqlite = setup.sqlite
+    })
+
+    afterEach(() => {
+      if (sqlite) cleanupTestDatabase(sqlite)
+    })
+
+    const settings = {
+      derivationType: 'Extraction',
+      specimenTypeName: 'DNA',
+      containerType: 'micronix_tube' as const,
+      protocol: 'Standard',
+      derivationDate: '2025-01-15',
+    }
+
+    /** A parent tube to derive from, and a study and location bulk import can register into. */
+    async function seed() {
+      const now = utcNow()
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(testDb, { micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' } })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+      const study = await createTestStudy(testDb, { title: 'Deriv Study', shortCode: 'DERIV' })
+      const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'Subj1' })
+      const dnaType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      await testDb.insert(specimenTypeContainerType).values({ specimenTypeId: dnaType.id, containerType: 'micronix_tube', created: now })
+      const [parentSpecimen] = await testDb
+        .insert(specimen)
+        .values({ studySubjectId: subject.id, specimenTypeId: dnaType.id, collectionDate: '2025-01-01', created: now, lastUpdated: now })
+        .returning()
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const loc = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id), canContainCollections: true })
+      const parentPlate = await createTestMicronixPlate(testDb, { name: 'ParentPlate', locationId: loc.id })
+      const [parent] = await testDb
+        .insert(storageContainer)
+        .values({ specimenId: parentSpecimen.id, unitId: unit.id, totalQuantity: 10, remainingQuantity: 10, created: now, lastUpdated: now })
+        .returning()
+      await createTestMicronixTube(testDb, { containerId: parent.id, collectionId: parentPlate.id, position: 'A01', barcode: 'MT-PARENT' })
+      return { parent, locationId: loc.id }
+    }
+
+    /** Register one DNA tube on a plate through bulk import. */
+    async function bulkImportTube(barcode: string, collection: { name?: string; barcode?: string; locationId: number; position: string }) {
+      return runBulkCombinedImport(
+        testDb,
+        {
+          studyShortCode: 'DERIV',
+          atomicMode: 'full_file',
+          subjects: [
+            {
+              subjectName: 'Subj1',
+              specimens: [
+                {
+                  specimenTypeName: 'DNA',
+                  collectionDate: '2025-02-01',
+                  container: { containerType: 'micronix_tube', barcode, collection: { type: 'micronix_plate', ...collection } },
+                },
+              ],
+            },
+          ],
+        },
+        undefined,
+      )
+    }
+
+    const platesCalled = (identifier: string) =>
+      testDb
+        .select({ id: micronixPlate.id, name: micronixPlate.name, barcode: micronixPlate.barcode })
+        .from(micronixPlate)
+        .where(or(eq(micronixPlate.name, identifier), eq(micronixPlate.barcode, identifier)))
+        .all()
+
+    it('finds the plate bulk import created from a barcode alone, by its name or its barcode', async () => {
+      const { parent, locationId } = await seed()
+      await bulkImportTube('MT-BULK', { barcode: 'PB-1', locationId, position: 'A01' })
+      expect(platesCalled('PB-1')).toEqual([expect.objectContaining({ name: 'PB-1', barcode: 'PB-1' })])
+
+      const byName = await validateDerivationsCsv(testDb, ['parent_container_id,plate_name,position,container_barcode', `${parent.id},PB-1,B01,C1`].join('\n'), settings)
+      const byBarcode = await validateDerivationsCsv(testDb, ['parent_container_id,collection_barcode,position,container_barcode', `${parent.id},PB-1,B01,C1`].join('\n'), settings)
+
+      expect(byName.collections).toEqual([expect.objectContaining({ name: 'PB-1', status: 'existing' })])
+      expect(byBarcode.collections).toEqual([expect.objectContaining({ barcode: 'PB-1', status: 'existing' })])
+    })
+
+    it('lets bulk import find the plate the Derivations import creates from a barcode alone', async () => {
+      const { parent, locationId } = await seed()
+      const barcodeOnlyCsv = ['parent_container_id,collection_barcode,position,container_barcode', `${parent.id},PB-2,A01,C1`].join('\n')
+      const validation = await validateDerivationsCsv(testDb, barcodeOnlyCsv, settings)
+      const [missing] = validation.collections
+      expect(missing).toMatchObject({ barcode: 'PB-2', status: 'will_be_created' })
+      // The Derivations import wizard creates each missing Collection under this name.
+      await createTestMicronixPlate(testDb, { name: newCollectionName(missing)!, barcode: missing.barcode, locationId })
+      const derived = await importDerivationsFromCsv(testDb, barcodeOnlyCsv, { settings })
+      expect(derived.rows).toEqual([expect.objectContaining({ success: true })])
+
+      const byName = await bulkImportTube('MT-BULK-1', { name: 'PB-2', locationId, position: 'A02' })
+      const byBarcode = await bulkImportTube('MT-BULK-2', { barcode: 'PB-2', locationId, position: 'A03' })
+
+      expect(byName.errors ?? []).toEqual([])
+      expect(byBarcode.errors ?? []).toEqual([])
+      expect(platesCalled('PB-2')).toEqual([expect.objectContaining({ name: 'PB-2', barcode: 'PB-2' })])
+      const tubes = await testDb.select({ position: micronixTube.position }).from(micronixTube).where(eq(micronixTube.collectionId, platesCalled('PB-2')[0].id)).all()
+      expect(tubes.map((t) => t.position).sort()).toEqual(['A01', 'A02', 'A03'])
     })
   })
 })
