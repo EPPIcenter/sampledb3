@@ -55,8 +55,9 @@ export const adminApi = {
     api.patch<{ message: string }>(`/auth/users/${id}/password`, { password }),
   getUserSessions: (userId: number) =>
     api.get<{ sessions: UserSession[] }>(`/auth/users/${userId}/sessions`),
-  revokeSession: (sessionId: string) =>
-    api.delete<{ message: string }>(`/auth/sessions/${sessionId}`),
+  /** Revoke a session by its public id (`UserSession.id`). */
+  revokeSession: (publicSessionId: string) =>
+    api.delete<{ message: string }>(`/auth/sessions/${encodeURIComponent(publicSessionId)}`),
   approveUser: (id: number) =>
     api.patch<{ user: User }>(`/auth/users/${id}/approve`),
   getSystemStats: () =>

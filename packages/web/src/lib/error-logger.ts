@@ -1,3 +1,4 @@
+import { fitErrorReportToLimits } from '@sampledb/contract'
 import { axiosApi, getLastResponseRequestId } from './api/client'
 
 export interface FrontendError {
@@ -7,6 +8,9 @@ export interface FrontendError {
   level: 'error' | 'warning' | 'info'
   context?: Record<string, unknown>
 }
+
+/** Context entries a report keeps when its context is over the API's size cap. */
+const REPORT_CONTEXT_KEYS_KEPT_WHEN_TRUNCATED = ['requestId', 'userAgent', 'url', 'timestamp'] as const
 
 // Error queue to batch errors and avoid overwhelming the server
 const errorQueue: FrontendError[] = []
@@ -23,19 +27,24 @@ async function sendError(error: FrontendError): Promise<void> {
     getLastResponseRequestId()
 
   try {
-    await axiosApi.post('/error-logs', {
-      message: error.message,
-      stack: error.stack,
-      errorCode: error.errorCode,
-      level: error.level,
-      context: {
-        ...error.context,
-        ...(requestId ? { requestId } : {}),
-        userAgent: navigator.userAgent,
-        url: window.location.href,
-        timestamp: new Date().toISOString(),
+    // The API rejects a report over its size caps, so cut it to fit rather than lose it.
+    const report = fitErrorReportToLimits(
+      {
+        message: error.message,
+        stack: error.stack,
+        errorCode: error.errorCode,
+        level: error.level,
+        context: {
+          ...error.context,
+          ...(requestId ? { requestId } : {}),
+          userAgent: navigator.userAgent,
+          url: window.location.href,
+          timestamp: new Date().toISOString(),
+        },
       },
-    })
+      REPORT_CONTEXT_KEYS_KEPT_WHEN_TRUNCATED
+    )
+    await axiosApi.post('/error-logs', report)
   } catch (err) {
     // If logging fails, fall back to console
     console.error('[ERROR_LOGGER] Failed to send error to backend:', err)

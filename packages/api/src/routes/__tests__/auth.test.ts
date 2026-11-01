@@ -8,7 +8,7 @@ import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/
 import { users, sessions } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
-import { BCRYPT_COST } from '../../lib/auth/auth-service'
+import { BCRYPT_COST, hashSessionToken } from '../../lib/auth/auth-service'
 import type { Database } from '../../db/client'
 import {
   createTestUser,
@@ -826,12 +826,14 @@ describe('Auth API', () => {
       // Create additional sessions for the user
       await testDb.insert(sessions).values({
         id: 'session1',
+        tokenHash: hashSessionToken('session1-token'),
         userId: testUser.id,
         expiresAt: Math.floor(Date.now() / 1000) + 604800,
       })
 
       await testDb.insert(sessions).values({
         id: 'session2',
+        tokenHash: hashSessionToken('session2-token'),
         userId: testUser.id,
         expiresAt: Math.floor(Date.now() / 1000) + 604800,
       })
@@ -862,7 +864,7 @@ describe('Auth API', () => {
         .all()
 
       expect(remainingSessions.length).toBe(1)
-      expect(remainingSessions[0].id).toBe(currentSessionId)
+      expect(remainingSessions[0].tokenHash).toBe(hashSessionToken(currentSessionId))
     })
   })
 

@@ -1,4 +1,5 @@
-import { eq, and, isNull } from 'drizzle-orm'
+import { eq, and, gt, isNull, ne } from 'drizzle-orm'
+import { createHash, randomBytes } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { nanoid } from 'nanoid'
 import type { Database } from '../../db/client'
@@ -77,23 +78,77 @@ export async function verifyLoginCredentials(
   return user
 }
 
+/**
+ * SHA-256 of a session cookie token, hex encoded. The sessions table stores only this hash, so a
+ * copy of the database or an admin session listing cannot be replayed as a cookie. The token has
+ * 256 bits of entropy, so an unsalted fast hash is enough and keeps the lookup an indexed equality.
+ */
+export function hashSessionToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+/**
+ * Start a session for a user. Returns the cookie token, which is not stored, and the session's
+ * public id, which admins list and revoke by.
+ */
 export async function createUserSession(
   database: Database,
-  userId: number
-): Promise<{ sessionId: string; expiresAt: number; maxAgeSeconds: number }> {
-  const sessionSettings = await getSessionSettings(database)
+  userId: number,
+  settingsDatabase: Database = database
+): Promise<{ sessionToken: string; publicId: string; expiresAt: number; maxAgeSeconds: number }> {
+  const sessionSettings = await getSessionSettings(settingsDatabase)
   if (!sessionSettings) {
     throw new Error('Session settings are not configured. Please run database initialization.')
   }
   const maxAgeSeconds = sessionSettings.maxAgeSeconds
-  const sessionId = nanoid()
+  const sessionToken = randomBytes(32).toString('base64url')
+  const publicId = nanoid()
   const expiresAt = Math.floor(Date.now() / 1000) + maxAgeSeconds
   await database.insert(sessions).values({
-    id: sessionId,
+    id: publicId,
+    tokenHash: hashSessionToken(sessionToken),
     userId,
     expiresAt,
   })
-  return { sessionId, expiresAt, maxAgeSeconds }
+  return { sessionToken, publicId, expiresAt, maxAgeSeconds }
+}
+
+/** The unexpired session a cookie token belongs to, or null. */
+export async function findActiveSessionByToken(
+  database: Database,
+  sessionToken: string
+): Promise<{ id: string; userId: number; expiresAt: number } | null> {
+  return (
+    (await database
+      .select({ id: sessions.id, userId: sessions.userId, expiresAt: sessions.expiresAt })
+      .from(sessions)
+      .where(and(
+        eq(sessions.tokenHash, hashSessionToken(sessionToken)),
+        gt(sessions.expiresAt, Math.floor(Date.now() / 1000))
+      ))
+      .get()) ?? null
+  )
+}
+
+/** End the session a cookie token belongs to, if any. */
+export async function deleteSessionByToken(database: Database, sessionToken: string): Promise<void> {
+  await database.delete(sessions).where(eq(sessions.tokenHash, hashSessionToken(sessionToken)))
+}
+
+/**
+ * End all of a user's sessions, or all but the one a cookie token belongs to when `keepToken`
+ * is given.
+ */
+export async function deleteUserSessions(
+  database: Database,
+  userId: number,
+  keepToken?: string
+): Promise<void> {
+  await database
+    .delete(sessions)
+    .where(keepToken
+      ? and(eq(sessions.userId, userId), ne(sessions.tokenHash, hashSessionToken(keepToken)))
+      : eq(sessions.userId, userId))
 }
 
 export async function registerApprovedUser(
