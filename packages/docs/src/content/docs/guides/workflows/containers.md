@@ -68,7 +68,7 @@ Micronix plate and cryovial box pages include a grid of occupied and empty cells
 
 ## Delete a collection
 
-On a plate, cryovial box, box, or bag (not the sheet-only page), **Delete collection** removes:
+Only administrators can delete a collection. On a plate, cryovial box, box, or bag (not the sheet-only page), **Delete collection** removes:
 
 - The collection
 - Every container in it

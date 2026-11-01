@@ -53,6 +53,7 @@ describe('Collections API', () => {
         password: 'password123',
         role: 'admin',
       },
+      additionalUsers: [{ key: 'member', email: 'member@test.com', password: 'password123', role: 'member' }],
       mount: (app, { db }) => {
         app.route('/api/collections', createCollectionsRoutes(db))
       },
@@ -1095,6 +1096,50 @@ describe('Collections API', () => {
       expect(data.subjectsDeleted).toBe(1)
       const leftSubj = await ctx.db.select().from(studySubject).where(eq(studySubject.id, subject.id)).all()
       expect(leftSubj.length).toBe(0)
+    })
+  })
+  describe('delete-with-contents role policy (admin-only)', () => {
+    async function createEmptyPlate(name: string) {
+      const storageType = await createTestStorageType(ctx.db, { name: `St-${name}` })
+      const loc = await createTestLocation(ctx.db, {
+        name: `Loc-${name}`,
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+      return createTestMicronixPlate(ctx.db, { name, locationId: loc.id })
+    }
+
+    it('returns 403 to a member for the preflight', async () => {
+      const plate = await createEmptyPlate('PlateRolePre')
+      const res = await ctx.request('/api/collections/delete-with-contents/preflight', {
+        method: 'POST',
+        json: { collectionType: 'micronix_plate', id: plate.id },
+        cookie: ctx.cookies.member,
+      })
+      expect(res.status).toBe(403)
+    })
+
+    it('returns 403 to a member and keeps the Collection', async () => {
+      const plate = await createEmptyPlate('PlateRoleDel')
+      const res = await ctx.request('/api/collections/delete-with-contents', {
+        method: 'POST',
+        json: { collectionType: 'micronix_plate', id: plate.id, removeEmptySubjects: false },
+        cookie: ctx.cookies.member,
+      })
+      expect(res.status).toBe(403)
+      const still = await ctx.db.select().from(micronixPlate).where(eq(micronixPlate.id, plate.id)).get()
+      expect(still).toBeDefined()
+    })
+
+    it('lets an admin delete the Collection', async () => {
+      const plate = await createEmptyPlate('PlateRoleAdmin')
+      const res = await ctx.request('/api/collections/delete-with-contents', {
+        method: 'POST',
+        json: { collectionType: 'micronix_plate', id: plate.id, removeEmptySubjects: false },
+      })
+      expect(res.status).toBe(200)
+      const gone = await ctx.db.select().from(micronixPlate).where(eq(micronixPlate.id, plate.id)).get()
+      expect(gone).toBeUndefined()
     })
   })
 })

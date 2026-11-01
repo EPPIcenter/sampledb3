@@ -16,7 +16,7 @@ import {
 } from '../lib/control-name-generation'
 import { ConflictError, handleRouteError, ValidationError } from '../lib/error-handler'
 import type { BloodControlProperties } from '../types/properties'
-import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { deleteBloodControlBatch, deleteSpecimenFromBatch } from '../lib/controls/batch-delete'
@@ -62,6 +62,7 @@ export function createControlsRoutes(database: Database): Hono {
   const controls = new Hono()
   const authMiddleware = createAuthMiddleware(database)
   const memberMiddleware = createMemberMiddleware(database)
+  const adminMiddleware = createAdminMiddleware(database)
 
   // --- Control Batches ---
 
@@ -141,8 +142,8 @@ controls.patch('/batches/:id', memberMiddleware, async (c) => {
   }
 })
 
-// Delete batch and all associated data
-controls.delete('/batches/:id', memberMiddleware, async (c) => {
+// Delete batch and all associated data (admin-only: CONTEXT.md, Roles)
+controls.delete('/batches/:id', adminMiddleware, async (c) => {
   const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 

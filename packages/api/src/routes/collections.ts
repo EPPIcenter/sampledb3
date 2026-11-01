@@ -3,7 +3,7 @@ import type { Database } from '../db/client'
 import { executeMoves, type BatchMoveRequest, type ContainerInfo } from '../lib/container-move'
 import type { BarcodeMatch } from '../lib/identifier-resolution'
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
-import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
 import { deleteCollectionWithContents, preflightCollectionDelete } from '../lib/collection-delete-cascade'
 import { validatePlateScan, inferPlateOrGetReport } from '../lib/plate-scan-validation'
@@ -79,6 +79,7 @@ export function createCollectionsRoutes(database: Database): Hono {
   const collections = new Hono()
   const authMiddleware = createAuthMiddleware(database)
   const memberMiddleware = createMemberMiddleware(database)
+  const adminMiddleware = createAdminMiddleware(database)
 
   collections.get('/plates/micronix/:id', authMiddleware, async (c) => {
     const id = parseInt(requireParam(c, 'id'))
@@ -331,7 +332,8 @@ export function createCollectionsRoutes(database: Database): Hono {
     }
   })
 
-  collections.post('/delete-with-contents/preflight', memberMiddleware, async (c) => {
+  // Admin-only: deleting a Collection with its contents is a destructive action (CONTEXT.md, Roles).
+  collections.post('/delete-with-contents/preflight', adminMiddleware, async (c) => {
     try {
       const parsed = deleteWithContentsBodySchema
         .pick({ collectionType: true, id: true })
@@ -346,7 +348,7 @@ export function createCollectionsRoutes(database: Database): Hono {
     }
   })
 
-  collections.post('/delete-with-contents', memberMiddleware, async (c) => {
+  collections.post('/delete-with-contents', adminMiddleware, async (c) => {
     try {
       const parsed = deleteWithContentsBodySchema.parse(await c.req.json())
       const result = await deleteCollectionWithContents(database, {

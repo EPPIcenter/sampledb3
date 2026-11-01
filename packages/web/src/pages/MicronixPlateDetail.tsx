@@ -17,6 +17,7 @@ import { Link } from 'react-router-dom'
 import CollectionDeleteDialog from '../components/CollectionDeleteDialog'
 import UnplacedContainersSection from '../components/UnplacedContainersSection'
 import { gridAxes } from '@sampledb/contract'
+import CollectionDeleteButton from '../components/CollectionDeleteButton'
 import '../styles/storage.css'
 
 function statusColor(name: string): string {
@@ -205,13 +206,7 @@ export default function MicronixPlateDetail() {
           Micronix Plate {plate.name}
         </h1>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowDeleteCollection(true)}
-            className="shrink-0 px-3 py-1.5 text-sm rounded border text-app-trend-down border-app-trend-down/50 hover:bg-app-trend-down/10"
-          >
-            Delete collection…
-          </button>
+          <CollectionDeleteButton onClick={() => setShowDeleteCollection(true)} />
         </div>
         {plate.barcode && (
           <p className="mt-1 text-sm font-mono" style={{ color: 'rgb(var(--app-text-muted))' }}>Barcode: {plate.barcode}</p>
