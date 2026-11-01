@@ -30,7 +30,8 @@ export function collectionDateFilter(label: string, value: string | null | undef
 
 /**
  * A bound on a created timestamp (stored as `YYYY-MM-DD HH:MM:SS`): YYYY-MM-DD, optionally
- * followed by a time. A `T` separator is stored as a space so it compares with stored values.
+ * followed by a time. The time is written as stored (space separator, seconds) so the bound
+ * compares with stored values as text.
  * Empty or omitted means no bound; anything else throws a `ValidationError` naming `label`.
  */
 export function timestampFilter(label: string, value: string | null | undefined): string | undefined {
@@ -41,5 +42,8 @@ export function timestampFilter(label: string, value: string | null | undefined)
   if (!match || !isIsoCalendarDate(match[1])) {
     throw new ValidationError(`Invalid ${label} '${value}': use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS.`)
   }
-  return match[2] ? `${match[1]} ${match[2]}` : match[1]
+  if (!match[2]) return match[1]
+  // HH:MM means HH:MM:00, so an upper bound includes a row stored at exactly that minute.
+  const time = match[2].length === 5 ? `${match[2]}:00` : match[2]
+  return `${match[1]} ${time}`
 }
