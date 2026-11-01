@@ -42,6 +42,12 @@ function createTablesForLaterMigrations(sqlite: Database): void {
     box_id INTEGER,
     bag_id INTEGER
   )`)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT NOT NULL, created TEXT, approved_at TEXT)`)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    expires_at INTEGER NOT NULL
+  )`)
 }
 
 describe('schema evolution', () => {
@@ -337,6 +343,32 @@ describe('schema evolution', () => {
     expect(() =>
       sqlite.exec(`INSERT INTO qpcr_well_result (qpcr_run_id, well_position, target_name) VALUES (1, 'A01', 'T')`),
     ).toThrow(/UNIQUE/)
+    sqlite.close()
+  })
+
+  it('migration 009 drops sessions stored by cookie value and stores sessions by token hash', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (7)')
+    createTablesForLaterMigrations(sqlite)
+    sqlite.exec(`INSERT INTO users (id, email) VALUES (1, 'a@test.com')`)
+    sqlite.exec(`INSERT INTO sessions (id, user_id, expires_at) VALUES ('raw-cookie-value', 1, 9999999999)`)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(sqlite.prepare('SELECT COUNT(*) AS n FROM sessions').get()).toEqual({ n: 0 })
+    const columns = (sqlite.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string; notnull: number }>)
+      .map((column) => `${column.name}${column.notnull ? ' NOT NULL' : ''}`)
+    expect(columns).toEqual(['id', 'token_hash NOT NULL', 'user_id NOT NULL', 'expires_at NOT NULL'])
+    sqlite.exec(`INSERT INTO sessions (id, token_hash, user_id, expires_at) VALUES ('p1', 'h1', 1, 1)`)
+    expect(() =>
+      sqlite.exec(`INSERT INTO sessions (id, token_hash, user_id, expires_at) VALUES ('p2', 'h1', 1, 1)`),
+    ).toThrow(/UNIQUE/)
+    const plan = sqlite
+      .prepare(`EXPLAIN QUERY PLAN SELECT id FROM sessions WHERE token_hash = 'h1'`)
+      .all() as Array<{ detail: string }>
+    expect(plan.map((row) => row.detail).join(' ')).toContain('sessions_token_hash_idx')
     sqlite.close()
   })
 

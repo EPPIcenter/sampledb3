@@ -1,9 +1,11 @@
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { z } from 'zod'
+import { ERROR_REPORT_LIMITS, errorReportSchema } from '@sampledb/contract'
 import type { Database } from '../db/client'
 import { errorLogs } from '../db/schema'
 import { logFrontendError, cleanupOldErrorLogs, type ErrorLogContext } from '../lib/error-logger'
-import { handleRouteError } from '../lib/error-handler'
+import { handleRouteError, PayloadTooLargeError } from '../lib/error-handler'
 import { eq, and, desc, sql, or } from 'drizzle-orm'
 import { createAdminMiddleware, createAuthMiddleware, createOptionalAuthMiddleware } from '../middleware/auth'
 import { rateLimit } from '../middleware/rate-limit'
@@ -11,14 +13,9 @@ import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { likeContains } from '../lib/sql-like'
 
-// Schema for frontend error submission
-const frontendErrorSchema = z.object({
-  message: z.string(),
-  stack: z.string().optional(),
-  errorCode: z.string().optional(),
-  level: z.enum(['error', 'warning', 'info']).default('error'),
-  context: z.record(z.string(), z.unknown()).optional(),
-})
+/** Header values copied into an error log row are cut to these lengths. */
+const MAX_LOGGED_URL_LENGTH = 2_000
+const MAX_LOGGED_USER_AGENT_LENGTH = 500
 
 // Schema for error log query parameters
 const errorLogQuerySchema = z.object({
@@ -64,17 +61,24 @@ export function createErrorLogsRoutes(database: Database): Hono {
 
   // POST /api/error-logs - Accept frontend error reports
   // Use optional auth so errors can be logged even if session expired
-  // Rate limited to prevent error-log flooding (60 requests per minute per IP)
-  errorLogsRoutes.post('/', rateLimit(60, 60 * 1000), optionalAuthMiddleware, async (c) => {
+  // Rate limited to prevent error-log flooding (60 requests per minute per IP), and capped in
+  // size (ERROR_REPORT_LIMITS): 413 for an oversized body, 400 for an oversized field.
+  const errorReportBodyLimit = bodyLimit({
+    maxSize: ERROR_REPORT_LIMITS.bodyBytes,
+    onError: () => {
+      throw new PayloadTooLargeError(`Error report body is over ${ERROR_REPORT_LIMITS.bodyBytes} bytes`)
+    },
+  })
+  errorLogsRoutes.post('/', rateLimit(60, 60 * 1000), errorReportBodyLimit, optionalAuthMiddleware, async (c) => {
     try {
       const body = await c.req.json()
-      const errorData = frontendErrorSchema.parse(body)
+      const errorData = errorReportSchema.parse(body)
       
       // Extract context from request
       // User may be undefined if not authenticated (e.g., session expired)
       const user = c.get('user')
-      const url = c.req.header('referer') || c.req.url
-      const userAgent = c.req.header('user-agent')
+      const url = (c.req.header('referer') || c.req.url).slice(0, MAX_LOGGED_URL_LENGTH)
+      const userAgent = c.req.header('user-agent')?.slice(0, MAX_LOGGED_USER_AGENT_LENGTH)
       
       const errorContext: ErrorLogContext = {
         userId: user?.id,

@@ -55,11 +55,17 @@ export const users = sqliteTable('users', {
   approvedAt: text('approved_at'), // null = pending approval; non-null = approved
 })
 
+// A session's cookie value is a random token stored only as its SHA-256 hash in token_hash.
+// id is a public id for listing and revoking; it does not authenticate.
 export const sessions = sqliteTable('sessions', {
   id: text('id').primaryKey(),
+  tokenHash: text('token_hash').notNull(),
   userId: integer('user_id').notNull().references(() => users.id),
   expiresAt: integer('expires_at').notNull(),
-})
+}, (table) => ({
+  tokenHashIdx: uniqueIndex('sessions_token_hash_idx').on(table.tokenHash),
+  userIdIdx: index('sessions_user_id_idx').on(table.userId),
+}))
 
 // Tags and Units (Standardized System)
 export const tag = sqliteTable('tag', {
