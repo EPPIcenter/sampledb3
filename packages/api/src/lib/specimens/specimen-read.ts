@@ -3,7 +3,7 @@ import { specimen, storageContainer, studySubject, study, specimenType, controlB
 import { eq, and, or, sql } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../constants'
 import { resolveContainerByBarcode } from '../identifier-resolution'
-import { dateToUpperBound } from '../sql-helpers'
+import { dateRangeConditions } from '../sql-helpers'
 import { likeContains } from '../sql-like'
 
 export type ListSpecimensQuery = {
@@ -148,12 +148,7 @@ export async function listSpecimens(database: Database, query: ListSpecimensQuer
   if (collectionDateTo) {
     conditions.push(sql`${specimen.collectionDate} <= ${collectionDateTo}`)
   }
-  if (createdFrom) {
-    conditions.push(sql`${specimen.created} >= ${createdFrom}`)
-  }
-  if (createdTo) {
-    conditions.push(dateToUpperBound(specimen.created, createdTo))
-  }
+  conditions.push(...dateRangeConditions(specimen.created, createdFrom, createdTo))
 
   if (barcode) {
     const containerId = await resolveContainerByBarcode(database, barcode)

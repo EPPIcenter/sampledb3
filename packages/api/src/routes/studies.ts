@@ -60,7 +60,15 @@ studies.get('/', authMiddleware, async (c) => {
     const page = validatePage(c.req.query('page'))
     const limit = await validateLimit(database, c.req.query('limit'))
 
-    return c.json(await listStudies(database, { search, page, limit }))
+    return c.json(
+      await listStudies(database, {
+        search,
+        createdFrom: c.req.query('created_from'),
+        createdTo: c.req.query('created_to'),
+        page,
+        limit,
+      }),
+    )
   } catch (error) {
     return handleRouteError(error, c)
   }
