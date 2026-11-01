@@ -37,17 +37,20 @@ vi.mock('../../lib/api/controls', async () => {
   })
 })
 
+const userState = vi.hoisted(() => ({ isAdmin: false }))
+
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')
   return {
     ...actual,
-    useUser: () => ({ canWrite: true }),
+    useUser: () => ({ canWrite: true, isAdmin: userState.isAdmin }),
   }
 })
 
 describe('ControlBatchDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    userState.isAdmin = false
   })
 
   it('shows batch content after load', async () => {
@@ -55,5 +58,17 @@ describe('ControlBatchDetail', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /Batch 1|Control Def|blood/i })).toBeInTheDocument()
     }, { timeout: 3000 })
+  })
+
+  it('shows Delete Batch to an admin', async () => {
+    userState.isAdmin = true
+    await render(<ControlBatchDetail />)
+    expect(await screen.findByRole('button', { name: /Delete Batch/i })).toBeInTheDocument()
+  })
+
+  it('hides Delete Batch from a member who can still edit the batch', async () => {
+    await render(<ControlBatchDetail />)
+    expect(await screen.findByRole('button', { name: /^Edit$/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Delete Batch/i })).not.toBeInTheDocument()
   })
 })

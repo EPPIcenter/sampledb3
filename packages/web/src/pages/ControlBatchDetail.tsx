@@ -19,7 +19,7 @@ export default function ControlBatchDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { canWrite } = useUser()
+  const { canWrite, isAdmin } = useUser()
   const batchId = id != null ? parseInt(id, 10) : NaN
   const summaryQuery = useControlBatchSummary(batchId)
   const summaryStatus = fromQuery(summaryQuery)
@@ -279,9 +279,12 @@ export default function ControlBatchDetail() {
                 <button onClick={() => setCreateSpecimenModalOpen(true)} className="blood-controls-btn-primary px-4 py-2">
                   Add Single Specimen
                 </button>
-                <button onClick={handleDeleteBatch} disabled={deleting} className="blood-controls-btn-danger px-4 py-2">
-                  {deleting ? 'Deleting...' : 'Delete Batch'}
-                </button>
+                {/* Deleting a Control batch removes its Specimens: admin-only (CONTEXT.md, Roles) */}
+                {isAdmin && (
+                  <button onClick={handleDeleteBatch} disabled={deleting} className="blood-controls-btn-danger px-4 py-2">
+                    {deleting ? 'Deleting...' : 'Delete Batch'}
+                  </button>
+                )}
               </div>
             )}
           </div>

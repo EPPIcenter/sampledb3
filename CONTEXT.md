@@ -14,6 +14,32 @@ _Avoid_: End user, operator (without context)
 Lab staff responsible for long-term specimen storage, inventory accuracy, and sample retrieval.
 _Avoid_: Curator (unless that is your org's term)
 
+### Roles
+
+Every account has one role. The API enforces it on each route, and the web app hides actions the role cannot take.
+
+**Admin**:
+Can do everything a **Member** can, plus manage users, settings, **Reference data**, **Locations**, and every **Destructive action**.
+
+**Member**:
+Lab staff who create and change **Operational data**: register, store, move, derive, and import. A member cannot take a **Destructive action**, except deleting a tutorial **Study** (short code starting with TUT).
+_Avoid_: User (every role is a user)
+
+**Viewer**:
+Can read data and run exports, but not create or change anything.
+
+**Destructive action**:
+An action that removes or rewrites recorded **Operational data** or configuration in bulk, or that the app cannot undo. Admin-only. Today these are:
+
+- Deleting a **Collection** with its contents, and its preflight (removes every **Container** in it, orphaned **Specimens**, and optionally emptied **Subjects**)
+- Deleting an empty **Collection** (Data Integrity)
+- Deleting a **Control batch** (removes its **Specimens** and their **Containers**)
+- Editing or deleting a **Derivation** record
+- Deleting a non-tutorial **Study** (removes its **Subjects**, **Specimens**, and **Containers**)
+- Deleting **Reference data**, a **Location**, or a user account
+
+_Avoid_: Calling an ordinary edit (renaming a **Collection**, changing a **Container**'s quantity, removing a **Tag** from a **Container**) a destructive action.
+
 ### Provenance hierarchy
 
 **Study → Subject → Specimen** is the primary provenance chain. Most specimens trace back to a study participant or sample source through this path.

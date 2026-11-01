@@ -67,6 +67,10 @@ Manual: Batch Info, Specimen Types, CSV Upload, Containers, Review.
 
 You can add specimens later from the batch detail page with **Add Specimens**, or import with source type **Control** and the batch name.
 
+## Delete a batch
+
+Only administrators can delete a batch. On the batch page, click **Delete Batch** and confirm. SampleDB deletes the batch, its specimens, and their containers. This cannot be undone.
+
 ## Use a control as a specimen source
 
 On specimen registration, select **Control** as source type, then the batch. Complete specimen type, optional collection date, and container fields as usual.
