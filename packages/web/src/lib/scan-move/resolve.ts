@@ -61,11 +61,18 @@ export function groupResolveResults(
   const wrongTypeFileIndexes = new Set<number>()
 
   for (const response of responseContainers) {
-    if (!response.container) continue
     const key = variant.identifierKeyFromResponse(response.identifier)
     if (key === null) continue
     const entry = entryByKey.get(key)
     if (!entry) continue
+    if (!response.container) {
+      // The server found several Containers for this identifier and won't pick one.
+      if (response.error !== undefined) {
+        resolvedKeys.add(key)
+        outcomes[entry.fileIndex].errors.push({ row: entry.rowIndex + 1, error: response.error })
+      }
+      continue
+    }
     resolvedKeys.add(key)
     outcomes[entry.fileIndex].resolvedContainers.push({
       identifierKey: key,

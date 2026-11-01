@@ -101,6 +101,7 @@ After execution, micronix and cryovial results are per file, with each error und
 ## Errors
 
 - Lookup failed (for example a server error during Resolve): the message appears on each file. Click **Next: Resolve Containers** again to retry with the same files.
+- Ambiguous barcode on Resolve: the barcode is on more than one container, and the error lists them. The move won't pick one. Fix the barcode, or move that tube some other way.
 - Unresolved micronix barcodes: they are listed on Resolve. Click **Back**, fix the CSV, then **Next: Resolve Containers**. You do not need to recreate destination plates that already exist.
 - Relocation error on Upload (tube at an empty well not relocated): every tube currently on the destination plate must stay in place (barcode in that well) or appear at another well in the same batch.
 - Occupied destination at execute: adjust positions or use a different atomicity mode.

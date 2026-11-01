@@ -182,6 +182,8 @@ export interface ScanMoveVariant {
 export interface ScanMoveResolveResponseEntry {
   identifier: unknown
   container: ScanMoveContainerInfo | null
+  /** Set when the identifier matched more than one Container (an ambiguous barcode). */
+  error?: string
 }
 
 /**

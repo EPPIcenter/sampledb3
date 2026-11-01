@@ -305,6 +305,48 @@ describe('Specimen registration', () => {
     )
   })
 
+  describe('tube barcodes across types', () => {
+    const cryovial = (barcode: string, position: string): RegistrationContainer => ({
+      containerType: 'cryovial_tube',
+      barcode,
+      collection: { type: 'cryovial_box', name: 'CB1', locationId, position },
+    })
+
+    it('rejects a micronix barcode a cryovial tube already has, ignoring case', async () => {
+      await registerSpecimens(db, [entry([cryovial('CV-9', 'A01')])])
+
+      const error = await rejection([entry([tube('cv-9', { name: 'P1', position: 'A01' })])])
+
+      expect(error.errors).toEqual([
+        { entryIndex: 0, containerIndex: 0, field: 'barcode', message: "Barcode 'cv-9' already exists as 'CV-9'. Use a different barcode." },
+      ])
+      expect(await count(storageContainer)).toBe(1)
+    })
+
+    it('rejects a cryovial barcode a micronix tube already has', async () => {
+      await registerSpecimens(db, [entry([tube('MX-9', { name: 'P1', position: 'A01' })])])
+
+      const error = await rejection([entry([cryovial('MX-9', 'A01')])])
+
+      expect(error.errors).toEqual([
+        { entryIndex: 0, containerIndex: 0, field: 'barcode', message: "Barcode 'MX-9' already exists. Use a different barcode." },
+      ])
+    })
+
+    it('rejects one barcode on two tube types in the same request', async () => {
+      const error = await rejection([entry([tube('X1', { name: 'P1', position: 'A01' }), cryovial('x1', 'A01')])])
+
+      expect(error.errors).toEqual([
+        {
+          entryIndex: 0,
+          containerIndex: 1,
+          field: 'barcode',
+          message: "Barcode 'x1' is used more than once in this request. Each barcode must be unique.",
+        },
+      ])
+    })
+  })
+
   it('keys a missing position to the position field', async () => {
     const error = await rejection([entry([tube('T1', { name: 'P1' })])])
 

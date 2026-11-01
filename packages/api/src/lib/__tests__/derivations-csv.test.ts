@@ -21,6 +21,8 @@ import {
   createTestLocation,
   createTestMicronixPlate,
   createTestMicronixTube,
+  createTestCryovialBox,
+  createTestCryovialTube,
   createTestBag,
   createTestSpecimen,
   createTestStorageContainer,
@@ -383,6 +385,42 @@ describe('derivations-csv', () => {
       expect(good.rows[0]?.success).toBe(true)
       const child = await testDb.select().from(micronixTube).where(eq(micronixTube.barcode, 'C1')).get()
       expect(child?.position).toBe('B01')
+    })
+
+    /** A cryovial tube with `barcode`, on the parent's Specimen. */
+    async function addCryovial(seed: Awaited<ReturnType<typeof seedParent>>, barcode: string) {
+      const cryoBox = await createTestCryovialBox(testDb, { name: 'BoxDef', locationId: seed.loc.id })
+      const [sc] = await testDb
+        .insert(storageContainer)
+        .values({ specimenId: seed.parent.specimenId, unitId: seed.unit.id, totalQuantity: 5, remainingQuantity: 5 })
+        .returning()
+      await createTestCryovialTube(testDb, { containerId: sc.id, collectionId: cryoBox.id, barcode, position: 'A01' })
+      return sc
+    }
+
+    it('rejects a row whose parent barcode is on several Containers instead of drawing from one', async () => {
+      const seed = await seedParent()
+      const cryovial = await addCryovial(seed, 'MT-PARENT')
+      const csv = ['parent_container_barcode,plate_name,position,container_barcode', 'MT-PARENT,PlateDef,B01,C1'].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows[0].valid).toBe(false)
+      expect(result.rows[0].error).toBe(
+        `Ambiguous barcode 'MT-PARENT': it matches 2 containers (container ${seed.parent.id} (micronix_tube in PlateDef A01), ` +
+          `container ${cryovial.id} (cryovial_tube in BoxDef A01)). Identify the container by its id or position instead.`,
+      )
+    })
+
+    it('rejects a child barcode another tube type already has, ignoring case', async () => {
+      const seed = await seedParent()
+      await addCryovial(seed, 'cv-777')
+      const csv = [header, `${seed.parent.id},PlateDef,B01,CV-777`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows[0].valid).toBe(false)
+      expect(result.rows[0].error).toMatch(/already used for another container/)
     })
 
     it('warns about a mismatched source type even when the first row has no parent', async () => {

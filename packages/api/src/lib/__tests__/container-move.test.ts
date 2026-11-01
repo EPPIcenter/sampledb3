@@ -13,10 +13,13 @@ import {
   createTestSheet,
   createTestStorageContainer,
   createTestPaper,
+  createTestCryovialBox,
+  createTestCryovialTube,
+  createTestMicronixTube,
 } from '../../__tests__/helpers/factories'
+import { resolveContainerByBarcode } from '../identifier-resolution'
 import {
   resolveContainerByPosition,
-  resolveContainerByBarcode,
   resolveContainerByIdentifier,
   inferCollectionTypeFromContainers,
   executeMoves,
@@ -472,6 +475,47 @@ describe('container-move', () => {
 
       const movedToA02 = await resolveContainerByPosition(testDb, 'BestEffortPlate', 'micronix_plate', 'A02')
       expect(movedToA02?.barcode).toBe('MT-BESTEFFORT-001')
+    })
+  })
+
+  describe('executeMoves with an ambiguous barcode', () => {
+    it('fails the row and lists every candidate instead of moving one of them', async () => {
+      const storageType = await createTestStorageType(testDb, { name: 'FreezerAmbiguous' })
+      const location = await createTestLocation(testDb, { name: 'LocAmbiguous', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(testDb, { name: 'AmbPlate', locationId: location.id })
+      const cryoBox = await createTestCryovialBox(testDb, { name: 'AmbBox', locationId: location.id })
+      const micronix = await createTestStorageContainer(testDb, {})
+      const cryovial = await createTestStorageContainer(testDb, { unitId: micronix.unitId, specimenId: micronix.specimenId })
+      const other = await createTestStorageContainer(testDb, { unitId: micronix.unitId, specimenId: micronix.specimenId })
+      await createTestMicronixTube(testDb, { containerId: micronix.id, collectionId: plate.id, barcode: 'SHARED', position: 'A01' })
+      await createTestCryovialTube(testDb, { containerId: cryovial.id, collectionId: cryoBox.id, barcode: 'SHARED', position: 'A01' })
+      await createTestMicronixTube(testDb, { containerId: other.id, collectionId: plate.id, barcode: 'UNIQUE-1', position: 'A02' })
+
+      const result = await executeMoves(testDb, {
+        atomicMode: 'best_effort',
+        mappings: [{ fromCollectionName: 'AmbPlate', toCollectionName: 'AmbPlate' }],
+        moves: [
+          { identifier: { type: 'barcode', barcode: 'SHARED' }, targetPosition: 'B01' },
+          { identifier: { type: 'barcode', barcode: 'UNIQUE-1' }, targetPosition: 'B02' },
+        ],
+      })
+
+      expect(result).toEqual({
+        success: false,
+        moved: 1,
+        errors: [
+          {
+            row: 1,
+            error:
+              `Ambiguous barcode 'SHARED': it matches 2 containers (container ${micronix.id} (micronix_tube in AmbPlate A01), ` +
+              `container ${cryovial.id} (cryovial_tube in AmbBox A01)). Identify the container by its id or position instead.`,
+          },
+        ],
+      })
+      expect((await resolveContainerByIdentifier(testDb, { type: 'container_id', containerId: micronix.id }))?.currentPosition).toBe('A01')
+      expect((await resolveContainerByIdentifier(testDb, { type: 'container_id', containerId: cryovial.id }))?.currentPosition).toBe('A01')
+      // A container id still resolves a tube whose barcode is shared.
+      expect((await resolveContainerByIdentifier(testDb, { type: 'container_id', containerId: micronix.id }))?.containerId).toBe(micronix.id)
     })
   })
 

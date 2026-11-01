@@ -69,9 +69,12 @@ export const adminApi = {
   getIntegrityReport: () =>
     api.get<IntegrityReport>('/admin/data-audit/integrity-report'),
 }
+/** Tubes whose barcodes are equal ignoring case and surrounding whitespace. */
 export interface DuplicateBarcodeItem {
   barcode: string
-  containerType: 'micronix_tube'
+  /** Every stored spelling in the group; more than one means case or whitespace variants. */
+  variants: string[]
+  containerTypes: Array<'micronix_tube' | 'cryovial_tube'>
   ids: number[]
 }
 

@@ -21,7 +21,8 @@ import {
   validateContainerTypeForSpecimenType,
   validateUnitForContainerType,
 } from '../validation'
-import { GRID_COLLECTION_OF, TUBE_TABLES } from './tables'
+import { GRID_COLLECTION_OF } from './tables'
+import { findTubesUsingBarcode } from '../identifier-resolution'
 import { CollectionPlanner, targetKey, type CollectionTarget, type GridCollectionType, type PlannedCollection } from './collections'
 import { validateContainerWriteFields } from './container-fields'
 import type { RegistrationContainer, RegistrationEntry, RegistrationError, RegistrationSource } from './types'
@@ -89,14 +90,15 @@ function specimenIdentityKey(identity: SpecimenIdentity): string {
 
 /** Something a request may use only once. */
 type Claim =
-  | { kind: 'barcode'; containerType: 'micronix_tube' | 'cryovial_tube'; barcode: string }
+  | { kind: 'barcode'; barcode: string }
   | { kind: 'position'; gridType: GridCollectionType; collection: CollectionTarget; position: string }
   | { kind: 'sublabel'; sheet: CollectionTarget; sublabel: string }
 
 function claimKey(claim: Claim): string {
   switch (claim.kind) {
     case 'barcode':
-      return `barcode:${claim.containerType}:${claim.barcode}`
+      // Tube barcodes are unique across types and case.
+      return `barcode:${claim.barcode.toLowerCase()}`
     case 'position':
       return `position:${claim.gridType}:${targetKey(claim.collection)}:${claim.position}`
     case 'sublabel':
@@ -313,10 +315,13 @@ async function planContainer(
 
     const barcode = 'barcode' in input ? input.barcode?.trim() : undefined
     if (barcode && (input.containerType === 'micronix_tube' || input.containerType === 'cryovial_tube')) {
-      const table = TUBE_TABLES[input.containerType]
-      const taken = await database.select({ id: table.id }).from(table).where(eq(table.barcode, barcode)).get()
-      if (taken) problems.push({ field: 'barcode', message: `Barcode '${barcode}' already exists. Use a different barcode.` })
-      if (!claims.take({ kind: 'barcode', containerType: input.containerType, barcode })) {
+      // A tube barcode must be new across every tube type, ignoring case and whitespace.
+      const taken = await findTubesUsingBarcode(database, barcode)
+      if (taken.length > 0) {
+        const asVariant = taken.some((match) => match.barcode === barcode) ? '' : ` as '${taken[0].barcode}'`
+        problems.push({ field: 'barcode', message: `Barcode '${barcode}' already exists${asVariant}. Use a different barcode.` })
+      }
+      if (!claims.take({ kind: 'barcode', barcode })) {
         problems.push({
           field: 'barcode',
           message: `Barcode '${barcode}' is used more than once in ${claims.inputName}. Each barcode must be unique.`,

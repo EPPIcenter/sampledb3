@@ -455,6 +455,13 @@ describe('Containers API', () => {
       return id
     }
 
+    async function seedCryovial(barcode: string, position: string) {
+      const cryoBox = await createTestCryovialBox(ctx.db, { name: `BOX-${barcode}-${position}`, locationId })
+      const id = await seedContainer()
+      await createTestCryovialTube(ctx.db, { containerId: id, collectionId: cryoBox.id, barcode, position })
+      return id
+    }
+
     async function seedPaper(sublabel: string) {
       const boxRecord = await createTestBox(ctx.db, { name: `BX-${sublabel}`, locationId })
       const sheetRecord = await createTestSheet(ctx.db, { name: 'S1', boxId: boxRecord.id })
@@ -525,7 +532,7 @@ describe('Containers API', () => {
       const id = await seedMicronix('MX-SELF', 'A01')
       // The check misses the conflict (as when another request takes the barcode first), so the
       // UNIQUE constraint fails on the last write of the edit.
-      vi.spyOn(identifierResolution, 'resolveContainerByBarcode').mockResolvedValue(null)
+      vi.spyOn(identifierResolution, 'findTubesUsingBarcode').mockResolvedValue([])
 
       const res = await ctx.request(`/api/containers/${id}`, {
         method: 'PATCH',
@@ -535,6 +542,39 @@ describe('Containers API', () => {
       expect(res.status).toBe(409)
       expect(((await res.json()) as { errorCode: string }).errorCode).toBe('CONFLICT')
       await expectUnchanged(id)
+    })
+
+    it('saves a Container whose unchanged barcode other tubes already share', async () => {
+      await seedCryovial('NA', 'A01')
+      const id = await seedCryovial('NA', 'A02')
+
+      const res = await ctx.request(`/api/containers/${id}`, {
+        method: 'PATCH',
+        json: { comment: 'changed', barcode: 'NA' },
+      })
+
+      expect(res.status).toBe(200)
+      const row = await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, id)).get()
+      expect(row?.comment).toBe('changed')
+    })
+
+    it('returns 400 for a barcode another tube type has in a different case and leaves the Container unchanged', async () => {
+      const takenBy = await seedCryovial('CV-1', 'A01')
+      const id = await seedMicronix('MX-OWN', 'A01')
+
+      const res = await ctx.request(`/api/containers/${id}`, {
+        method: 'PATCH',
+        json: { comment: 'changed', remainingQuantity: 0.5, tagIds: [otherTagId], barcode: 'cv-1' },
+      })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({
+        error: "Barcode 'cv-1' is already in use as 'CV-1'",
+        details: { containerIds: [takenBy] },
+      })
+      await expectUnchanged(id)
+      const tube = await ctx.db.select().from(micronixTube).where(eq(micronixTube.id, id)).get()
+      expect(tube?.barcode).toBe('MX-OWN')
     })
 
     it('returns 400 for a Paper sublabel already in use and leaves the Container unchanged', async () => {

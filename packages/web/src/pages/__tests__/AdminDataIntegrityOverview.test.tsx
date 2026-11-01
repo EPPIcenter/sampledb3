@@ -48,7 +48,7 @@ describe('AdminDataIntegrityOverview', () => {
   it('does not count containers with no grid position as integrity issues', async () => {
     vi.mocked(adminApi.getIntegrityReport).mockResolvedValue({
       ...emptyIntegrityReport(),
-      duplicateBarcodes: [{ barcode: 'DUP', containerType: 'micronix_tube', ids: [1, 2] }],
+      duplicateBarcodes: [{ barcode: 'DUP', variants: ['DUP'], containerTypes: ['micronix_tube'], ids: [1, 2] }],
       containersWithNoGridPosition: [
         { id: 9, containerType: 'micronix_tube', collectionId: 3 },
       ],

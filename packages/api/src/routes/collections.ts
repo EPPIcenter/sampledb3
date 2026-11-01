@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono'
 import type { Database } from '../db/client'
 import { executeMoves, type BatchMoveRequest, type ContainerInfo } from '../lib/container-move'
+import type { BarcodeMatch } from '../lib/identifier-resolution'
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
@@ -241,15 +242,28 @@ export function createCollectionsRoutes(database: Database): Hono {
       const { resolveContainersByIdentifiers } = await import('../lib/container-move')
       const containers = await resolveContainersByIdentifiers(database, data.identifiers)
 
-      const result: Array<{ identifier: unknown; container: ContainerInfo }> = []
-      for (const [key, container] of containers.entries()) {
+      // An ambiguous barcode comes back with no container and the error that lists its candidates.
+      const result: Array<
+        | { identifier: unknown; container: ContainerInfo }
+        | { identifier: unknown; container: null; error: string; candidates: BarcodeMatch[] }
+      > = []
+      for (const [key, resolved] of containers.entries()) {
         const identifier = data.identifiers.find(
           (id) =>
             (id.type === 'barcode' && id.barcode === key) ||
             (id.type === 'position' && `${id.sourceCollectionName}:${id.sourcePosition}` === key) ||
             (id.type === 'container_id' && `container_${id.containerId}` === key),
         )
-        result.push({ identifier: identifier || key, container })
+        if ('container' in resolved) {
+          result.push({ identifier: identifier || key, container: resolved.container })
+        } else {
+          result.push({
+            identifier: identifier || key,
+            container: null,
+            error: resolved.ambiguous.message,
+            candidates: resolved.ambiguous.candidates,
+          })
+        }
       }
 
       return c.json({ containers: result })

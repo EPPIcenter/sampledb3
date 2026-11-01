@@ -321,15 +321,16 @@ export default function AdminDataIntegrityReport() {
       </IntegritySection>
 
       <IntegritySection
-        title="Duplicate barcodes (micronix)"
+        title="Duplicate tube barcodes"
         count={report.duplicateBarcodes.length}
-        description="Micronix tubes that share the same barcode (schema expects unique barcodes)."
+        description="Micronix and cryovial tubes that share a barcode, ignoring case and surrounding spaces. Scanning or looking up one of these barcodes stops and asks which tube you mean."
       >
         <div className="overflow-x-auto">
           <table className="admin-table min-w-full">
             <thead>
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Barcode</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Spellings</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Type</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Container IDs</th>
               </tr>
@@ -338,7 +339,10 @@ export default function AdminDataIntegrityReport() {
               {report.duplicateBarcodes.map((d, i) => (
                 <tr key={`${d.barcode}-${i}`} className="hover:bg-app-surface">
                   <td className="px-4 py-3 text-sm font-medium">{d.barcode}</td>
-                  <td className="px-4 py-3 text-sm">{d.containerType}</td>
+                  <td className="px-4 py-3 text-sm">
+                    {d.variants.length > 1 ? d.variants.map((v) => JSON.stringify(v)).join(', ') : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-sm">{d.containerTypes.join(', ')}</td>
                   <td className="px-4 py-3 text-sm">
                     {d.ids.map((id) => (
                       <Link key={id} to={`/containers/${id}`} className="text-[rgb(var(--app-accent))] hover:underline mr-2">

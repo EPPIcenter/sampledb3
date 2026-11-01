@@ -4,7 +4,6 @@ import {
   cryovialBox,
   cryovialTube,
   micronixPlate,
-  micronixTube,
   paper,
   specimen,
   specimenType,
@@ -27,6 +26,7 @@ import {
 import { createDerivation, type CreateDerivationInput } from './derivations'
 import { withWriteTransaction } from '../db/write-transaction'
 import { resolveParentContainerId } from './derivations/parent-container-resolver'
+import { findTubesUsingBarcode } from './identifier-resolution'
 import { checkGridPositionOccupancy } from './container-occupancy'
 import { CollectionPlanner } from './specimen-registration/collections'
 
@@ -402,8 +402,8 @@ export async function validateDerivationsCsv(
   const collectionsMap = new Map<string, CollectionStatus>()
   /** Track (collectionKey, position) to catch duplicate position in same collection within the CSV */
   const seenCollectionPosition = new Set<string>()
-  /** Track micronix container_barcode to catch duplicates within the CSV */
-  const seenMicronixBarcode = new Set<string>()
+  /** Track tube container_barcode (lowercased) to catch duplicates within the CSV */
+  const seenTubeBarcode = new Set<string>()
   let validCount = 0
   let invalidCount = 0
   let warningCount = 0
@@ -606,35 +606,31 @@ export async function validateDerivationsCsv(
       }
 
       // For micronix tubes, container_barcode is required (barcodes are scanned and provided externally)
-      if (containerType === 'micronix_tube') {
+      if (containerType === 'micronix_tube' || containerType === 'cryovial_tube') {
         const barcode = (row.container_barcode ?? '').toString().trim()
-        if (!barcode) {
+        if (!barcode && containerType === 'micronix_tube') {
           validationRow.error =
             'container_barcode is required for micronix tube derivations. Barcodes are scanned and provided by you; the system does not assign them.'
           validationRows.push(validationRow)
           invalidCount++
           continue
         }
-        if (seenMicronixBarcode.has(barcode)) {
+        // Tube barcodes are unique across tube types, ignoring case.
+        if (barcode && seenTubeBarcode.has(barcode.toLowerCase())) {
           validationRow.error =
-            'That micronix barcode is used more than once in your file. Each barcode must be unique.'
+            'That tube barcode is used more than once in your file. Each barcode must be unique.'
           validationRows.push(validationRow)
           invalidCount++
           continue
         }
-        const existingTube = await database
-          .select({ id: micronixTube.id })
-          .from(micronixTube)
-          .where(eq(micronixTube.barcode, barcode))
-          .get()
-        if (existingTube) {
+        if (barcode && (await findTubesUsingBarcode(database, barcode)).length > 0) {
           validationRow.error =
             'That barcode is already used for another container. Use a different barcode. Barcodes are scanned and provided by you; the system does not assign them.'
           validationRows.push(validationRow)
           invalidCount++
           continue
         }
-        seenMicronixBarcode.add(barcode)
+        if (barcode) seenTubeBarcode.add(barcode.toLowerCase())
       }
 
       if (containerType === 'paper') {

@@ -8,7 +8,7 @@ import { validatePage, validateLimit } from '../lib/constants'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
-import { resolveContainerByBarcode } from '../lib/identifier-resolution'
+import { findContainersByBarcode, findTubesUsingBarcode } from '../lib/identifier-resolution'
 import { enrichContainerForApi, enrichContainersForApi, toEnrichedContainerApi } from '../lib/container-api-enrichment'
 import { loadContainerReadViews } from '../lib/container-read-view'
 import { mapEnrichedContainerToWire, mapEnrichedContainersToWire } from '../lib/container-wire-mapper'
@@ -178,17 +178,44 @@ function nextSublabel(containerType: ContainerSubtype | null, rawSublabel: strin
   return trimmed.length === 0 ? null : trimmed
 }
 
+/** The tube barcode or Paper sublabel the Container has now. */
+async function currentIdentifier(database: Database, id: number, containerType: ContainerSubtype | null): Promise<string | null> {
+  switch (containerType) {
+    case 'micronix_tube':
+      return (await database.select({ value: micronixTube.barcode }).from(micronixTube).where(eq(micronixTube.id, id)).get())?.value ?? null
+    case 'cryovial_tube':
+      return (await database.select({ value: cryovialTube.barcode }).from(cryovialTube).where(eq(cryovialTube.id, id)).get())?.value ?? null
+    case 'paper':
+      return (await database.select({ value: paper.sublabel }).from(paper).where(eq(paper.id, id)).get())?.value ?? null
+    default:
+      return null
+  }
+}
+
+/**
+ * Rejects a barcode or sublabel another Container already has. A tube barcode is compared
+ * with every tube's barcode ignoring case and surrounding whitespace. An unchanged value is
+ * not checked, so a Container whose barcode was duplicated before this check existed still saves.
+ */
 async function assertIdentifierFree(
   database: Database,
   id: number,
+  containerType: ContainerSubtype | null,
   identifier: string | null,
   label: 'Barcode' | 'Sublabel',
 ): Promise<void> {
   if (identifier === null) return
-  const takenBy = await resolveContainerByBarcode(database, identifier)
-  if (takenBy !== null && takenBy !== id) {
-    throw new ValidationError(`${label} '${identifier}' is already in use`)
-  }
+  if (identifier === (await currentIdentifier(database, id, containerType))?.trim()) return
+  const takenBy =
+    label === 'Barcode'
+      ? await findTubesUsingBarcode(database, identifier, id)
+      : (await findContainersByBarcode(database, identifier)).filter((match) => match.containerId !== id)
+  if (takenBy.length === 0) return
+  // Name the stored spelling when only a case or whitespace variant collides.
+  const asVariant = takenBy.some((match) => match.barcode === identifier) ? '' : ` as '${takenBy[0].barcode}'`
+  throw new ValidationError(`${label} '${identifier}' is already in use${asVariant}`, {
+    containerIds: takenBy.map((match) => match.containerId),
+  })
 }
 
 /** De-duplicated Tag ids, after checking that each one exists. */
@@ -240,9 +267,9 @@ containers.patch('/:id', memberMiddleware, async (c) => {
         }
       }
       const newBarcode = rawBarcode === undefined ? undefined : nextBarcode(containerType, rawBarcode)
-      if (newBarcode !== undefined) await assertIdentifierFree(tx, id, newBarcode, 'Barcode')
+      if (newBarcode !== undefined) await assertIdentifierFree(tx, id, containerType, newBarcode, 'Barcode')
       const newSublabel = rawSublabel === undefined ? undefined : nextSublabel(containerType, rawSublabel)
-      if (newSublabel !== undefined) await assertIdentifierFree(tx, id, newSublabel, 'Sublabel')
+      if (newSublabel !== undefined) await assertIdentifierFree(tx, id, containerType, newSublabel, 'Sublabel')
       const newTagIds = tagIds === undefined ? undefined : await knownTagIds(tx, tagIds)
 
       const [row] = await tx

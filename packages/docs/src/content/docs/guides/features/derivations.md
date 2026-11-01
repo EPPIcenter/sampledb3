@@ -58,4 +58,6 @@ A repository example for DBS-to-DNA from controls is `examples/derivation-contro
 
 Type, date, protocol, and notes are read-only on the parent and child container pages. The app has no edit or delete for a derivation. Ask an administrator if a record is wrong.
 
+If `parent_container_barcode` is on more than one container, the row fails with an ambiguous barcode error that lists them. Use `parent_container_id` for that row instead.
+
 If the parent is not found, check identifier, source type (control vs subject), and parent container type. Position errors: use `A01` for micronix and static wells.
