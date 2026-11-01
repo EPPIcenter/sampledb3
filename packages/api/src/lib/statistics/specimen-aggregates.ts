@@ -4,6 +4,7 @@ import { inArray } from 'drizzle-orm'
 import { cache, cacheKeys } from '../cache'
 import { chunkArray, SQL_IN_CHUNK_SIZE } from '../sql-helpers'
 import { utcMonthOf } from '../datetime'
+import { parseCollectionDate } from '../validation'
 
 export type SpecimenAggregates = {
   total: number
@@ -28,9 +29,11 @@ function buildMonthlyTimeline(
   specimens
     .filter((s) => (dateField === 'collectionDate' ? s.collectionDate : true))
     .forEach((s) => {
-      const rawDate = dateField === 'collectionDate' ? s.collectionDate! : s.created
-      // UTC month: `created` is a UTC timestamp and a collection date has no time of day.
-      const monthKey = utcMonthOf(rawDate)
+      // A collection date has no time of day, so its month is its own (`5/1/2024` is May in every
+      // time zone); `created` is a UTC timestamp, so its month is the UTC month.
+      const monthKey = dateField === 'collectionDate'
+        ? parseCollectionDate(s.collectionDate!)?.slice(0, 7) ?? null
+        : utcMonthOf(s.created)
       if (!monthKey) return
       monthMap.set(monthKey, (monthMap.get(monthKey) || 0) + 1)
     })

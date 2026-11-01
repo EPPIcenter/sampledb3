@@ -4,8 +4,11 @@ import { setupTestDatabase, cleanupTestDatabase } from '../../../__tests__/helpe
 import {
   createTestLocation,
   createTestMicronixPlate,
+  createTestSpecimen,
+  createTestSpecimenType,
   createTestStorageContainer,
   createTestStorageType,
+  createTestUnit,
 } from '../../../__tests__/helpers/factories'
 import { micronixTube } from '../../../db/schema'
 import { computeStorageStatistics } from '../storage-aggregates'
@@ -61,6 +64,53 @@ describe('storage-aggregates', () => {
       totalContainers: 1,
       containersWithLocations: 1,
       containersWithoutLocations: 0,
+    })
+  })
+
+  describe('locations in use (#107)', () => {
+    let storageTypeId: string
+    let unitId: number
+    let specimenTypeId: number
+
+    beforeEach(async () => {
+      storageTypeId = String((await createTestStorageType(testDb, { name: 'Freezer' })).id)
+      unitId = (await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })).id
+      specimenTypeId = (await createTestSpecimenType(testDb, { name: 'Blood' })).id
+    })
+
+    /** A micronix tube on its own plate at a new Location with this path. */
+    async function tubeAtNewLocation(path: string, index: number): Promise<number> {
+      const loc = await createTestLocation(testDb, { name: `${path} ${index}`, path, storageTypeId })
+      const plate = await createTestMicronixPlate(testDb, { name: `Plate ${index}`, locationId: loc.id })
+      const spec = await createTestSpecimen(testDb, specimenTypeId)
+      const container = await createTestStorageContainer(testDb, { specimenId: spec.id, unitId })
+      await testDb.insert(micronixTube).values({
+        id: container.id,
+        collectionId: plate.id,
+        barcode: `MX-LOC-${index}`,
+        position: 'A01',
+      })
+      return container.id
+    }
+
+    it('lists every Location holding Containers, not a top-20 list', async () => {
+      const containerIds: number[] = []
+      for (let i = 0; i < 25; i++) containerIds.push(await tubeAtNewLocation(`Shelf ${i}`, i))
+
+      const result = await computeStorageStatistics(testDb, containerIds, containerIds.length)
+
+      expect(result.byLocation).toHaveLength(25)
+    })
+
+    it('counts two Locations that share a path as two Locations', async () => {
+      const containerIds = [await tubeAtNewLocation('Shelf', 1), await tubeAtNewLocation('Shelf', 2)]
+
+      const result = await computeStorageStatistics(testDb, containerIds, containerIds.length)
+
+      expect(result.byLocation).toEqual([
+        { location: 'Shelf', count: 1 },
+        { location: 'Shelf', count: 1 },
+      ])
     })
   })
 })
