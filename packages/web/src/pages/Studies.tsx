@@ -1,16 +1,12 @@
-import { useEffect, useState, useRef, useMemo, useCallback, useEffectEvent } from 'react'
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import type { Study, StudySummaryBasic } from '../lib/api/studies'
 import StudyCard from '../components/StudyCard'
 import { useUser } from '../contexts/UserContext'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
-import {
-  useInfiniteStudies,
-  useStudiesFiltered,
-  useStudyLeadPersons,
-  useStudySummaryCards,
-} from '../hooks/useStudies'
+import { useAllStudies, useStudyLeadPersons, useStudySummaryCards } from '../hooks/useStudies'
+import { compareText, type SortDirection } from '../lib/sort-compare'
 import {
   AsyncPresentation,
   EmptyState,
@@ -21,6 +17,7 @@ import {
   getQueryErrorMessage,
 } from '../ui'
 import '../styles/studies.css'
+import { displayDateTime } from '../lib/date-utils'
 
 type ViewMode = 'grid' | 'list'
 type SortOption = 'title' | 'date' | 'subjects' | 'specimens' | 'containers' | 'lead'
@@ -31,15 +28,29 @@ interface StudyWithSummary extends Study {
   summaryLoading?: boolean
 }
 
-const PAGE_LIMIT = 50
-
 const SORT_OPTIONS: SortOption[] = ['title', 'date', 'subjects', 'specimens', 'containers', 'lead']
-
-type SortDirection = 'asc' | 'desc'
 
 /** Names sort A-Z by default; dates and counts sort largest first. */
 function defaultSortDirection(sortBy: SortOption): SortDirection {
   return sortBy === 'title' || sortBy === 'lead' ? 'asc' : 'desc'
+}
+
+/** Ascending order for a sort key: A to Z for text, oldest or smallest first otherwise. */
+function compareStudiesAscending(a: StudyWithSummary, b: StudyWithSummary, sortBy: SortOption): number {
+  switch (sortBy) {
+    case 'title':
+      return compareText(a.title, b.title)
+    case 'lead':
+      return compareText(a.leadPerson, b.leadPerson)
+    case 'date':
+      return displayDateTime(a.lastUpdated) - displayDateTime(b.lastUpdated)
+    case 'subjects':
+      return (a.summary?.totalSubjects || 0) - (b.summary?.totalSubjects || 0)
+    case 'specimens':
+      return (a.summary?.totalSpecimens || 0) - (b.summary?.totalSpecimens || 0)
+    case 'containers':
+      return (a.summary?.totalContainers || 0) - (b.summary?.totalContainers || 0)
+  }
 }
 
 export default function Studies() {
@@ -87,7 +98,6 @@ export default function Studies() {
   })
   const { prefetch: prefetchSummaries, getCardState } = useStudySummaryCards()
   const summaryObserverRef = useRef<IntersectionObserver | null>(null)
-  const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const cardRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   useFocusSearchOnSlash(searchInputRef)
@@ -98,18 +108,15 @@ export default function Studies() {
     [debouncedSearch, filterType, filterLead]
   )
 
-  const infiniteQuery = useInfiniteStudies(PAGE_LIMIT)
-  const filteredQuery = useStudiesFiltered(debouncedSearch, hasActiveFilters)
+  // Load every study rather than pages of 50, so sorting and filtering cover the whole
+  // list. The search query narrows by title and short code on the server.
+  const allStudiesQuery = useAllStudies('')
+  const searchQuery = useAllStudies(debouncedSearch, { enabled: debouncedSearch !== '' })
   const leadPersonsQuery = useStudyLeadPersons()
 
-  const activeQuery = hasActiveFilters ? filteredQuery : infiniteQuery
+  const activeQuery = debouncedSearch !== '' ? searchQuery : allStudiesQuery
 
-  const baseStudies = useMemo(() => {
-    if (hasActiveFilters) {
-      return filteredQuery.data?.studies ?? []
-    }
-    return infiniteQuery.data?.pages.flatMap((page) => page.studies) ?? []
-  }, [hasActiveFilters, filteredQuery.data, infiniteQuery.data])
+  const baseStudies = useMemo(() => activeQuery.data?.studies ?? [], [activeQuery.data])
 
   const studies: StudyWithSummary[] = useMemo(
     () =>
@@ -124,9 +131,7 @@ export default function Studies() {
     [baseStudies, getCardState]
   )
 
-  const total = hasActiveFilters
-    ? (filteredQuery.data?.pagination?.total ?? studies.length)
-    : (infiniteQuery.data?.pages[0]?.pagination?.total ?? 0)
+  const total = allStudiesQuery.data?.total ?? 0
 
   const listStatus = fromQuery(activeQuery, {
     isEmpty: activeQuery.isSuccess && baseStudies.length === 0,
@@ -166,30 +171,14 @@ export default function Studies() {
     }
   }, [studies, prefetchSummaries])
 
-  const loadNextPage = useEffectEvent(() => {
-    if (infiniteQuery.hasNextPage && !infiniteQuery.isFetchingNextPage) {
-      void infiniteQuery.fetchNextPage()
-    }
-  })
-
+  // Subject, specimen, and container counts come from per-study summaries that load as
+  // cards scroll into view. Sorting by a count needs every study's summary.
+  const sortsByCount = sortBy === 'subjects' || sortBy === 'specimens' || sortBy === 'containers'
   useEffect(() => {
-    if (hasActiveFilters || !infiniteQuery.hasNextPage) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) loadNextPage()
-      },
-      { rootMargin: '200px' }
-    )
-
-    if (loadMoreRef.current) {
-      observer.observe(loadMoreRef.current)
+    if (sortsByCount && baseStudies.length > 0) {
+      prefetchSummaries(baseStudies.map((study) => study.id))
     }
-
-    return () => observer.disconnect()
-    // isFetchingNextPage re-creates the observer after each page, which fires again
-    // while the sentinel is still visible, so short pages keep loading.
-  }, [hasActiveFilters, infiniteQuery.hasNextPage, infiniteQuery.isFetchingNextPage])
+  }, [sortsByCount, baseStudies, prefetchSummaries])
 
   const filteredAndSortedStudies = useMemo(() => {
     let filtered = [...studies]
@@ -216,30 +205,8 @@ export default function Studies() {
     }
 
     filtered.sort((a, b) => {
-      let result = 0
-      switch (sortBy) {
-        case 'title':
-          result = a.title.localeCompare(b.title)
-          break
-        case 'date':
-          result = new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
-          break
-        case 'lead':
-          result = a.leadPerson.localeCompare(b.leadPerson)
-          break
-        case 'subjects':
-          result = (b.summary?.totalSubjects || 0) - (a.summary?.totalSubjects || 0)
-          break
-        case 'specimens':
-          result = (b.summary?.totalSpecimens || 0) - (a.summary?.totalSpecimens || 0)
-          break
-        case 'containers':
-          result = (b.summary?.totalContainers || 0) - (a.summary?.totalContainers || 0)
-          break
-        default:
-          return 0
-      }
-      return sortDirection === 'asc' ? -result : result
+      const ascending = compareStudiesAscending(a, b, sortBy)
+      return sortDirection === 'asc' ? ascending : -ascending
     })
 
     return filtered
@@ -558,49 +525,6 @@ export default function Studies() {
                 ))}
               </div>
 
-              {!hasActiveFilters && (
-                <>
-                  <div ref={loadMoreRef} className="h-10" />
-                  {infiniteQuery.isFetchingNextPage && (
-                    <div className="flex justify-center items-center py-8">
-                      <div
-                        className="flex items-center gap-3"
-                        style={{ color: 'rgb(var(--app-text-muted))' }}
-                      >
-                        <svg
-                          className="animate-spin h-5 w-5"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          />
-                        </svg>
-                        <span>Loading more studies...</span>
-                      </div>
-                    </div>
-                  )}
-                  {!infiniteQuery.hasNextPage && studies.length > 0 && (
-                    <div
-                      className="text-center py-8 text-sm"
-                      style={{ color: 'rgb(var(--app-text-muted))' }}
-                    >
-                      No more studies to load
-                    </div>
-                  )}
-                </>
-              )}
             </>
           </AsyncPresentation>
         </div>

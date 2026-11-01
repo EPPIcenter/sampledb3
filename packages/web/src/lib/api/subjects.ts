@@ -74,7 +74,7 @@ type SubjectsListResponse = {
 }
 
 export const subjectsApi = {
-  list: (params?: { page?: number; limit?: number }) =>
+  list: (params?: { page?: number; limit?: number; created_from?: string; created_to?: string }) =>
     api.get<SubjectsListResponse>('/subjects', { params }),
   get: (id: number) => api.get<SubjectResponse>(`/subjects/${id}`),
   getSummary: (id: number) => api.get<SubjectSummaryResponse>(`/subjects/${id}/summary`),

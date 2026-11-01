@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   useQuery,
-  useInfiniteQuery,
   useMutation,
   useQueryClient,
   type QueryClient,
@@ -16,7 +15,8 @@ export const studyKeys = {
   lists: () => [...studyKeys.all, 'list'] as const,
   list: (filters?: { search?: string; page?: number; limit?: number }) =>
     [...studyKeys.lists(), filters] as const,
-  infinite: (limit?: number) => [...studyKeys.all, 'infinite', { limit }] as const,
+  /** Every study matching the search, for the Studies page. */
+  browse: (search: string) => [...studyKeys.lists(), 'browse', { search }] as const,
   leadPersons: () => [...studyKeys.all, 'lead-persons'] as const,
   details: () => [...studyKeys.all, 'detail'] as const,
   detail: (id: number) => [...studyKeys.details(), id] as const,
@@ -24,7 +24,8 @@ export const studyKeys = {
   summaryCard: (id: number) => [...studyKeys.all, 'summary-card', id] as const,
 }
 
-const STUDIES_PAGE_LIMIT = 50
+/** Page size for loading every study; the API clamps it to its configured maximum. */
+const ALL_STUDIES_PAGE_LIMIT = 1000
 const SUMMARY_CARD_STALE_MS = 5 * 60 * 1000
 
 function summaryBatchKey(ids: number[]) {
@@ -116,26 +117,28 @@ export function useStudies(search?: string, params?: { page?: number; limit?: nu
   })
 }
 
-/** Unfiltered browse with server pagination (infinite scroll). */
-export function useInfiniteStudies(limit = STUDIES_PAGE_LIMIT) {
-  return useInfiniteQuery({
-    queryKey: studyKeys.infinite(limit),
-    queryFn: async ({ pageParam }) => studiesApi.list(undefined, { page: pageParam, limit }),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage, _pages, lastPageParam) => {
-      const pagination = lastPage.pagination
-      if (!pagination || lastPageParam >= pagination.totalPages) return undefined
-      return lastPageParam + 1
-    },
-  })
+/**
+ * Every study matching the search, fetching each page the API reports, so the page can
+ * sort and filter the whole list rather than the pages loaded so far.
+ */
+export async function listAllStudies(search?: string): Promise<{ studies: Study[]; total: number }> {
+  const first = await studiesApi.list(search || undefined, { page: 1, limit: ALL_STUDIES_PAGE_LIMIT })
+  const totalPages = first.pagination?.totalPages ?? 1
+  const rest = await Promise.all(
+    Array.from({ length: Math.max(0, totalPages - 1) }, (_, i) =>
+      studiesApi.list(search || undefined, { page: i + 2, limit: ALL_STUDIES_PAGE_LIMIT })
+    )
+  )
+  const studies = [...first.studies, ...rest.flatMap((page) => page.studies)]
+  return { studies, total: first.pagination?.total ?? studies.length }
 }
 
-/** All studies matching filters (client-side sort/pagination on the list page). */
-export function useStudiesFiltered(search: string, enabled: boolean) {
+/** All studies matching the search (the Studies page sorts and filters them client-side). */
+export function useAllStudies(search: string, options?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: studyKeys.list({ search, page: 1, limit: 10000 }),
-    queryFn: () => studiesApi.list(search || undefined, { page: 1, limit: 10000 }),
-    enabled,
+    queryKey: studyKeys.browse(search),
+    queryFn: () => listAllStudies(search),
+    enabled: options?.enabled ?? true,
   })
 }
 
@@ -143,7 +146,7 @@ export function useStudyLeadPersons() {
   return useQuery({
     queryKey: studyKeys.leadPersons(),
     queryFn: async () => {
-      const res = await studiesApi.list(undefined, { page: 1, limit: 10000 })
+      const res = await listAllStudies()
       const leads = new Set(res.studies.map((s) => s.leadPerson).filter(Boolean))
       return Array.from(leads).sort() as string[]
     },
@@ -219,7 +222,7 @@ export function useCreateStudy(options?: { silent?: boolean }) {
       showError(message || 'Failed to create study')
     },
     onSuccess: () => {
-      // Every studies query (lists, infinite pages, lead persons, summaries) can change.
+      // Every studies query (lists, lead persons, summaries) can change.
       void queryClient.invalidateQueries({ queryKey: studyKeys.all })
       void queryClient.invalidateQueries({ queryKey: dashboardKeys.all })
       success('Study created successfully')

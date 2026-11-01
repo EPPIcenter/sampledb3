@@ -35,6 +35,7 @@ import {
 } from '../ui'
 import { TUTORIAL_SHORT_CODE_PREFIX } from '../lib/constants'
 import '../styles/studies.css'
+import { parseDisplayDate } from '../lib/date-utils'
 
 export default function StudyDetail() {
   const { id } = useParams<{ id: string }>()
@@ -240,24 +241,24 @@ export default function StudyDetail() {
   }
 
   const subjectColumns: Column<StudySubject>[] = [
-    { key: 'name', label: 'Name', sortable: true },
+    { key: 'name', label: 'Name', sortType: 'text' },
     {
       key: 'specimenCount',
       label: 'Specimens',
-      sortable: true,
+      sortType: 'number',
       render: (value) => (value ?? 0).toLocaleString(),
     },
     {
       key: 'created',
       label: 'Created',
-      sortable: true,
-      render: (value) => new Date(value as string).toLocaleDateString(),
+      sortType: 'date',
+      render: (value) => parseDisplayDate(value as string).toLocaleDateString(),
     },
     {
       key: 'lastUpdated',
       label: 'Last Updated',
-      sortable: true,
-      render: (value) => new Date(value as string).toLocaleDateString(),
+      sortType: 'date',
+      render: (value) => parseDisplayDate(value as string).toLocaleDateString(),
     },
   ]
 

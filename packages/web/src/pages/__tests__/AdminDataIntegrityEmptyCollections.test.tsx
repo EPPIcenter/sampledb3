@@ -17,6 +17,8 @@ function emptyIntegrityReport() {
     duplicateBarcodes: [],
     locationPathInconsistencies: [],
     containersWithNoGridPosition: [],
+    specimensWithNonIsoCollectionDate: [],
+    containersWithInvalidGridPosition: [],
   }
 }
 

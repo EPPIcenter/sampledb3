@@ -21,7 +21,7 @@ import {
   getQueryErrorMessage,
 } from '../ui'
 import '../styles/subject-specimen.css'
-import { formatDate } from '../lib/date-utils'
+import { formatDate, parseDisplayDate } from '../lib/date-utils'
 
 interface Container {
   id: number
@@ -228,7 +228,7 @@ export default function SpecimenDetail() {
               <div>
                 <dt className="text-xs font-medium text-[rgb(var(--app-text-muted))]">Created</dt>
                 <dd className="text-sm text-[rgb(var(--app-text))]">
-                  {new Date(specimen.created).toLocaleDateString()}
+                  {parseDisplayDate(specimen.created).toLocaleDateString()}
                 </dd>
               </div>
             </dl>

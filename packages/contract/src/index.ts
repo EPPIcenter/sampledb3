@@ -81,3 +81,28 @@ export {
   PAPER_DERIVATION_USE_SUBLABEL_NOT_POSITION,
   type PaperInboundWriteFields,
 } from './paper-container-inbound'
+export {
+  ERROR_REPORT_LIMITS,
+  errorReportSchema,
+  fitErrorReportToLimits,
+  type ErrorReport,
+} from './error-report'
+export {
+  GRID_GEOMETRY,
+  gridAxes,
+  gridCellKey,
+  gridCellKeys,
+  gridPositionKey,
+  gridPositionRange,
+  isStoredGridPosition,
+  parseGridPosition,
+  type GridCollectionType,
+  type GridGeometry,
+  type GridPositionResult,
+} from './grid-position'
+export {
+  containerQuantityBoundsError,
+  quantityDrawError,
+  quantityUsedError,
+  type ContainerQuantityBounds,
+} from './container-quantity'

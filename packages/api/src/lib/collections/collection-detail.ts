@@ -12,9 +12,25 @@ import {
   sheet,
   location,
 } from '../../db/schema'
+import { gridPositionKey } from '@sampledb/contract'
 import { formatLocationPath } from '../container-enrichment'
-import { normalizePosition } from '../normalize-position'
 import { enrichPaperContainers, enrichStorageContainers } from './container-detail'
+
+const naturalOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+/** Unplaced entries by stored position (missing last), then barcode, then id. */
+function sortUnplaced<T extends { id: number; position: string | null; barcode?: string | null }>(entries: T[]): T[] {
+  return [...entries].sort((a, b) => {
+    if (a.position !== b.position) {
+      if (a.position == null) return 1
+      if (b.position == null) return -1
+      const byPosition = naturalOrder.compare(a.position, b.position)
+      if (byPosition !== 0) return byPosition
+    }
+    const byBarcode = naturalOrder.compare(a.barcode ?? '', b.barcode ?? '')
+    return byBarcode !== 0 ? byBarcode : a.id - b.id
+  })
+}
 
 export async function getMicronixPlateDetail(database: Database, id: number) {
   const plate = await database.select().from(micronixPlate).where(eq(micronixPlate.id, id)).get()
@@ -46,9 +62,16 @@ export async function getMicronixPlateDetail(database: Database, id: number) {
     container: enrichedById.get(w.id) ?? null,
   }))
 
-  const wellsByPosition: Record<string, (typeof tubeEntries)[number] | (typeof wellEntries)[number]> = {}
+  // A Container whose position is missing or not a cell of the plate grid is
+  // unplaced. A second Container normalizing to an occupied cell is also listed
+  // as unplaced so that no Container drops out of the response.
+  type PlateEntry = (typeof tubeEntries)[number] | (typeof wellEntries)[number]
+  const wellsByPosition: Record<string, PlateEntry> = {}
+  const unplaced: PlateEntry[] = []
   for (const entry of [...tubeEntries, ...wellEntries]) {
-    wellsByPosition[entry.position || ''] = entry
+    const key = gridPositionKey(entry.position, 'micronix_plate')
+    if (key != null && !(key in wellsByPosition)) wellsByPosition[key] = entry
+    else unplaced.push(entry)
   }
 
   return {
@@ -58,6 +81,7 @@ export async function getMicronixPlateDetail(database: Database, id: number) {
       locationPath: formatLocationPath(loc),
     },
     wells: wellsByPosition,
+    unplaced: sortUnplaced(unplaced),
   }
 }
 
@@ -78,9 +102,11 @@ export async function getCryovialBoxDetail(database: Database, id: number) {
   }))
 
   const positions: Record<string, typeof tubeEntries> = {}
+  const unplaced: typeof tubeEntries = []
   for (const entry of tubeEntries) {
-    const pos = normalizePosition(entry.position) ?? ''
-    ;(positions[pos] ??= []).push(entry)
+    const key = gridPositionKey(entry.position, 'cryovial_box')
+    if (key == null) unplaced.push(entry)
+    else (positions[key] ??= []).push(entry)
   }
 
   return {
@@ -90,6 +116,7 @@ export async function getCryovialBoxDetail(database: Database, id: number) {
       locationPath: formatLocationPath(loc),
     },
     positions,
+    unplaced: sortUnplaced(unplaced),
   }
 }
 

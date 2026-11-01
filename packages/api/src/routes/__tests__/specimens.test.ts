@@ -66,6 +66,33 @@ describe('Specimens API', () => {
       const res = await authenticatedRequest(ctx.createRequestApp(), '/api/specimens', { method: 'GET' })
       expect(res.status).toBe(401)
     })
+
+    it('filters by collection date as a calendar date', async () => {
+      const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })
+      const early = await createTestSpecimen(ctx.db, type.id, { collectionDate: '1999-12-31' })
+      await createTestSpecimen(ctx.db, type.id, { collectionDate: '2024-05-07' })
+
+      const res = await ctx.request('/api/specimens?collection_date_to=2000-01-01')
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { specimens: Array<{ id: number }> }
+      expect(data.specimens.map((s) => s.id)).toEqual([early.id])
+    })
+
+    it.each([
+      ['collection_date_from', 'garbage'],
+      ['collection_date_to', '5/7/2024'],
+      ['collection_date_from', '2024'],
+      ['collection_date_to', '2024-02-30'],
+      ['created_from', 'yesterday'],
+      ['created_to', '2024-13-01'],
+    ])('returns 400 for %s=%s', async (param, value) => {
+      const res = await ctx.request(`/api/specimens?${param}=${encodeURIComponent(value)}`)
+
+      expect(res.status).toBe(400)
+      const data = (await res.json()) as { error: string }
+      expect(data.error).toContain(param)
+    })
   })
 
   describe('POST /api/specimens/bulk', () => {
@@ -228,6 +255,44 @@ describe('Specimens API', () => {
       const after = await ctx.db.select({ id: specimen.id }).from(specimen)
       expect(after.length).toBe(before.length)
     })
+
+    it('POST /api/specimens stores an M/D/YYYY collection date as YYYY-MM-DD', async () => {
+      const res = await ctx.request('/api/specimens', {
+        method: 'POST',
+        json: {
+          sourceType: 'subject',
+          studyShortCode: 'BLK01',
+          subjectName: 'BULK-SUBJ',
+          specimenTypeName: 'Whole Blood',
+          collectionDate: '5/7/2024',
+          container: { containerType: 'cryovial_tube', collection: { type: 'cryovial_box', name: 'BULK-BOX', position: 'A01' } },
+        },
+      })
+
+      expect(res.status).toBe(201)
+      const rows = await ctx.db.select().from(specimen).where(eq(specimen.studySubjectId, testSubject.id))
+      expect(rows.map((r) => r.collectionDate)).toEqual(['2024-05-07'])
+    })
+
+    it.each(['5/7/24', 'garbage', '2024-02-30'])(
+      'POST /api/specimens rejects collection date %s and stores nothing',
+      async (collectionDate) => {
+        const res = await ctx.request('/api/specimens', {
+          method: 'POST',
+          json: {
+            sourceType: 'subject',
+            studyShortCode: 'BLK01',
+            subjectName: 'BULK-SUBJ',
+            specimenTypeName: 'Whole Blood',
+            collectionDate,
+            container: { containerType: 'cryovial_tube', collection: { type: 'cryovial_box', name: 'BULK-BOX', position: 'A02' } },
+          },
+        })
+
+        expect(res.status).toBe(400)
+        expect(await ctx.db.select().from(specimen).where(eq(specimen.studySubjectId, testSubject.id))).toEqual([])
+      },
+    )
 
     it('rolls back single specimen creation when container creation fails', async () => {
       const beforeSpecimens = await ctx.db.select({ id: specimen.id }).from(specimen)

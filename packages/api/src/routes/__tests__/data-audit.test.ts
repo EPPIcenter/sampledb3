@@ -18,6 +18,9 @@ import {
   createTestControlDefinition,
   createTestUnit,
   createTestTag,
+  createTestCryovialBox,
+  createTestCryovialTube,
+  createTestMicronixTube,
 } from '../../__tests__/helpers/factories'
 import {
   micronixTube,
@@ -245,6 +248,8 @@ describe('Data audit API', () => {
         duplicateBarcodes: unknown[]
         locationPathInconsistencies: unknown[]
         containersWithNoGridPosition: unknown[]
+        specimensWithNonIsoCollectionDate: unknown[]
+        containersWithInvalidGridPosition: unknown[]
       }
       expect(Array.isArray(data.emptyCollections)).toBe(true)
       expect(Array.isArray(data.collectionsWithMissingLocation)).toBe(true)
@@ -258,6 +263,26 @@ describe('Data audit API', () => {
       expect(Array.isArray(data.duplicateBarcodes)).toBe(true)
       expect(Array.isArray(data.locationPathInconsistencies)).toBe(true)
       expect(Array.isArray(data.containersWithNoGridPosition)).toBe(true)
+      expect(Array.isArray(data.specimensWithNonIsoCollectionDate)).toBe(true)
+      expect(data.containersWithInvalidGridPosition).toEqual([])
+    })
+
+    it('flags specimens whose collection date is not YYYY-MM-DD', async () => {
+      const specType = await createTestSpecimenType(ctx.db, { name: 'STDate' })
+      const iso = await createTestSpecimen(ctx.db, specType.id, { collectionDate: '2024-05-07' })
+      const legacy = await createTestSpecimen(ctx.db, specType.id, { collectionDate: '5/7/24' })
+      const impossible = await createTestSpecimen(ctx.db, specType.id, { collectionDate: '2024-02-30' })
+      await createTestSpecimen(ctx.db, specType.id)
+
+      const res = await ctx.request('/api/admin/data-audit/integrity-report', { method: 'GET' })
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { specimensWithNonIsoCollectionDate: Array<{ id: number; collectionDate: string }> }
+      expect(data.specimensWithNonIsoCollectionDate).toEqual([
+        { id: legacy.id, collectionDate: '5/7/24' },
+        { id: impossible.id, collectionDate: '2024-02-30' },
+      ])
+      expect(data.specimensWithNonIsoCollectionDate.map((s) => s.id)).not.toContain(iso.id)
     })
 
     it('includes containers with missing specimen in report', async () => {
@@ -420,29 +445,32 @@ describe('Data audit API', () => {
       expect(match).toBeDefined()
     })
 
-    it('does not report duplicate cryovial barcodes as integrity issues', async () => {
+    it('reports tube barcodes duplicated across types, including case and whitespace variants', async () => {
       const storageType = await createTestStorageType(ctx.db, { name: 'Shelf', description: '' })
       const loc = await createTestLocation(ctx.db, { name: 'LocDup', storageTypeId: String(storageType.id), canContainCollections: true })
       const now = utcNow()
-      const [cvBox1] = await ctx.db.insert(cryovialBox).values({ name: `CryoDup1-${Date.now()}`, locationId: loc.id, created: now, lastUpdated: now }).returning()
-      const [cvBox2] = await ctx.db.insert(cryovialBox).values({ name: `CryoDup2-${Date.now()}`, locationId: loc.id, created: now, lastUpdated: now }).returning()
+      const [cvBox] = await ctx.db.insert(cryovialBox).values({ name: 'CryoDup', locationId: loc.id, created: now, lastUpdated: now }).returning()
+      const [plate] = await ctx.db.insert(micronixPlate).values({ name: 'PlateDup', locationId: loc.id, created: now, lastUpdated: now }).returning()
       const specType = await createTestSpecimenType(ctx.db, { name: 'STDup' })
-      const spec1 = await createTestSpecimen(ctx.db, specType.id)
-      const unit = await createTestUnit(ctx.db, { symbol: `uL-dup-${Date.now()}`, name: 'microliter', category: 'volume' })
-      const c1 = await createTestStorageContainer(ctx.db, { specimenId: spec1.id, unitId: unit.id })
-      const spec2 = await createTestSpecimen(ctx.db, specType.id)
-      const c2 = await createTestStorageContainer(ctx.db, { specimenId: spec2.id, unitId: unit.id })
-      const sharedBarcode = `DUP-${Date.now()}`
-      await ctx.db.insert(cryovialTube).values({ id: c1.id, collectionId: cvBox1!.id, barcode: sharedBarcode, position: null })
-      await ctx.db.insert(cryovialTube).values({ id: c2.id, collectionId: cvBox2!.id, barcode: sharedBarcode, position: null })
+      const spec = await createTestSpecimen(ctx.db, specType.id)
+      const unit = await createTestUnit(ctx.db, { symbol: 'uL-dup', name: 'microliter', category: 'volume' })
+      const container = () => createTestStorageContainer(ctx.db, { specimenId: spec.id, unitId: unit.id })
+      const [na1, na2, mx, cv, lone] = [await container(), await container(), await container(), await container(), await container()]
+      await ctx.db.insert(cryovialTube).values({ id: na1.id, collectionId: cvBox!.id, barcode: 'NA', position: null })
+      await ctx.db.insert(cryovialTube).values({ id: na2.id, collectionId: cvBox!.id, barcode: 'NA', position: null })
+      await ctx.db.insert(micronixTube).values({ id: mx.id, collectionId: plate!.id, barcode: 'CK3-3FR4', position: null })
+      await ctx.db.insert(cryovialTube).values({ id: cv.id, collectionId: cvBox!.id, barcode: 'ck3-3fr4 ', position: null })
+      await ctx.db.insert(cryovialTube).values({ id: lone.id, collectionId: cvBox!.id, barcode: 'LONE', position: null })
 
       const res = await ctx.request('/api/admin/data-audit/integrity-report', {
         method: 'GET',
       })
       expect(res.status).toBe(200)
-      const data = (await res.json()) as { duplicateBarcodes: Array<{ barcode: string; containerType: string }> }
-      const cryovialMatch = data.duplicateBarcodes.find((d) => d.barcode === sharedBarcode && d.containerType === 'cryovial_tube')
-      expect(cryovialMatch).toBeUndefined()
+      const data = (await res.json()) as { duplicateBarcodes: unknown[] }
+      expect(data.duplicateBarcodes).toEqual([
+        { barcode: 'CK3-3FR4', variants: ['CK3-3FR4', 'ck3-3fr4 '], containerTypes: ['cryovial_tube', 'micronix_tube'], ids: [mx.id, cv.id] },
+        { barcode: 'NA', variants: ['NA'], containerTypes: ['cryovial_tube'], ids: [na1.id, na2.id] },
+      ])
     })
 
     it('includes location path inconsistencies in report', async () => {
@@ -490,6 +518,54 @@ describe('Data audit API', () => {
       expect(match).toBeDefined()
       expect(match!.containerType).toBe('micronix_tube')
       expect(match!.collectionId).toBe(plate.id)
+    })
+
+    it('lists Containers whose stored position fails the Grid position rule, and no valid or missing ones', async () => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'ShelfBadPos', description: '' })
+      const loc = await createTestLocation(ctx.db, { name: 'LocBadPos', storageTypeId: String(storageType.id), canContainCollections: true })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'PlateBadPos', locationId: loc.id })
+      const cvBox = await createTestCryovialBox(ctx.db, { name: 'BoxBadPos', locationId: loc.id })
+      const specType = await createTestSpecimenType(ctx.db, { name: 'STBadPos' })
+      const spec = await createTestSpecimen(ctx.db, specType.id)
+      const unit = await createTestUnit(ctx.db, { symbol: 'uL-badpos', name: 'microliter', category: 'volume' })
+      const newContainer = async () => (await createTestStorageContainer(ctx.db, { specimenId: spec.id, unitId: unit.id })).id
+
+      const ids: Record<string, number> = {}
+      for (const [barcode, position] of [
+        ['MX-OK', 'H12'],
+        ['MX-NULL', null],
+        ['MX-BARCODE', 'A1145854300'],
+        ['MX-UNPADDED', 'A1'],
+        ['MX-OUTSIDE', 'J10'],
+      ] as const) {
+        ids[barcode] = await newContainer()
+        await createTestMicronixTube(ctx.db, { containerId: ids[barcode]!, collectionId: plate.id, barcode, position })
+      }
+      for (const [barcode, position] of [
+        ['CV-OK', 'J10'],
+        ['CV-DASH', '--A01'],
+        ['CV-NA', 'NA01'],
+      ] as const) {
+        ids[barcode] = await newContainer()
+        await createTestCryovialTube(ctx.db, { containerId: ids[barcode]!, collectionId: cvBox.id, barcode, position })
+      }
+
+      const res = await ctx.request('/api/admin/data-audit/integrity-report', { method: 'GET' })
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        containersWithInvalidGridPosition: Array<{ id: number; containerType: string; collectionId: number; position: string }>
+      }
+      const byId = (a: { id: number }, b: { id: number }) => a.id - b.id
+      expect([...data.containersWithInvalidGridPosition].sort(byId)).toEqual(
+        [
+          { id: ids['MX-BARCODE']!, containerType: 'micronix_tube', collectionId: plate.id, position: 'A1145854300' },
+          { id: ids['MX-UNPADDED']!, containerType: 'micronix_tube', collectionId: plate.id, position: 'A1' },
+          { id: ids['MX-OUTSIDE']!, containerType: 'micronix_tube', collectionId: plate.id, position: 'J10' },
+          { id: ids['CV-DASH']!, containerType: 'cryovial_tube', collectionId: cvBox.id, position: '--A01' },
+          { id: ids['CV-NA']!, containerType: 'cryovial_tube', collectionId: cvBox.id, position: 'NA01' },
+        ].sort(byId),
+      )
     })
   })
 })

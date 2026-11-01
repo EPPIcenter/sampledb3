@@ -27,7 +27,8 @@ function getTemplateExampleRow(
     case 'cryovial_tube':
       return [...base, 'BOX-001', '', 'B01', '']
     case 'paper':
-      return [...base, 'BOX-003', 'SPOT-001', '']
+      // box_name, bag_name, sheet_name, sublabel, comment: a row names its box or its bag, not both.
+      return [...base, 'BOX-003', '', 'SHEET-001', 'SPOT-001', '']
     case 'static_well':
       return [...base, 'PLATE-002', 'A01', '']
     default:

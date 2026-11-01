@@ -5,6 +5,8 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createErrorLogsRoutes } from '../error-logs'
+import { ERROR_REPORT_LIMITS } from '@sampledb/contract'
+import { errorLogs } from '../../db/schema'
 
 describe('Error Logs API', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -102,6 +104,74 @@ describe('Error Logs API', () => {
         }),
       })
       expect(res.status).toBe(201)
+    })
+
+    describe('size caps', () => {
+      const post = (body: string, headers: Record<string, string> = {}) =>
+        ctx.createRequestApp().request('/api/error-logs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...headers },
+          body,
+        })
+
+      const countLogs = () => ctx.db.select().from(errorLogs).all().length
+
+      it('accepts a report with every field at its cap', async () => {
+        const contextPadding = 'c'.repeat(ERROR_REPORT_LIMITS.contextJson - JSON.stringify({ pad: '' }).length)
+        const res = await post(JSON.stringify({
+          message: 'm'.repeat(ERROR_REPORT_LIMITS.message),
+          stack: 's'.repeat(ERROR_REPORT_LIMITS.stack),
+          errorCode: 'e'.repeat(ERROR_REPORT_LIMITS.errorCode),
+          context: { pad: contextPadding },
+        }))
+        expect(res.status).toBe(201)
+        expect(countLogs()).toBe(1)
+      })
+
+      it.each([
+        ['message', { message: 'm'.repeat(ERROR_REPORT_LIMITS.message + 1) }],
+        ['stack', { message: 'x', stack: 's'.repeat(ERROR_REPORT_LIMITS.stack + 1) }],
+        ['errorCode', { message: 'x', errorCode: 'e'.repeat(ERROR_REPORT_LIMITS.errorCode + 1) }],
+        ['context', { message: 'x', context: { pad: 'c'.repeat(ERROR_REPORT_LIMITS.contextJson) } }],
+      ])('rejects a report whose %s is over its cap with 400 and writes no frontend log', async (_field, report) => {
+        const res = await post(JSON.stringify(report))
+        expect(res.status).toBe(400)
+        const body = (await res.json()) as { errorCode?: string }
+        expect(body.errorCode).toBe('VALIDATION_ERROR')
+        expect(ctx.db.select().from(errorLogs).all().filter((l) => l.source === 'frontend')).toHaveLength(0)
+      })
+
+      it('rejects a body over the byte cap with 413 and writes no log', async () => {
+        const res = await post(JSON.stringify({ message: 'x', context: { pad: 'p'.repeat(ERROR_REPORT_LIMITS.bodyBytes) } }))
+        expect(res.status).toBe(413)
+        const body = (await res.json()) as { errorCode?: string }
+        expect(body.errorCode).toBe('PAYLOAD_TOO_LARGE')
+        expect(countLogs()).toBe(0)
+      })
+
+      it('rejects a streamed body over the byte cap (no Content-Length) with 413', async () => {
+        const chunk = new TextEncoder().encode('x'.repeat(16 * 1024))
+        let sent = 0
+        const stream = new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (sent > ERROR_REPORT_LIMITS.bodyBytes) {
+              controller.close()
+              return
+            }
+            sent += chunk.length
+            controller.enqueue(chunk)
+          },
+        })
+        const res = await ctx.createRequestApp().request(new Request('http://localhost/api/error-logs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: stream,
+          // @ts-expect-error - duplex is required by fetch for a streamed body but missing from the DOM types
+          duplex: 'half',
+        }))
+        expect(res.status).toBe(413)
+        expect(countLogs()).toBe(0)
+      })
     })
   })
 })

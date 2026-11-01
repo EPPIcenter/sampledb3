@@ -49,7 +49,6 @@ export default function DerivationsBulkImport() {
     quantityUsed: undefined,
     reduceParentQuantity: true,
     validateSourceSpecimenType: false,
-    validateParentQuantity: false,
   })
 
   const {
@@ -80,6 +79,7 @@ export default function DerivationsBulkImport() {
   const { specimenTypes, units, allowedContainerTypes, bootstrapLoading, bootstrapError, containerTypesError } =
     bootstrap
   const formDisabled = workflowLoading || bootstrapLoading
+  const invalidValidationRows = validationResult?.rows.filter((row) => !row.valid && row.error) ?? []
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const importResultsRef = useRef<HTMLDivElement>(null)
@@ -564,7 +564,7 @@ export default function DerivationsBulkImport() {
                       {settings.containerType !== 'paper' && (
                       <p><span className="font-medium text-app-text">position</span> — Position in the collection (e.g. A01, B02).</p>
                       )}
-                      <p><span className="font-medium text-app-text">quantity, unit_symbol, quantity_used, reduce_parent_quantity</span> — Optional. You can set these in Import settings (same for all rows) or provide columns in the CSV (per row). Use <code className="bg-app-surface px-1 rounded text-xs">quantity_used</code> and <code className="bg-app-surface px-1 rounded text-xs">reduce_parent_quantity</code> to reduce the parent&apos;s remaining quantity (e.g. DBS spot count). Not a blocker if missing or if data is imperfect.</p>
+                      <p><span className="font-medium text-app-text">quantity, unit_symbol, quantity_used, reduce_parent_quantity</span> — Optional. You can set these in Import settings (same for all rows) or provide columns in the CSV (per row). Use <code className="bg-app-surface px-1 rounded text-xs">quantity_used</code> and <code className="bg-app-surface px-1 rounded text-xs">reduce_parent_quantity</code> to reduce the parent&apos;s remaining quantity (e.g. DBS spot count). A row whose quantity used is 0 or less, or more than the parent has left (counting earlier rows from the same parent), is rejected.</p>
                       <p className="pt-1"><span className="font-medium text-app-text">parent_specimen_type_name</span> is the <em>parent</em> specimen type (e.g. DBS, Whole Blood). The <em>derived</em> specimen type (e.g. DNA (DBS)) is set in Import settings or in the <code className="bg-app-surface px-1 rounded text-xs">specimen_type_name</code> column.</p>
                     </div>
                   </div>
@@ -770,6 +770,18 @@ export default function DerivationsBulkImport() {
               <p className="text-sm mb-4" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 The default unit for the derived container type (e.g. µL for tubes) is used; you can change it in the review step if needed. Edit any values below before importing.
               </p>
+              {invalidValidationRows.length > 0 && (
+                <div role="alert" className="mb-4 p-3 rounded text-sm border border-app-trend-down/40 bg-app-trend-down/10 text-app-trend-down">
+                  <p className="font-medium mb-1">Fix these rows before importing:</p>
+                  <ul className="list-disc list-inside">
+                    {invalidValidationRows.map((row) => (
+                      <li key={row.index}>
+                        Row {row.index + 1}: {row.error}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="overflow-x-auto border border-app-border rounded-lg mb-6">
                 <table className="min-w-full text-sm">
                   <thead className="bg-app-surface border-b border-app-border">

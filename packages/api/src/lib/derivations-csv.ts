@@ -4,7 +4,6 @@ import {
   cryovialBox,
   cryovialTube,
   micronixPlate,
-  micronixTube,
   paper,
   specimen,
   specimenType,
@@ -14,8 +13,12 @@ import {
 } from '../db/schema'
 import { and, eq, sql } from 'drizzle-orm'
 import {
+  containerQuantityBoundsError,
   csvRowToContainerWriteInput,
   parseCsv as parseCsvCells,
+  parseGridPosition,
+  quantityDrawError,
+  quantityUsedError,
   PAPER_DERIVATION_USE_SUBLABEL_NOT_CONTAINER_BARCODE,
   PAPER_DERIVATION_USE_SUBLABEL_NOT_POSITION,
   type ContainerCsvRow,
@@ -23,7 +26,7 @@ import {
 import { createDerivation, type CreateDerivationInput } from './derivations'
 import { withWriteTransaction } from '../db/write-transaction'
 import { resolveParentContainerId } from './derivations/parent-container-resolver'
-import { normalizePosition } from './normalize-position'
+import { findTubesUsingBarcode } from './identifier-resolution'
 import { checkGridPositionOccupancy } from './container-occupancy'
 import { CollectionPlanner } from './specimen-registration/collections'
 
@@ -69,7 +72,6 @@ export interface BulkDerivationSettings {
   
   // Validation flags
   validateSourceSpecimenType?: boolean
-  validateParentQuantity?: boolean
 }
 
 export interface DerivationCsvRow {
@@ -174,6 +176,27 @@ function rowValueError(row: DerivationCsvRow): string | null {
     return `reduce_parent_quantity '${flag}' must be true or false`
   }
   return null
+}
+
+/** The quantity used a row draws from its Parent container, or undefined when it draws none. */
+function rowQuantityDraw(row: DerivationCsvRow, settings: BulkDerivationSettings | undefined): number | undefined {
+  const reduce = parseBoolean(row.reduce_parent_quantity) ?? settings?.reduceParentQuantity ?? true
+  return reduce ? rowQuantityUsed(row, settings) : undefined
+}
+
+function rowQuantityUsed(row: DerivationCsvRow, settings: BulkDerivationSettings | undefined): number | undefined {
+  return row.quantity_used ? parseNumber(row.quantity_used) : settings?.quantityUsed
+}
+
+/** A row's Child container quantity or quantity used out of bounds, before looking at the Parent container. */
+function rowQuantityError(row: DerivationCsvRow, settings: BulkDerivationSettings | undefined): string | null {
+  const quantity = row.quantity ? parseNumber(row.quantity) : settings?.quantity
+  if (quantity != null) {
+    const childError = containerQuantityBoundsError({ totalQuantity: quantity, remainingQuantity: quantity })
+    if (childError) return `Child container: ${childError}`
+  }
+  const quantityUsed = rowQuantityUsed(row, settings)
+  return quantityUsed == null ? null : quantityUsedError(quantityUsed)
 }
 
 function parseNumber(value?: string): number | undefined {
@@ -379,12 +402,14 @@ export async function validateDerivationsCsv(
   const collectionsMap = new Map<string, CollectionStatus>()
   /** Track (collectionKey, position) to catch duplicate position in same collection within the CSV */
   const seenCollectionPosition = new Set<string>()
-  /** Track micronix container_barcode to catch duplicates within the CSV */
-  const seenMicronixBarcode = new Set<string>()
+  /** Track tube container_barcode (lowercased) to catch duplicates within the CSV */
+  const seenTubeBarcode = new Set<string>()
   let validCount = 0
   let invalidCount = 0
   let warningCount = 0
   let firstParentSpecimenTypeId: number | null = null
+  /** Parent container remaining quantity after the draws of earlier rows. */
+  const parentRemaining = new Map<number, number | null>()
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
@@ -490,28 +515,35 @@ export async function validateDerivationsCsv(
         }
       }
 
-      // Validate parent quantity if enabled
-      if (settings?.validateParentQuantity && parentContainerId) {
-        const parentContainer = await database
-          .select({ 
-            remainingQuantity: storageContainer.remainingQuantity,
-            unitId: storageContainer.unitId,
-          })
-          .from(storageContainer)
-          .where(eq(storageContainer.id, parentContainerId))
-          .get()
-        
-        if (parentContainer) {
-          const quantityUsed = row.quantity_used 
-            ? parseNumber(row.quantity_used) 
-            : settings.quantityUsed
-          
-          if (quantityUsed && parentContainer.remainingQuantity !== null && parentContainer.remainingQuantity < quantityUsed) {
-            validationRow.warnings = validationRow.warnings || []
-            validationRow.warnings.push(`Insufficient parent quantity: ${parentContainer.remainingQuantity} available, ${quantityUsed} requested`)
-            warningCount++
-          }
+      // Same bounds createDerivation enforces; rows drawing from one Parent container add up.
+      const quantityError = rowQuantityError(row, settings)
+      if (quantityError) {
+        validationRow.error = quantityError
+        validationRows.push(validationRow)
+        invalidCount++
+        continue
+      }
+      const draw = rowQuantityDraw(row, settings)
+      if (draw != null && parentContainerId) {
+        let remaining = parentRemaining.get(parentContainerId)
+        if (remaining === undefined) {
+          const parentContainer = await database
+            .select({ remainingQuantity: storageContainer.remainingQuantity })
+            .from(storageContainer)
+            .where(eq(storageContainer.id, parentContainerId))
+            .get()
+          remaining = parentContainer?.remainingQuantity ?? null
         }
+        const drawError = quantityDrawError(draw, remaining)
+        if (drawError) {
+          validationRow.error = parentRemaining.has(parentContainerId)
+            ? `${drawError} Earlier rows in this file draw from the same Parent container.`
+            : drawError
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+        parentRemaining.set(parentContainerId, remaining == null ? null : remaining - draw)
       }
 
       // Resolve collection and track status
@@ -528,14 +560,21 @@ export async function validateDerivationsCsv(
 
       // For tube types, validate position and check for duplicate (existing collection or within CSV)
       if (containerType === 'micronix_tube' || containerType === 'cryovial_tube') {
-        // Normalize ("A2" -> "A02") so checks match what the import stores.
-        const position = normalizePosition(row.position) ?? ''
-        if (!position) {
+        if (!row.position?.trim()) {
           validationRow.error = 'position is required for each row when deriving to a plate or box'
           validationRows.push(validationRow)
           invalidCount++
           continue
         }
+        // Grid position rule: normalize ("A2" -> "A02") so checks match what the import stores.
+        const parsedPosition = parseGridPosition(row.position, containerType === 'micronix_tube' ? 'micronix_plate' : 'cryovial_box')
+        if (!parsedPosition.ok) {
+          validationRow.error = parsedPosition.error
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+        const position = parsedPosition.position
         const collectionKey = `${collectionName || ''}_${row.collection_barcode || ''}_${containerType}`
         const positionKey = `${collectionKey}\t${position}`
 
@@ -567,35 +606,31 @@ export async function validateDerivationsCsv(
       }
 
       // For micronix tubes, container_barcode is required (barcodes are scanned and provided externally)
-      if (containerType === 'micronix_tube') {
+      if (containerType === 'micronix_tube' || containerType === 'cryovial_tube') {
         const barcode = (row.container_barcode ?? '').toString().trim()
-        if (!barcode) {
+        if (!barcode && containerType === 'micronix_tube') {
           validationRow.error =
             'container_barcode is required for micronix tube derivations. Barcodes are scanned and provided by you; the system does not assign them.'
           validationRows.push(validationRow)
           invalidCount++
           continue
         }
-        if (seenMicronixBarcode.has(barcode)) {
+        // Tube barcodes are unique across tube types, ignoring case.
+        if (barcode && seenTubeBarcode.has(barcode.toLowerCase())) {
           validationRow.error =
-            'That micronix barcode is used more than once in your file. Each barcode must be unique.'
+            'That tube barcode is used more than once in your file. Each barcode must be unique.'
           validationRows.push(validationRow)
           invalidCount++
           continue
         }
-        const existingTube = await database
-          .select({ id: micronixTube.id })
-          .from(micronixTube)
-          .where(eq(micronixTube.barcode, barcode))
-          .get()
-        if (existingTube) {
+        if (barcode && (await findTubesUsingBarcode(database, barcode)).length > 0) {
           validationRow.error =
             'That barcode is already used for another container. Use a different barcode. Barcodes are scanned and provided by you; the system does not assign them.'
           validationRows.push(validationRow)
           invalidCount++
           continue
         }
-        seenMicronixBarcode.add(barcode)
+        if (barcode) seenTubeBarcode.add(barcode.toLowerCase())
       }
 
       if (containerType === 'paper') {

@@ -7,6 +7,7 @@ import {
 import { createContainersRoutes } from '../containers'
 import * as containerEnrichment from '../../lib/container-api-enrichment'
 import * as containerReadView from '../../lib/container-read-view'
+import * as identifierResolution from '../../lib/identifier-resolution'
 import { utcNow } from '../../lib/datetime'
 import {
   createTestStudy,
@@ -20,8 +21,14 @@ import {
   createTestCryovialTube,
   createTestStorageContainer,
   createTestTag,
+  createTestContainerTags,
+  createTestMicronixPlate,
+  createTestMicronixTube,
+  createTestBox,
+  createTestSheet,
+  createTestPaper,
 } from '../../__tests__/helpers/factories'
-import { cryovialBox, cryovialTube, specimen, storageContainer, micronixPlate, micronixTube, box, sheet, paper, staticWell, storageContainerTag } from '../../db/schema'
+import { cryovialBox, cryovialTube, specimen, storageContainer, micronixPlate, micronixTube, box, sheet, paper, staticWell, storageContainerTag, errorLogs } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 
 describe('Containers API', () => {
@@ -294,6 +301,19 @@ describe('Containers API', () => {
       expect(row?.comment).toBeNull()
     })
 
+    it.each(['Z99', 'hello world', 'b1'])('never writes a grid position, even %s', async (position) => {
+      // Container edit sets no Grid position; a move changes it under the Grid position rule.
+      const boxRecord = await createTestCryovialBox(ctx.db, { name: `BOX-POS-${Date.now()}`, locationId: testLocation.id })
+      const container = await createTestStorageContainer(ctx.db, { unitId: testUnit.id })
+      await createTestCryovialTube(ctx.db, { containerId: container.id, collectionId: boxRecord.id, barcode: 'POS-1', position: 'A01' })
+
+      const res = await ctx.request(`/api/containers/${container.id}`, { method: 'PATCH', json: { comment: 'moved?', position } })
+
+      expect(res.status).toBe(200)
+      const row = await ctx.db.select().from(cryovialTube).where(eq(cryovialTube.id, container.id)).get()
+      expect(row?.position).toBe('A01')
+    })
+
     it('returns 400 when cryovial_tube barcode is already in use', async () => {
       const now = utcNow()
       const [boxRecord] = await ctx.db
@@ -394,6 +414,288 @@ describe('Containers API', () => {
       expect(res.status).toBe(200)
       const row = await ctx.db.select().from(paper).where(eq(paper.id, container.id)).get()
       expect(row?.sublabel).toBe('P-NEW')
+    })
+  })
+  describe('PATCH /api/containers/:id saves every change or none', () => {
+    let unitId: number
+    let specimenId: number
+    let locationId: number
+    let keepTagId: number
+    let otherTagId: number
+
+    beforeEach(async () => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer', description: 'Test' })
+      const location = await createTestLocation(ctx.db, {
+        name: 'Atomic Loc',
+        parentId: null,
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+      locationId = location.id
+      const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      unitId = unit.id
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+      specimenId = (await createTestSpecimen(ctx.db, specimenType.id)).id
+      keepTagId = (await createTestTag(ctx.db, { name: 'keep' })).id
+      otherTagId = (await createTestTag(ctx.db, { name: 'other' })).id
+    })
+
+    /** A Container with comment 'original', quantity 1 and the 'keep' Tag. */
+    async function seedContainer() {
+      const container = await createTestStorageContainer(ctx.db, { specimenId, unitId })
+      await ctx.db.update(storageContainer).set({ comment: 'original' }).where(eq(storageContainer.id, container.id))
+      await createTestContainerTags(ctx.db, container.id, [keepTagId])
+      return container.id
+    }
+
+    async function seedMicronix(barcode: string, position: string) {
+      const plate = await createTestMicronixPlate(ctx.db, { name: `PL-${barcode}`, locationId })
+      const id = await seedContainer()
+      await createTestMicronixTube(ctx.db, { containerId: id, collectionId: plate.id, barcode, position })
+      return id
+    }
+
+    async function seedCryovial(barcode: string, position: string) {
+      const cryoBox = await createTestCryovialBox(ctx.db, { name: `BOX-${barcode}-${position}`, locationId })
+      const id = await seedContainer()
+      await createTestCryovialTube(ctx.db, { containerId: id, collectionId: cryoBox.id, barcode, position })
+      return id
+    }
+
+    async function seedPaper(sublabel: string) {
+      const boxRecord = await createTestBox(ctx.db, { name: `BX-${sublabel}`, locationId })
+      const sheetRecord = await createTestSheet(ctx.db, { name: 'S1', boxId: boxRecord.id })
+      const id = await seedContainer()
+      await createTestPaper(ctx.db, { containerId: id, sheetId: sheetRecord.id, sublabel })
+      return id
+    }
+
+    async function tagIdsOf(id: number) {
+      const rows = await ctx.db
+        .select({ tagId: storageContainerTag.tagId })
+        .from(storageContainerTag)
+        .where(eq(storageContainerTag.storageContainerId, id))
+      return rows.map((row) => row.tagId).sort()
+    }
+
+    async function expectUnchanged(id: number) {
+      const row = await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, id)).get()
+      expect(row?.comment).toBe('original')
+      expect(row?.remainingQuantity).toBe(1)
+      expect(await tagIdsOf(id)).toEqual([keepTagId])
+    }
+
+    it('saves one Tag when the same Tag is sent twice', async () => {
+      const id = await seedMicronix('MX-DUP', 'A01')
+
+      const res = await ctx.request(`/api/containers/${id}`, { method: 'PATCH', json: { tagIds: [otherTagId, otherTagId] } })
+
+      expect(res.status).toBe(200)
+      expect(await tagIdsOf(id)).toEqual([otherTagId])
+      const body = (await res.json()) as { container: { tags?: Array<{ id: number }> } }
+      expect(body.container.tags?.map((t) => t.id)).toEqual([otherTagId])
+    })
+
+    it('returns 400 for an unknown Tag and leaves the Container unchanged', async () => {
+      const id = await seedMicronix('MX-UNK', 'A01')
+
+      const res = await ctx.request(`/api/containers/${id}`, {
+        method: 'PATCH',
+        json: { comment: 'changed', remainingQuantity: 0.5, tagIds: [otherTagId, 9999] },
+      })
+
+      expect(res.status).toBe(400)
+      const body = (await res.json()) as { error: string; errorCode: string }
+      expect(body.error).toBe('Unknown tag id: 9999')
+      expect(body.errorCode).toBe('VALIDATION_ERROR')
+      await expectUnchanged(id)
+    })
+
+    it('returns 400 for a barcode already in use and leaves quantity, comment and Tags unchanged', async () => {
+      await seedMicronix('MX-TAKEN', 'A01')
+      const id = await seedMicronix('MX-MINE', 'A01')
+
+      const res = await ctx.request(`/api/containers/${id}`, {
+        method: 'PATCH',
+        json: { comment: 'changed', remainingQuantity: 0.5, tagIds: [otherTagId], barcode: 'MX-TAKEN' },
+      })
+
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toBe("Barcode 'MX-TAKEN' is already in use")
+      await expectUnchanged(id)
+      const tube = await ctx.db.select().from(micronixTube).where(eq(micronixTube.id, id)).get()
+      expect(tube?.barcode).toBe('MX-MINE')
+    })
+
+    it('rolls back every change when the barcode write itself fails', async () => {
+      await seedMicronix('MX-RACE', 'A01')
+      const id = await seedMicronix('MX-SELF', 'A01')
+      // The check misses the conflict (as when another request takes the barcode first), so the
+      // UNIQUE constraint fails on the last write of the edit.
+      vi.spyOn(identifierResolution, 'findTubesUsingBarcode').mockResolvedValue([])
+
+      const res = await ctx.request(`/api/containers/${id}`, {
+        method: 'PATCH',
+        json: { comment: 'changed', remainingQuantity: 0.5, tagIds: [otherTagId], barcode: 'MX-RACE' },
+      })
+
+      expect(res.status).toBe(409)
+      expect(((await res.json()) as { errorCode: string }).errorCode).toBe('CONFLICT')
+      await expectUnchanged(id)
+    })
+
+    it('saves a Container whose unchanged barcode other tubes already share', async () => {
+      await seedCryovial('NA', 'A01')
+      const id = await seedCryovial('NA', 'A02')
+
+      const res = await ctx.request(`/api/containers/${id}`, {
+        method: 'PATCH',
+        json: { comment: 'changed', barcode: 'NA' },
+      })
+
+      expect(res.status).toBe(200)
+      const row = await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, id)).get()
+      expect(row?.comment).toBe('changed')
+    })
+
+    it('returns 400 for a barcode another tube type has in a different case and leaves the Container unchanged', async () => {
+      const takenBy = await seedCryovial('CV-1', 'A01')
+      const id = await seedMicronix('MX-OWN', 'A01')
+
+      const res = await ctx.request(`/api/containers/${id}`, {
+        method: 'PATCH',
+        json: { comment: 'changed', remainingQuantity: 0.5, tagIds: [otherTagId], barcode: 'cv-1' },
+      })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({
+        error: "Barcode 'cv-1' is already in use as 'CV-1'",
+        details: { containerIds: [takenBy] },
+      })
+      await expectUnchanged(id)
+      const tube = await ctx.db.select().from(micronixTube).where(eq(micronixTube.id, id)).get()
+      expect(tube?.barcode).toBe('MX-OWN')
+    })
+
+    it('returns 400 for a Paper sublabel already in use and leaves the Container unchanged', async () => {
+      await seedPaper('SPOT-TAKEN')
+      const id = await seedPaper('SPOT-MINE')
+
+      const res = await ctx.request(`/api/containers/${id}`, {
+        method: 'PATCH',
+        json: { comment: 'changed', remainingQuantity: 0.5, tagIds: [otherTagId], sublabel: 'SPOT-TAKEN' },
+      })
+
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toBe("Sublabel 'SPOT-TAKEN' is already in use")
+      await expectUnchanged(id)
+      const row = await ctx.db.select().from(paper).where(eq(paper.id, id)).get()
+      expect(row?.sublabel).toBe('SPOT-MINE')
+    })
+
+    it('returns 400 when a Paper Container is sent a barcode and leaves it unchanged', async () => {
+      const id = await seedPaper('SPOT-BC')
+
+      const res = await ctx.request(`/api/containers/${id}`, {
+        method: 'PATCH',
+        json: { comment: 'changed', tagIds: [otherTagId], barcode: 'SPOT-NEW' },
+      })
+
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toBe(
+        'Paper containers use sublabel for spot identifiers, not barcode',
+      )
+      await expectUnchanged(id)
+    })
+
+    it('returns 400 for an invalid body through the standard handler', async () => {
+      const id = await seedMicronix('MX-ZOD', 'A01')
+
+      const res = await ctx.request(`/api/containers/${id}`, { method: 'PATCH', json: { tagIds: ['one'] } })
+
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { errorCode: string }).errorCode).toBe('VALIDATION_ERROR')
+      await expectUnchanged(id)
+    })
+
+    it('returns 404 for a Container that does not exist', async () => {
+      const res = await ctx.request('/api/containers/999999', { method: 'PATCH', json: { comment: 'x' } })
+
+      expect(res.status).toBe(404)
+      expect(((await res.json()) as { errorCode: string }).errorCode).toBe('NOT_FOUND')
+    })
+
+    it('logs a server error to error_logs through the standard handler', async () => {
+      const id = await seedMicronix('MX-500', 'A01')
+      vi.spyOn(containerEnrichment, 'enrichContainerForApi').mockRejectedValueOnce(new Error('enrichment failed'))
+      const logsBefore = await ctx.db.select().from(errorLogs)
+
+      const res = await ctx.request(`/api/containers/${id}`, { method: 'PATCH', json: { comment: 'changed' } })
+
+      expect(res.status).toBe(500)
+      const body = (await res.json()) as { error: string; errorCode: string }
+      expect(body.error).toBe('enrichment failed')
+      // The handler writes the log without awaiting it.
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const logsAfter = await ctx.db.select().from(errorLogs)
+      expect(logsAfter.length).toBe(logsBefore.length + 1)
+      expect(logsAfter.at(-1)?.message).toBe('enrichment failed')
+    })
+  })
+
+  describe('PATCH /api/containers/:id keeps remaining quantity within bounds', () => {
+    /** A Container with total 10 and remaining 4. */
+    async function seedQuantityContainer() {
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+      const specimenId = (await createTestSpecimen(ctx.db, specimenType.id)).id
+      const container = await createTestStorageContainer(ctx.db, { specimenId })
+      await ctx.db
+        .update(storageContainer)
+        .set({ totalQuantity: 10, remainingQuantity: 4, comment: 'original' })
+        .where(eq(storageContainer.id, container.id))
+      return container.id
+    }
+
+    async function remainingOf(id: number) {
+      return (await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, id)).get())?.remainingQuantity
+    }
+
+    it('returns 400 for a negative remaining quantity and leaves the Container unchanged', async () => {
+      const id = await seedQuantityContainer()
+
+      const res = await ctx.request(`/api/containers/${id}`, { method: 'PATCH', json: { comment: 'changed', remainingQuantity: -5 } })
+
+      expect(res.status).toBe(400)
+      const body = (await res.json()) as { error: string; errorCode: string }
+      expect(body.errorCode).toBe('VALIDATION_ERROR')
+      expect(body.error).toBe('Remaining quantity must be 0 or more (got -5).')
+      expect(await remainingOf(id)).toBe(4)
+      const row = await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, id)).get()
+      expect(row?.comment).toBe('original')
+    })
+
+    it('returns 400 for a remaining quantity greater than total', async () => {
+      const id = await seedQuantityContainer()
+
+      const res = await ctx.request(`/api/containers/${id}`, { method: 'PATCH', json: { remainingQuantity: 1e9 } })
+
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toBe(
+        'Remaining quantity (1000000000) cannot exceed total quantity (10).',
+      )
+      expect(await remainingOf(id)).toBe(4)
+    })
+
+    it('saves a remaining quantity of 0 and one equal to total', async () => {
+      const id = await seedQuantityContainer()
+
+      const zero = await ctx.request(`/api/containers/${id}`, { method: 'PATCH', json: { remainingQuantity: 0 } })
+      expect(zero.status).toBe(200)
+      expect(await remainingOf(id)).toBe(0)
+
+      const full = await ctx.request(`/api/containers/${id}`, { method: 'PATCH', json: { remainingQuantity: 10 } })
+      expect(full.status).toBe(200)
+      expect(await remainingOf(id)).toBe(10)
     })
   })
 })

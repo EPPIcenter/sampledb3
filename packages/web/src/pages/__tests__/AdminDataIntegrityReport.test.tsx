@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '../../__tests__/helpers/render'
+import { render, screen, waitFor, within } from '../../__tests__/helpers/render'
 import AdminDataIntegrityReport from '../AdminDataIntegrityReport'
 import { adminApi } from '../../lib/api/admin'
 
@@ -17,6 +17,8 @@ function emptyIntegrityReport() {
     duplicateBarcodes: [],
     locationPathInconsistencies: [],
     containersWithNoGridPosition: [],
+    specimensWithNonIsoCollectionDate: [],
+    containersWithInvalidGridPosition: [],
   }
 }
 
@@ -54,6 +56,46 @@ describe('AdminDataIntegrityReport', () => {
       expect(screen.getByText('Containers with no grid position')).toBeInTheDocument()
       expect(screen.getByRole('link', { name: '42' })).toHaveAttribute('href', '/containers/42')
     })
+  })
+
+  it('shows specimens whose collection date is not ISO', async () => {
+    vi.mocked(adminApi.getIntegrityReport).mockResolvedValue({
+      ...emptyIntegrityReport(),
+      specimensWithNonIsoCollectionDate: [{ id: 143200, collectionDate: '9/14/20' }],
+    })
+    await render(<AdminDataIntegrityReport />)
+    expect(await screen.findByText('Collection date not ISO')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '143200' })).toHaveAttribute('href', '/specimens/143200')
+    expect(screen.getByText('9/14/20')).toBeInTheDocument()
+  })
+
+  it('shows Containers with an invalid Grid position, with the stored position and a Collection link', async () => {
+    vi.mocked(adminApi.getIntegrityReport).mockResolvedValue({
+      ...emptyIntegrityReport(),
+      containersWithInvalidGridPosition: [
+        { id: 51, containerType: 'cryovial_tube', collectionId: 790, position: '--A01' },
+      ],
+    })
+    await render(<AdminDataIntegrityReport />)
+    expect(await screen.findByText('Containers with an invalid Grid position')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '51' })).toHaveAttribute('href', '/containers/51')
+    expect(screen.getByRole('link', { name: '790' })).toHaveAttribute('href', '/collections/cryovial-boxes/790')
+    expect(screen.getByText('--A01')).toBeInTheDocument()
+  })
+
+  it('lists duplicated tube barcodes with their spellings and tube types', async () => {
+    vi.mocked(adminApi.getIntegrityReport).mockResolvedValue({
+      ...emptyIntegrityReport(),
+      duplicateBarcodes: [
+        { barcode: 'CK3-3FR4', variants: ['CK3-3FR4', 'ck3-3fr4 '], containerTypes: ['cryovial_tube', 'micronix_tube'], ids: [42911, 137291] },
+      ],
+    })
+    await render(<AdminDataIntegrityReport />)
+    const row = (await screen.findByRole('cell', { name: 'CK3-3FR4' })).closest('tr')!
+    expect(within(row).getByRole('cell', { name: '"CK3-3FR4", "ck3-3fr4 "' })).toBeInTheDocument()
+    expect(within(row).getByRole('cell', { name: 'cryovial_tube, micronix_tube' })).toBeInTheDocument()
+    expect(within(row).getByRole('link', { name: '137291' })).toHaveAttribute('href', '/containers/137291')
+    expect(screen.getByText('Duplicate tube barcodes')).toBeInTheDocument()
   })
 
   it('shows retry when report load fails', async () => {

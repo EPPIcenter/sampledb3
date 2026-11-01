@@ -25,6 +25,7 @@ import { requireParam } from '../lib/common-validators'
 import { withWriteTransaction } from '../db/write-transaction'
 import { assertNotUsedInQpcr } from '../lib/qpcr-usage'
 import { insertedRow } from '../lib/inserted-row'
+import { timestampFilter } from '../lib/date-filters'
 
 /** Short code prefix for tutorial namespace. Any study whose short code starts with this (case-insensitive) may be deleted by any member. Only admins may rename a study into or out of this namespace. */
 const TUTORIAL_SHORT_CODE_PREFIX = 'TUT'
@@ -60,7 +61,15 @@ studies.get('/', authMiddleware, async (c) => {
     const page = validatePage(c.req.query('page'))
     const limit = await validateLimit(database, c.req.query('limit'))
 
-    return c.json(await listStudies(database, { search, page, limit }))
+    return c.json(
+      await listStudies(database, {
+        search,
+        createdFrom: timestampFilter('created_from', c.req.query('created_from')),
+        createdTo: timestampFilter('created_to', c.req.query('created_to')),
+        page,
+        limit,
+      }),
+    )
   } catch (error) {
     return handleRouteError(error, c)
   }

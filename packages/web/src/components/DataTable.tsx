@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { SkeletonTable } from '../ui'
 import Pagination from './Pagination'
+import { compareBySortType, type SortType } from '../lib/sort-compare'
 
 export interface Column<T> {
   key: keyof T | string
   label: string
-  sortable?: boolean
+  /** How the column sorts: text (natural order), number, or date. Omit for a column that does not sort. */
+  sortType?: SortType
   render?: (value: any, row: T) => React.ReactNode
 }
 
@@ -48,7 +50,7 @@ export default function DataTable<T extends { id: number }>({
   const prevResetDepsRef = useRef([data.length, sortColumn, sortDirection, pagination?.page ?? 0])
 
   const handleSort = (column: Column<T>) => {
-    if (!column.sortable) return
+    if (!column.sortType) return
     
     if (sortColumn === column.key) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
@@ -58,38 +60,13 @@ export default function DataTable<T extends { id: number }>({
     }
   }
 
-  const sortedData = [...data].sort((a, b) => {
-    if (!sortColumn) return 0
-    
-    const aValue = a[sortColumn as keyof T]
-    const bValue = b[sortColumn as keyof T]
-    
-    if (aValue === bValue) return 0
-    if (aValue === null || aValue === undefined) return 1
-    if (bValue === null || bValue === undefined) return -1
-    
-    // Handle numeric comparison for specimenCount and dates
-    if (typeof aValue === 'number' && typeof bValue === 'number') {
-      const comparison = aValue < bValue ? -1 : 1
-      return sortDirection === 'asc' ? comparison : -comparison
-    }
-    
-    // Handle date strings
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-      const aDate = new Date(aValue).getTime()
-      const bDate = new Date(bValue).getTime()
-      if (!isNaN(aDate) && !isNaN(bDate)) {
-        const comparison = aDate < bDate ? -1 : 1
-        return sortDirection === 'asc' ? comparison : -comparison
-      }
-    }
-    
-    // String comparison
-    const aStr = String(aValue).toLowerCase()
-    const bStr = String(bValue).toLowerCase()
-    const comparison = aStr < bStr ? -1 : 1
-    return sortDirection === 'asc' ? comparison : -comparison
-  })
+  const sortType = columns.find((column) => column.key === sortColumn)?.sortType
+  const sortedData =
+    sortColumn && sortType
+      ? [...data].sort((a, b) =>
+          compareBySortType(a[sortColumn as keyof T], b[sortColumn as keyof T], sortType, sortDirection)
+        )
+      : data
 
   // Apply pagination if enabled
   const paginatedData = pagination
@@ -203,12 +180,12 @@ export default function DataTable<T extends { id: number }>({
                   key={String(column.key)}
                   onClick={() => handleSort(column)}
                   className={`${density === 'compact' ? 'px-3 py-2' : 'px-6 py-3'} text-left text-xs font-medium text-app-text-muted uppercase ${
-                    column.sortable ? 'cursor-pointer hover:bg-app-border/50' : ''
+                    column.sortType ? 'cursor-pointer hover:bg-app-border/50' : ''
                   }`}
                 >
                   <div className="flex items-center space-x-1">
                     <span>{column.label}</span>
-                    {column.sortable && sortColumn === column.key && (
+                    {column.sortType && sortColumn === column.key && (
                       <svg
                         className={`h-4 w-4 ${sortDirection === 'asc' ? '' : 'transform rotate-180'}`}
                         fill="none"

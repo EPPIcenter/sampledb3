@@ -13,9 +13,12 @@ CREATE TABLE IF NOT EXISTS users (
 );--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL,
   user_id INTEGER NOT NULL REFERENCES users(id),
   expires_at INTEGER NOT NULL
 );--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS sessions_token_hash_idx ON sessions(token_hash);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions(user_id);--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS tag (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL UNIQUE
@@ -284,7 +287,7 @@ CREATE TABLE IF NOT EXISTS storage_type (
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER NOT NULL
 );--> statement-breakpoint
-INSERT INTO schema_version (version) VALUES (7);--> statement-breakpoint
+INSERT INTO schema_version (version) VALUES (10);--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT NOT NULL,
   user_id INTEGER REFERENCES users(id),

@@ -1,9 +1,10 @@
 import type { Database } from '../../db/client'
 import { specimen, storageContainer, studySubject, study, specimenType, controlBatch } from '../../db/schema'
-import { eq, and, or, sql } from 'drizzle-orm'
+import { eq, and, or, sql, inArray } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../constants'
-import { resolveContainerByBarcode } from '../identifier-resolution'
-import { dateToUpperBound } from '../sql-helpers'
+import { findContainersByBarcode } from '../identifier-resolution'
+import { collectionDateFilter, timestampFilter } from '../date-filters'
+import { dateRangeConditions } from '../sql-helpers'
 import { likeContains } from '../sql-like'
 
 export type ListSpecimensQuery = {
@@ -142,35 +143,31 @@ export async function listSpecimens(database: Database, query: ListSpecimensQuer
     }
   }
 
-  if (collectionDateFrom) {
-    conditions.push(sql`${specimen.collectionDate} >= ${collectionDateFrom}`)
+  const collectionFrom = collectionDateFilter('collection_date_from', collectionDateFrom)
+  const collectionTo = collectionDateFilter('collection_date_to', collectionDateTo)
+  const createdFromBound = timestampFilter('created_from', createdFrom)
+  const createdToBound = timestampFilter('created_to', createdTo)
+  if (collectionFrom) {
+    conditions.push(sql`${specimen.collectionDate} >= ${collectionFrom}`)
   }
-  if (collectionDateTo) {
-    conditions.push(sql`${specimen.collectionDate} <= ${collectionDateTo}`)
+  if (collectionTo) {
+    conditions.push(sql`${specimen.collectionDate} <= ${collectionTo}`)
   }
-  if (createdFrom) {
-    conditions.push(sql`${specimen.created} >= ${createdFrom}`)
-  }
-  if (createdTo) {
-    conditions.push(dateToUpperBound(specimen.created, createdTo))
-  }
+  conditions.push(...dateRangeConditions(specimen.created, createdFromBound, createdToBound))
 
   if (barcode) {
-    const containerId = await resolveContainerByBarcode(database, barcode)
-    if (containerId) {
-      const container = await database
-        .select({ specimenId: storageContainer.specimenId })
-        .from(storageContainer)
-        .where(eq(storageContainer.id, containerId))
-        .get()
-      if (container) {
-        conditions.push(eq(specimen.id, container.specimenId))
-      } else {
-        return emptyBarcodeResult()
-      }
-    } else {
-      return emptyBarcodeResult()
-    }
+    // Every Specimen with a Container carrying the barcode; cryovial barcodes repeat.
+    const containerIds = (await findContainersByBarcode(database, barcode)).map((match) => match.containerId)
+    if (containerIds.length === 0) return emptyBarcodeResult()
+    conditions.push(
+      inArray(
+        specimen.id,
+        database
+          .select({ specimenId: storageContainer.specimenId })
+          .from(storageContainer)
+          .where(inArray(storageContainer.id, containerIds)),
+      ),
+    )
   }
 
   if (search) {

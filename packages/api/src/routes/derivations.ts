@@ -10,7 +10,7 @@ import { and, eq } from 'drizzle-orm'
 import { createDerivation } from '../lib/derivations'
 import { resolveSpecimenSource } from '../lib/specimens/provenance'
 import { createDerivationRequestSchema } from '../lib/derivation-schemas'
-import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { requireParam } from '../lib/common-validators'
 import { handleRouteError } from '../lib/error-handler'
 import { enrichContainersForApi } from '../lib/container-api-enrichment'
@@ -24,6 +24,7 @@ export function createDerivationsRoutes(database: Database): Hono {
   const derivations = new Hono()
   const authMiddleware = createAuthMiddleware(database)
   const memberMiddleware = createMemberMiddleware(database)
+  const adminMiddleware = createAdminMiddleware(database)
 
 // Create derivation from parent container
 derivations.post('/containers/:id/derive', memberMiddleware, async (c) => {
@@ -236,8 +237,8 @@ derivations.get('/containers/:id/derivation-chain', authMiddleware, async (c) =>
   }
 })
 
-// Update derivation metadata
-derivations.patch('/derivations/:id', memberMiddleware, async (c) => {
+// Update derivation metadata (admin-only: CONTEXT.md, Roles)
+derivations.patch('/derivations/:id', adminMiddleware, async (c) => {
   try {
     const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
@@ -274,8 +275,8 @@ derivations.patch('/derivations/:id', memberMiddleware, async (c) => {
   }
 })
 
-// Delete derivation (relationship only)
-derivations.delete('/derivations/:id', memberMiddleware, async (c) => {
+// Delete derivation (relationship only; admin-only: CONTEXT.md, Roles)
+derivations.delete('/derivations/:id', adminMiddleware, async (c) => {
   try {
     const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {

@@ -64,18 +64,20 @@ Micronix barcodes must be unique across the system. Paper uses **sheet name** an
 
 Open **Browse Data → Collections**. Tabs: **All**, **Micronix Plates**, **Cryovial Boxes**, **Boxes**, **Bags**. See [Browsing collections](/docs/guides/features/browse-collections/).
 
-Plate pages include a grid of occupied and empty wells. Box and bag pages list sheets. Every collection type has a **Table** view and **Export CSV**, which downloads the rows currently shown.
+Micronix plate and cryovial box pages include a grid of occupied and empty cells. The grid always shows the whole plate (A–H, 1–12) or box (A–J, 1–10). Tubes that belong to the plate or box but have no position, or a stored position that is not a cell of the grid, appear below the grid in an **Unplaced** section, labelled with the stored value. Box and bag pages list sheets. Every collection type has a **Table** view and **Export CSV**, which downloads the rows currently shown; on plates and boxes this includes unplaced tubes after the grid rows.
 
 ## Delete a collection
 
-On a plate, cryovial box, box, or bag (not the sheet-only page), **Delete collection** removes:
+Only administrators can delete a collection. On a plate, cryovial box, box, or bag (not the sheet-only page), **Delete collection** removes:
 
 - The collection
 - Every container in it
 - Specimen records that would have no storage left (a specimen with another container elsewhere is kept)
 - Optional: with **Also remove study participants (subjects) that have no specimens left**, subjects who would have no specimens. Control batches are never removed this way.
 
-Type the exact collection name to confirm. The operation is all or nothing.
+Before you confirm, the dialog counts the containers, specimens, and subjects the delete removes. Subjects count only when the option to remove them is on; otherwise the dialog shows how many would be left with no specimens. Containers that belong to the collection but have no grid position are counted and removed too.
+
+Type the exact collection name to confirm. The operation is all or nothing. Afterwards the Collections list, dashboard, study and subject pages, and location contents show the result.
 
 ### When deletion is blocked
 
@@ -85,6 +87,6 @@ Type the exact collection name to confirm. The operation is all or nothing.
 | `qpcr_wells_link_specimens` | A specimen you would remove is still on a qPCR well. | Clear the well, then try again. |
 | `container_derivation_spans_outside_collection` | A derivation parent is in this collection and the child is in another. | Move or remove the child, or reassign the derivation. Deleting a collection that only holds child containers is allowed. |
 
-Nothing is partially deleted. Fix the listed codes and submit again.
+The dialog lists blockers before you confirm, and keeps **Delete collection** disabled until they are fixed. Nothing is partially deleted. Fix the listed codes and open the dialog again.
 
 To move tubes between plates, see [Container movement](/docs/guides/bulk-operations/container-movement/). To move a whole plate or box to a new freezer, see [Move collections](/docs/guides/features/collection-move/).

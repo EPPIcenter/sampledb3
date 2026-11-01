@@ -1,11 +1,30 @@
+const CALENDAR_DATE = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/
+const ZONELESS_DATETIME = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)$/
+
 /**
- * Parse a date for display. A bare YYYY-MM-DD is a calendar date, so it is built in local
- * time: new Date('2024-01-15') is UTC midnight, which renders as Jan 14 in the Americas.
+ * Parse a date or server timestamp for display. Every date string from the API goes through
+ * here.
+ *
+ * - A bare YYYY-MM-DD (a collection date) or YYYY-MM (a timeline month) is a calendar date, so
+ *   it is built in local time: new Date('2024-01-15') is UTC midnight, which renders as Jan 14
+ *   in the Americas.
+ * - A timestamp with no zone marker, such as SQLite's `YYYY-MM-DD HH:MM:SS` from
+ *   `current_timestamp` or `utcNow()`, is UTC. new Date() would read it as local time.
+ * - Anything else (ISO with `Z` or an offset) keeps its own zone.
  */
 export function parseDisplayDate(value: string): Date {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
-  if (match) return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  const calendar = CALENDAR_DATE.exec(value)
+  if (calendar) {
+    return new Date(Number(calendar[1]), Number(calendar[2]) - 1, calendar[3] ? Number(calendar[3]) : 1)
+  }
+  const zoneless = ZONELESS_DATETIME.exec(value)
+  if (zoneless) return new Date(`${zoneless[1]}T${zoneless[2]}Z`)
   return new Date(value)
+}
+
+/** Milliseconds since the epoch for a date or server timestamp (see parseDisplayDate). */
+export function displayDateTime(value: string): number {
+  return parseDisplayDate(value).getTime()
 }
 
 /** A Date as a local YYYY-MM-DD calendar date (toISOString() gives the UTC date). */
@@ -23,7 +42,7 @@ export function localToday(): string {
 
 /**
  * Formats a date string with relative time for recent dates and absolute dates for older items
- * @param dateString - ISO date string
+ * @param dateString - Date or server timestamp (see parseDisplayDate)
  * @returns Formatted date string (e.g., "2 days ago" or "Jan 15, 2024")
  */
 export function formatDateWithRelativeTime(dateString: string | null | undefined): string {
@@ -31,7 +50,9 @@ export function formatDateWithRelativeTime(dateString: string | null | undefined
   
   const date = parseDisplayDate(dateString)
   const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
+  // A timestamp slightly ahead of this clock (server clock skew) reads as "Just now", not as a
+  // negative age.
+  const diffMs = Math.max(0, now.getTime() - date.getTime())
   const diffSeconds = Math.floor(diffMs / 1000)
   const diffMinutes = Math.floor(diffSeconds / 60)
   const diffHours = Math.floor(diffMinutes / 60)
@@ -71,6 +92,17 @@ export function formatDate(
 ): string {
   if (!dateString) return 'N/A'
   return parseDisplayDate(dateString).toLocaleDateString('en-US', DATE_FORMATS[style])
+}
+
+/**
+ * Format a server timestamp as a local date and time, e.g. "1/15/2024, 3:45:00 PM" in en-US.
+ */
+export function formatDateTime(
+  dateString: string | null | undefined,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  if (!dateString) return 'N/A'
+  return parseDisplayDate(dateString).toLocaleString(undefined, options)
 }
 
 /**

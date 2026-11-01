@@ -40,6 +40,33 @@ describe('Subjects API', () => {
       expect(Array.isArray(data.subjects)).toBe(true)
     })
 
+    it('counts only subjects created inside created_from and created_to', async () => {
+      const s = await createTestStudy(ctx.db, { title: 'Study', shortCode: 'S1' })
+      await createTestStudySubject(ctx.db, { studyId: s.id, name: 'before', created: '2026-08-31 23:59:59' })
+      await createTestStudySubject(ctx.db, { studyId: s.id, name: 'first', created: '2026-09-01 00:00:00' })
+      await createTestStudySubject(ctx.db, { studyId: s.id, name: 'last', created: '2026-09-30 23:59:59' })
+      await createTestStudySubject(ctx.db, { studyId: s.id, name: 'after', created: '2026-10-01 00:00:00' })
+
+      const res = await ctx.request('/api/subjects?created_from=2026-09-01&created_to=2026-09-30&limit=1')
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { pagination: { total: number } }
+      expect(data.pagination.total).toBe(2)
+
+      const fromOnly = await ctx.request('/api/subjects?created_from=2026-09-01&limit=1')
+      expect(((await fromOnly.json()) as { pagination: { total: number } }).pagination.total).toBe(3)
+    })
+
+    it.each([
+      ['created_from', 'yesterday'],
+      ['created_to', '2024-13-01'],
+    ])('returns 400 for %s=%s', async (param, value) => {
+      const res = await ctx.request(`/api/subjects?${param}=${encodeURIComponent(value)}`)
+
+      expect(res.status).toBe(400)
+      const data = (await res.json()) as { error: string }
+      expect(data.error).toContain(param)
+    })
+
     it('returns 401 when not authenticated', async () => {
       const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects', { method: 'GET' })
       expect(res.status).toBe(401)

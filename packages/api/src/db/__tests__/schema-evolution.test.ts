@@ -42,6 +42,18 @@ function createTablesForLaterMigrations(sqlite: Database): void {
     box_id INTEGER,
     bag_id INTEGER
   )`)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS specimen (
+    id INTEGER PRIMARY KEY,
+    study_subject_id INTEGER,
+    specimen_type_id INTEGER NOT NULL,
+    collection_date DATE
+  )`)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT NOT NULL, created TEXT, approved_at TEXT)`)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    expires_at INTEGER NOT NULL
+  )`)
 }
 
 describe('schema evolution', () => {
@@ -293,6 +305,61 @@ describe('schema evolution', () => {
     sqlite.close()
   })
 
+  it('migration 008 rewrites M/D/YY and M/D/YYYY collection dates as YYYY-MM-DD', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (7)')
+    createTablesForLaterMigrations(sqlite)
+    const values: Array<[number, string | null]> = [
+      [1, '5/7/26'],
+      [2, '9/14/20'],
+      [3, '12/24/2024'],
+      [4, '07/04/2024'],
+      [5, '2023-08-21'],
+      [6, null],
+      [7, '   '],
+      [8, ' 3/17/22 '],
+      [9, '1970-01-01'],
+    ]
+    const insert = sqlite.prepare('INSERT INTO specimen (id, specimen_type_id, collection_date) VALUES (?, 1, ?)')
+    for (const [id, date] of values) insert.run(id, date)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    const rows = sqlite.prepare('SELECT collection_date AS date FROM specimen ORDER BY id').all() as Array<{ date: string | null }>
+    expect(rows.map((r) => r.date)).toEqual([
+      '2026-05-07',
+      '2020-09-14',
+      '2024-12-24',
+      '2024-07-04',
+      '2023-08-21',
+      null,
+      null,
+      '2022-03-17',
+      '1970-01-01',
+    ])
+    sqlite.close()
+  })
+
+  it.each(['13/2/2024', '2/30/2024', '2024-02-30', '5/7', '7 Apr 2024', '2024/05/07', '5/7/124'])(
+    'migration 008 aborts on a collection date it cannot read (%s) and changes nothing',
+    (bad) => {
+      const sqlite = new Database(testDbPath)
+      sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+      sqlite.exec('INSERT INTO schema_version (version) VALUES (7)')
+      createTablesForLaterMigrations(sqlite)
+      sqlite.exec(`INSERT INTO specimen (id, specimen_type_id, collection_date) VALUES (1, 1, '5/7/26')`)
+      sqlite.prepare('INSERT INTO specimen (id, specimen_type_id, collection_date) VALUES (2, 1, ?)').run(bad)
+
+      expect(() => evolveOperationalSchema(sqlite)).toThrow(/Cannot convert collection dates to YYYY-MM-DD/)
+      expect(getRecordedSchemaVersion(sqlite)).toBe(7)
+      const rows = sqlite.prepare('SELECT collection_date AS date FROM specimen ORDER BY id').all() as Array<{ date: string }>
+      expect(rows.map((r) => r.date)).toEqual(['5/7/26', bad])
+      sqlite.close()
+    },
+  )
+
   /** The CREATE TABLE text SQLite stored for qpcr_well_result. */
   function qpcrWellResultDdl(sqlite: Database): string {
     const row = sqlite.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='qpcr_well_result'").get() as
@@ -311,6 +378,7 @@ describe('schema evolution', () => {
     const migrated = new Database(testDbPath)
     migrated.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
     migrated.exec('INSERT INTO schema_version (version) VALUES (6)')
+    createTablesForLaterMigrations(migrated)
     evolveOperationalSchema(migrated)
     expect(getRecordedSchemaVersion(migrated)).toBe(CURRENT_SCHEMA_VERSION)
     expect(qpcrWellResultDdl(migrated)).toContain('CONSTRAINT qpcr_well_result_run_well_target_unique UNIQUE')
@@ -329,6 +397,7 @@ describe('schema evolution', () => {
       UNIQUE (qpcr_run_id, well_position, target_name)
     )`
     sqlite.exec(existing)
+    createTablesForLaterMigrations(sqlite)
 
     evolveOperationalSchema(sqlite)
 
@@ -339,6 +408,116 @@ describe('schema evolution', () => {
     ).toThrow(/UNIQUE/)
     sqlite.close()
   })
+
+  it('migration 009 drops sessions stored by cookie value and stores sessions by token hash', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (7)')
+    createTablesForLaterMigrations(sqlite)
+    sqlite.exec(`INSERT INTO users (id, email) VALUES (1, 'a@test.com')`)
+    sqlite.exec(`INSERT INTO sessions (id, user_id, expires_at) VALUES ('raw-cookie-value', 1, 9999999999)`)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(sqlite.prepare('SELECT COUNT(*) AS n FROM sessions').get()).toEqual({ n: 0 })
+    const columns = (sqlite.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string; notnull: number }>)
+      .map((column) => `${column.name}${column.notnull ? ' NOT NULL' : ''}`)
+    expect(columns).toEqual(['id', 'token_hash NOT NULL', 'user_id NOT NULL', 'expires_at NOT NULL'])
+    sqlite.exec(`INSERT INTO sessions (id, token_hash, user_id, expires_at) VALUES ('p1', 'h1', 1, 1)`)
+    expect(() =>
+      sqlite.exec(`INSERT INTO sessions (id, token_hash, user_id, expires_at) VALUES ('p2', 'h1', 1, 1)`),
+    ).toThrow(/UNIQUE/)
+    const plan = sqlite
+      .prepare(`EXPLAIN QUERY PLAN SELECT id FROM sessions WHERE token_hash = 'h1'`)
+      .all() as Array<{ detail: string }>
+    expect(plan.map((row) => row.detail).join(' ')).toContain('sessions_token_hash_idx')
+    sqlite.close()
+  })
+
+  /** A database at version 9 with grid tables, ready for migration 010. */
+  function databaseBeforeMigration010(): Database {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (9)')
+    createTablesForLaterMigrations(sqlite)
+    return sqlite
+  }
+
+  function positions(sqlite: Database, table: string): Array<[number, string | null]> {
+    const rows = sqlite.prepare(`SELECT id, position FROM ${table} ORDER BY id`).all() as Array<{ id: number; position: string | null }>
+    return rows.map((r) => [r.id, r.position])
+  }
+
+  it('migration 010 strips dashes, clears barcode-shaped and NA positions, and leaves valid ones', () => {
+    const sqlite = databaseBeforeMigration010()
+    sqlite.exec(`INSERT INTO cryovial_tube (id, collection_id, barcode, position) VALUES
+      (1, 790, 'C1', '--A01'), (2, 790, 'C2', '-F02'), (3, 790, 'C3', 'G01'), (4, 84, 'C4', 'NA01'),
+      (5, 84, 'C5', 'na05'), (6, 84, NULL, NULL), (7, 84, 'C7', 'b3'), (8, 84, 'C8', ' J10 ')`)
+    sqlite.exec(`INSERT INTO micronix_tube (id, collection_id, barcode, position) VALUES
+      (11, 254, '1145854300', 'A1145854300'), (12, 254, '1106665111', 'A1106665111'), (13, 254, 'MX3', NULL), (14, 1, 'MX4', 'H12')`)
+    sqlite.exec(`INSERT INTO static_well (id, collection_id, position) VALUES (21, 1, '-a1')`)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(positions(sqlite, 'cryovial_tube')).toEqual([
+      [1, 'A01'], [2, 'F02'], [3, 'G01'], [4, null], [5, null], [6, null], [7, 'B03'], [8, 'J10'],
+    ])
+    expect(positions(sqlite, 'micronix_tube')).toEqual([[11, null], [12, null], [13, null], [14, 'H12']])
+    expect(positions(sqlite, 'static_well')).toEqual([[21, 'A01']])
+    const temp = sqlite.prepare(`SELECT name FROM sqlite_temp_master WHERE name LIKE '__migration_010%'`).all()
+    expect(temp).toEqual([])
+    sqlite.close()
+  })
+
+  it('migration 010 aborts, changing nothing, when a stripped position collides with a stored one', () => {
+    const sqlite = databaseBeforeMigration010()
+    sqlite.exec(`INSERT INTO cryovial_tube (id, collection_id, barcode, position) VALUES (1, 790, 'C1', '--A01'), (2, 790, 'C2', 'A01'), (3, 790, 'C3', '-B01')`)
+
+    expect(() => evolveOperationalSchema(sqlite)).toThrow(/would put two Containers in one position of the same Collection/)
+    expect(getRecordedSchemaVersion(sqlite)).toBe(9)
+    expect(positions(sqlite, 'cryovial_tube')).toEqual([[1, '--A01'], [2, 'A01'], [3, '-B01']])
+    sqlite.close()
+  })
+
+  it('migration 010 aborts when two repairs land in one position', () => {
+    const sqlite = databaseBeforeMigration010()
+    sqlite.exec(`INSERT INTO micronix_tube (id, collection_id, barcode, position) VALUES (1, 5, 'M1', '--C04')`)
+    sqlite.exec(`INSERT INTO static_well (id, collection_id, position) VALUES (2, 5, 'c4')`)
+
+    expect(() => evolveOperationalSchema(sqlite)).toThrow(/would put two Containers in one position/)
+    expect(getRecordedSchemaVersion(sqlite)).toBe(9)
+    sqlite.close()
+  })
+
+  it('migration 010 allows a collision of the same position in different Collections', () => {
+    const sqlite = databaseBeforeMigration010()
+    sqlite.exec(`INSERT INTO cryovial_tube (id, collection_id, barcode, position) VALUES (1, 790, 'C1', '--A01'), (2, 794, 'C2', 'A01')`)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(positions(sqlite, 'cryovial_tube')).toEqual([[1, 'A01'], [2, 'A01']])
+    sqlite.close()
+  })
+
+  for (const [table, position] of [
+    ['cryovial_tube', 'K01'],
+    ['cryovial_tube', '--A11'],
+    ['micronix_tube', 'I01'],
+    ['micronix_tube', 'A001'],
+    ['micronix_tube', 'hello'],
+  ] as const) {
+    it(`migration 010 aborts on a position it cannot repair: ${table} "${position}"`, () => {
+      const sqlite = databaseBeforeMigration010()
+      sqlite.exec(`INSERT INTO ${table} (id, collection_id, barcode, position) VALUES (1, 1, 'X1', '--A02'), (2, 1, 'X2', '${position}')`)
+
+      expect(() => evolveOperationalSchema(sqlite)).toThrow(/cannot be repaired automatically/)
+      expect(getRecordedSchemaVersion(sqlite)).toBe(9)
+      expect(positions(sqlite, table)).toEqual([[1, '--A02'], [2, position]])
+      sqlite.close()
+    })
+  }
 
   it('fail-hard: invalid migration leaves schema_version unchanged', () => {
     const sqlite = new Database(testDbPath)

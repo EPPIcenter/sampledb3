@@ -27,8 +27,8 @@ describe('buildMovePlan', () => {
     const plan = buildMovePlan(files, micronixScanMoveVariant)
     if (!plan.ok) throw new Error('expected ok plan')
     expect(plan.moves).toEqual([
-      { identifier: { type: 'barcode', barcode: 'BC1' }, targetPosition: 'A01', fileIndex: 0 },
-      { identifier: { type: 'barcode', barcode: 'BC2' }, targetPosition: 'B01', fileIndex: 1 },
+      { identifier: { type: 'barcode', barcode: 'BC1' }, targetPosition: 'A01', fileIndex: 0, csvRow: 1 },
+      { identifier: { type: 'barcode', barcode: 'BC2' }, targetPosition: 'B01', fileIndex: 1, csvRow: 1 },
     ])
     expect(plan.mappings).toEqual([{ fromCollectionName: 'SRC-1', toCollectionName: 'DEST-1' }])
   })
@@ -57,43 +57,86 @@ describe('buildMovePlan', () => {
 })
 
 describe('buildPerFileResults', () => {
-  it('attributes moved counts and row-ranged errors per file', () => {
-    const files = [
-      makeFile({
-        filename: 'one.csv',
-        selectedDestinationName: 'DEST-1',
-        csvRows: [
-          { container_barcode: 'BC1', target_position: 'A01' },
-          { container_barcode: 'BC2', target_position: 'A02' },
-        ],
-      }),
-      makeFile({
-        filename: 'two.csv',
-        selectedDestinationName: 'DEST-2',
-        csvRows: [{ container_barcode: 'BC3', target_position: 'B01' }],
-      }),
-    ]
-    const moves = [
-      { identifier: { type: 'barcode' as const, barcode: 'BC1' }, targetPosition: 'A01', fileIndex: 0 },
-      { identifier: { type: 'barcode' as const, barcode: 'BC2' }, targetPosition: 'A02', fileIndex: 0 },
-      { identifier: { type: 'barcode' as const, barcode: 'BC3' }, targetPosition: 'B01', fileIndex: 1 },
-    ]
-    const results = buildPerFileResults(files, moves, {
+  // Scanner files list empty wells; the move request skips them, so the
+  // endpoint's row numbers don't line up with CSV rows.
+  const files = [
+    makeFile({
+      filename: 'one.csv',
+      selectedDestinationName: 'DEST-1',
+      csvRows: [
+        { container_barcode: 'BC1', target_position: 'A01' },
+        { container_barcode: '', target_position: 'A02' },
+        { container_barcode: 'BC2', target_position: 'A03' },
+      ],
+    }),
+    makeFile({
+      filename: 'two.csv',
+      selectedDestinationName: 'DEST-2',
+      csvRows: [
+        { container_barcode: '', target_position: 'A01' },
+        { container_barcode: 'BC3', target_position: 'B01' },
+      ],
+    }),
+  ]
+  const plan = buildMovePlan(files, micronixScanMoveVariant)
+  if (!plan.ok) throw new Error('unexpected plan failure')
+
+  it('records each move with its file and CSV row', () => {
+    expect(plan.moves.map((m) => [m.fileIndex, m.csvRow])).toEqual([
+      [0, 1],
+      [0, 3],
+      [1, 2],
+    ])
+  })
+
+  it('maps request rows back to the file and CSV row they came from', () => {
+    const { fileResults, unattributed } = buildPerFileResults(files, plan.moves, {
       success: false,
-      errors: [{ row: 2, error: 'occupied' }],
+      moved: 0,
+      errors: [
+        { row: 2, error: 'occupied' },
+        { row: 3, error: 'not found' },
+        { row: 0, error: 'Invalid collection mappings' },
+      ],
     })
-    expect(results).toEqual([
+    expect(fileResults).toEqual([
       {
         filename: 'one.csv',
         destinationName: 'DEST-1',
         moved: 0,
-        errors: [{ row: 2, error: 'occupied' }],
+        errors: [{ row: 3, error: 'occupied', filename: 'one.csv' }],
       },
-      { filename: 'two.csv', destinationName: 'DEST-2', moved: 0, errors: [] },
+      {
+        filename: 'two.csv',
+        destinationName: 'DEST-2',
+        moved: 0,
+        errors: [{ row: 2, error: 'not found', filename: 'two.csv' }],
+      },
     ])
+    expect(unattributed).toEqual([{ row: 0, error: 'Invalid collection mappings' }])
+  })
 
-    const successResults = buildPerFileResults(files, moves, { success: true })
-    expect(successResults.map((r) => r.moved)).toEqual([2, 1])
+  it('splits a best-effort partial result per file', () => {
+    const { fileResults } = buildPerFileResults(files, plan.moves, {
+      success: false,
+      moved: 2,
+      errors: [{ row: 3, error: 'not found' }],
+    })
+    expect(fileResults.map((r) => r.moved)).toEqual([2, 0])
+  })
+
+  it('leaves per-file counts unknown when a partial result does not add up', () => {
+    const { fileResults } = buildPerFileResults(files, plan.moves, {
+      success: false,
+      moved: 1,
+      errors: [{ row: 3, error: 'failed mid-way' }],
+    })
+    expect(fileResults.map((r) => r.moved)).toEqual([undefined, undefined])
+  })
+
+  it('counts every move on success', () => {
+    const { fileResults } = buildPerFileResults(files, plan.moves, { success: true, moved: 3 })
+    expect(fileResults.map((r) => r.moved)).toEqual([2, 1])
   })
 })
 
@@ -129,8 +172,9 @@ describe('executeScanMove', () => {
     if (event.type !== 'MOVE_COMPLETED') throw new Error('unexpected event')
     expect(event.result).toMatchObject({ success: true, moved: 1 })
     expect(event.result.fileResults).toEqual([
-      { filename: 'one.csv', destinationName: 'DEST-1', moved: 1, errors: undefined },
+      { filename: 'one.csv', destinationName: 'DEST-1', moved: 1, errors: [] },
     ])
+    expect(event.result.errors).toBeUndefined()
   })
 
   it('returns a failed result without calling the API when the plan conflicts', async () => {
@@ -166,7 +210,7 @@ describe('executeScanMove', () => {
         Promise.reject(
           Object.assign(new Error('Request failed'), {
             response: {
-              data: { error: 'move failed', moved: 2, errors: [{ row: 3, error: 'occupied' }] },
+              data: { error: 'move failed', moved: 0, errors: [{ row: 1, error: 'occupied' }, { row: 9, error: 'odd' }] },
             },
           }),
         ),
@@ -175,9 +219,31 @@ describe('executeScanMove', () => {
     if (event.type !== 'MOVE_COMPLETED') throw new Error('unexpected event')
     expect(event.result).toEqual({
       success: false,
-      moved: 2,
-      errors: [{ row: 3, error: 'occupied' }],
+      moved: 0,
+      // A row past the request can't be placed in a file.
+      errors: [{ row: 0, error: 'odd' }],
+      fileResults: [
+        {
+          filename: 'one.csv',
+          destinationName: 'DEST-1',
+          moved: 0,
+          errors: [{ row: 1, error: 'occupied', filename: 'one.csv' }],
+        },
+      ],
     })
+  })
+
+  it('reports per-file errors when the move endpoint returns success: false', async () => {
+    const gateway = stubGateway({
+      moveContainers: () =>
+        Promise.resolve({ success: false, moved: 0, errors: [{ row: 1, error: 'occupied' }] }),
+    })
+    const event = await executeScanMove(micronixScanMoveVariant, makeState({ files }), gateway)
+    if (event.type !== 'MOVE_COMPLETED') throw new Error('unexpected event')
+    expect(event.result.errors).toBeUndefined()
+    expect(event.result.fileResults?.[0].errors).toEqual([
+      { row: 1, error: 'occupied', filename: 'one.csv' },
+    ])
   })
 
   it('falls back to the error message when no body is present', async () => {

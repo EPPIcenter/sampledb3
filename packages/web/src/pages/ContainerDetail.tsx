@@ -23,7 +23,7 @@ import {
   hasContainerDisplayIdentifier,
 } from '../lib/container-display'
 import '../styles/storage.css'
-import { formatDate } from '../lib/date-utils'
+import { formatDate, parseDisplayDate } from '../lib/date-utils'
 
 function statusColor(name: string): string {
   const key = name.toLowerCase()
@@ -453,11 +453,11 @@ export default function ContainerDetail() {
             <div className="mt-3 pt-3 border-t border-app-border flex justify-end">
               <p className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 {container.created && (
-                  <span>Created {new Date(container.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  <span>Created {parseDisplayDate(container.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                 )}
                 {container.created && container.lastUpdated && ' · '}
                 {container.lastUpdated && (
-                  <span>Updated {new Date(container.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  <span>Updated {parseDisplayDate(container.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                 )}
               </p>
             </div>
@@ -702,15 +702,14 @@ export default function ContainerDetail() {
             id: container.id!,
             comment: container.comment,
             remainingQuantity: container.remainingQuantity ?? undefined,
+            totalQuantity: container.totalQuantity ?? undefined,
             tags: container.tags,
             unit: container.unit,
             containerType: effectiveContainerType,
-            barcode: tubeBarcode ?? paperSublabel,
+            barcode: tubeBarcode,
+            sublabel: paperSublabel,
           }}
-          onSuccess={() => {
-            refreshContainer()
-            setShowEditModal(false)
-          }}
+          onSuccess={() => setShowEditModal(false)}
         />
       )}
 

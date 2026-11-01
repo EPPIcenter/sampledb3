@@ -1,13 +1,23 @@
 import { Link } from 'react-router-dom'
+import { Button } from '../../ui'
 
 interface MetricCardProps {
   title: string
-  value: number | string
+  /** Ignored unless `status` is `ready`. */
+  value?: number | string
+  /** `loading` and `error` replace the value; an errored tile never shows a number. */
+  status?: 'loading' | 'error' | 'ready'
+  /** Shown on an errored tile. */
+  errorMessage?: string
+  /** Offers a retry button on an errored tile. */
+  onRetry?: () => void
   linkTo?: string
   trend?: {
     value: number
     label?: string
     positive?: boolean
+    /** Says what the trend compares; read by screen readers and shown on hover. */
+    description?: string
   }
   color?: 'blue' | 'green' | 'purple' | 'orange' | 'indigo'
   onClick?: () => void
@@ -72,10 +82,79 @@ function MetricIcon({ title, colorClass }: { title: string; colorClass: string }
   }
 }
 
-export default function MetricCard({ title, value, linkTo, trend, color = 'blue', onClick, index }: MetricCardProps) {
+function TrendBadge({ trend }: { trend: NonNullable<MetricCardProps['trend']> }) {
+  const up = trend.positive !== false
+  const tone = up ? 'text-[rgb(var(--app-trend-up))]' : 'text-[rgb(var(--app-trend-down))]'
+  return (
+    <div className="flex items-center gap-1 flex-shrink-0 whitespace-nowrap" title={trend.description}>
+      <svg className={`w-4 h-4 ${tone}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+        {up ? (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+        ) : (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        )}
+      </svg>
+      <span className={`text-xs font-medium ${tone}`}>
+        {up ? '+' : '-'}
+        {trend.value}%
+      </span>
+      {trend.label && <span className="text-[10px] text-[rgb(var(--app-text-muted))]">{trend.label}</span>}
+      {trend.description && <span className="sr-only">{trend.description}</span>}
+    </div>
+  )
+}
+
+/**
+ * Dashboard stat tile. The icon sits in the title row so the value gets the tile's full
+ * inner width, and the value never wraps or breaks: a six-digit count such as `118,069`
+ * needs about 6rem at `text-2xl`. The Dashboard's grid keeps every tile wide enough for that.
+ */
+export default function MetricCard({
+  title,
+  value,
+  status = 'ready',
+  errorMessage = 'Could not load this count.',
+  onRetry,
+  linkTo,
+  trend,
+  color = 'blue',
+  onClick,
+  index,
+}: MetricCardProps) {
   const colorClass = colorClasses[color]
-  const formattedValue = typeof value === 'number' ? value.toLocaleString() : value
+  const formattedValue = typeof value === 'number' ? value.toLocaleString() : (value ?? '')
   const revealClass = index != null && index >= 1 && index <= 8 ? `dashboard-reveal dashboard-reveal-${index}` : ''
+  const header = (
+    <div className="flex items-center justify-between gap-3 mb-1.5">
+      <h2 className="text-xs font-medium text-[rgb(var(--app-text-muted))] leading-tight min-w-0">{title}</h2>
+      <MetricIcon title={title} colorClass={colorClass} />
+    </div>
+  )
+
+  if (status !== 'ready') {
+    return (
+      <div
+        className={`dashboard-card p-6 min-w-0 ${revealClass}`}
+        aria-busy={status === 'loading' || undefined}
+      >
+        {header}
+        {status === 'loading' ? (
+          <div role="status" className="h-8 w-24 rounded bg-[rgb(var(--app-border))] animate-pulse">
+            <span className="sr-only">Loading {title}</span>
+          </div>
+        ) : (
+          <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <p className="text-sm text-[rgb(var(--app-text-muted))]">{errorMessage}</p>
+            {onRetry && (
+              <Button variant="secondary" onClick={onRetry} aria-label={`Retry loading ${title}`}>
+                Retry
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   const content = (
     <div
@@ -92,40 +171,12 @@ export default function MetricCard({ title, value, linkTo, trend, color = 'blue'
       }}
       aria-label={linkTo || onClick ? `${title}: ${formattedValue}` : undefined}
     >
-      <div className="flex items-start justify-between gap-3 min-w-0">
-        <div className="min-w-0 flex-1 overflow-hidden">
-          <h2 className="text-xs font-medium text-[rgb(var(--app-text-muted))] mb-1.5 leading-tight">{title}</h2>
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0">
-            <p className="text-xl sm:text-2xl font-bold text-[rgb(var(--app-text))] tabular-nums break-words">{formattedValue}</p>
-            {trend && (
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <svg
-                  className={`w-4 h-4 ${trend.positive !== false ? 'text-[rgb(var(--app-trend-up))]' : 'text-[rgb(var(--app-trend-down))]'}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden
-                >
-                  {trend.positive !== false ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  )}
-                </svg>
-                <span
-                  className={`text-xs font-medium ${trend.positive !== false ? 'text-[rgb(var(--app-trend-up))]' : 'text-[rgb(var(--app-trend-down))]'}`}
-                >
-                  {trend.positive !== false ? '+' : ''}
-                  {trend.value}%
-                </span>
-                {trend.label && (
-                  <span className="text-[10px] text-[rgb(var(--app-text-muted))]">{trend.label}</span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-        <MetricIcon title={title} colorClass={colorClass} />
+      {header}
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <p className="text-xl sm:text-2xl font-bold text-[rgb(var(--app-text))] tabular-nums whitespace-nowrap">
+          {formattedValue}
+        </p>
+        {trend && <TrendBadge trend={trend} />}
       </div>
     </div>
   )

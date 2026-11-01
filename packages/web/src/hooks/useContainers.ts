@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { containersApi, type ContainerDetail } from '../lib/api/containers'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { containersApi, type ContainerDetail, type ContainerUpdate } from '../lib/api/containers'
 import { derivationsApi } from '../lib/api/derivations'
 
 export const containerKeys = {
@@ -68,5 +68,18 @@ export function useContainerDerivationTree(containerId: number) {
       return { derivations, childContainers }
     },
     enabled: Number.isFinite(containerId) && containerId > 0,
+  })
+}
+
+/**
+ * Save a Container edit. Invalidates every container query: the edit changes the detail, and
+ * derivation trees and lists show the Container's quantity, Tags and identifier too.
+ * Shows no toast; the caller reports the error.
+ */
+export function useUpdateContainer() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: ContainerUpdate }) => containersApi.update(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: containerKeys.all }),
   })
 }

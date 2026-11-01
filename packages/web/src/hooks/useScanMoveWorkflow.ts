@@ -90,14 +90,39 @@ export function useScanMoveWorkflow(options: UseScanMoveWorkflowOptions) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mirror only on step change
   }, [state.step])
 
+  // Work in flight; `loading` mirrors it for rendering. A ref, not state,
+  // so a second click in the same tick sees the first one.
+  const busyCountRef = useRef(0)
+  const actionInFlightRef = useRef(false)
+
   const runBusy = useCallback(async (work: () => Promise<void>) => {
+    busyCountRef.current++
     setLoading(true)
     try {
       await work()
     } finally {
-      setLoading(false)
+      busyCountRef.current--
+      setLoading(busyCountRef.current > 0)
     }
   }, [])
+
+  /**
+   * Run a resolve, create, or execute step at most once at a time. A repeat
+   * call while one is in flight (a double click) is dropped, so a second,
+   * failing move request can't overwrite the first one's result.
+   */
+  const runExclusive = useCallback(
+    async (work: () => Promise<void>) => {
+      if (actionInFlightRef.current) return
+      actionInFlightRef.current = true
+      try {
+        await runBusy(work)
+      } finally {
+        actionInFlightRef.current = false
+      }
+    },
+    [runBusy],
+  )
 
   const ingestFiles = useCallback(
     (sources: ScanMoveFileSource[], scannerConfig?: ScannerConfiguration) =>
@@ -176,17 +201,17 @@ export function useScanMoveWorkflow(options: UseScanMoveWorkflowOptions) {
       plan.events.forEach(dispatch)
       return Promise.resolve()
     }
-    return runBusy(() => resolveAgainst(collections, false))
-  }, [state, collections, variant, runBusy, resolveAgainst])
+    return runExclusive(() => resolveAgainst(collections, false))
+  }, [state, collections, variant, runExclusive, resolveAgainst])
 
   /** Resolve against a freshly refetched collection list (post-create flows). */
   const resolveWithFreshCollections = useCallback(
     () =>
-      runBusy(async () => {
+      runExclusive(async () => {
         const fresh = refreshCollections ? await refreshCollections() : collections
         await resolveAgainst(fresh, true)
       }),
-    [runBusy, refreshCollections, collections, resolveAgainst],
+    [runExclusive, refreshCollections, collections, resolveAgainst],
   )
 
   /** Create all pending destinations, then resolve with the fresh collection list. */
@@ -198,7 +223,7 @@ export function useScanMoveWorkflow(options: UseScanMoveWorkflowOptions) {
       })
       return Promise.resolve()
     }
-    return runBusy(async () => {
+    return runExclusive(async () => {
       const { allSuccess } = await createScanMoveDestinations(
         state.pendingDestinations,
         gateway,
@@ -208,16 +233,16 @@ export function useScanMoveWorkflow(options: UseScanMoveWorkflowOptions) {
       const fresh = refreshCollections ? await refreshCollections() : collections
       await resolveAgainst(fresh, true)
     })
-  }, [state.pendingDestinations, runBusy, gateway, refreshCollections, collections, resolveAgainst])
+  }, [state.pendingDestinations, runExclusive, gateway, refreshCollections, collections, resolveAgainst])
 
   const executeMoves = useCallback(
     () =>
-      runBusy(async () => {
+      runExclusive(async () => {
         dispatch(await executeScanMove(variant, state, gateway))
         // Best-effort moves can succeed partially; refresh plate, box, and location views.
         void invalidateAfterBulkWrite(queryClient)
       }),
-    [runBusy, variant, state, gateway, queryClient],
+    [runExclusive, variant, state, gateway, queryClient],
   )
 
   const reset = useCallback(() => {

@@ -21,6 +21,8 @@ import {
   createTestLocation,
   createTestMicronixPlate,
   createTestMicronixTube,
+  createTestCryovialBox,
+  createTestCryovialTube,
   createTestBag,
   createTestSpecimen,
   createTestStorageContainer,
@@ -361,6 +363,66 @@ describe('derivations-csv', () => {
       expect(result.rows[2].error).toMatch(/more than once in your file/)
     })
 
+    it('rejects an out-of-range or garbage position in validation', async () => {
+      const { parent } = await seedParent()
+      const csv = [header, `${parent.id},PlateDef,b1,C1`, `${parent.id},PlateDef,Z99,C2`, `${parent.id},PlateDef,hello world,C3`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows.map((r) => r.valid)).toEqual([true, false, false])
+      expect(result.rows[1].error).toBe('Position "Z99" is outside a micronix plate (A01–H12)')
+      expect(result.rows[2].error).toContain('Position "hello world" is not a grid position')
+    })
+
+    it('imports a1 as A01 and refuses an out-of-range position', async () => {
+      const { parent } = await seedParent()
+
+      const bad = await importDerivationsFromCsv(testDb, [header, `${parent.id},PlateDef,I01,C1`].join('\n'), { settings })
+      expect(bad.rows[0]?.success).toBe(false)
+      expect(bad.rows[0]?.error).toContain('Position "I01" is outside a micronix plate')
+
+      const good = await importDerivationsFromCsv(testDb, [header, `${parent.id},PlateDef,b1,C1`].join('\n'), { settings })
+      expect(good.rows[0]?.success).toBe(true)
+      const child = await testDb.select().from(micronixTube).where(eq(micronixTube.barcode, 'C1')).get()
+      expect(child?.position).toBe('B01')
+    })
+
+    /** A cryovial tube with `barcode`, on the parent's Specimen. */
+    async function addCryovial(seed: Awaited<ReturnType<typeof seedParent>>, barcode: string) {
+      const cryoBox = await createTestCryovialBox(testDb, { name: 'BoxDef', locationId: seed.loc.id })
+      const [sc] = await testDb
+        .insert(storageContainer)
+        .values({ specimenId: seed.parent.specimenId, unitId: seed.unit.id, totalQuantity: 5, remainingQuantity: 5 })
+        .returning()
+      await createTestCryovialTube(testDb, { containerId: sc.id, collectionId: cryoBox.id, barcode, position: 'A01' })
+      return sc
+    }
+
+    it('rejects a row whose parent barcode is on several Containers instead of drawing from one', async () => {
+      const seed = await seedParent()
+      const cryovial = await addCryovial(seed, 'MT-PARENT')
+      const csv = ['parent_container_barcode,plate_name,position,container_barcode', 'MT-PARENT,PlateDef,B01,C1'].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows[0].valid).toBe(false)
+      expect(result.rows[0].error).toBe(
+        `Ambiguous barcode 'MT-PARENT': it matches 2 containers (container ${seed.parent.id} (micronix_tube in PlateDef A01), ` +
+          `container ${cryovial.id} (cryovial_tube in BoxDef A01)). Identify the container by its id or position instead.`,
+      )
+    })
+
+    it('rejects a child barcode another tube type already has, ignoring case', async () => {
+      const seed = await seedParent()
+      await addCryovial(seed, 'cv-777')
+      const csv = [header, `${seed.parent.id},PlateDef,B01,CV-777`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows[0].valid).toBe(false)
+      expect(result.rows[0].error).toMatch(/already used for another container/)
+    })
+
     it('warns about a mismatched source type even when the first row has no parent', async () => {
       const { parent, plate, unit } = await seedParent()
       const plasmaType = await createTestSpecimenType(testDb, { name: 'Plasma' })
@@ -397,6 +459,78 @@ describe('derivations-csv', () => {
       expect(result.rows[0].success).toBe(true)
       const after = await testDb.select().from(storageContainer).where(eq(storageContainer.id, parent.id)).get()
       expect(after?.remainingQuantity).toBe(10)
+    })
+
+    it('rejects a quantity used of 0 or less, with the row', async () => {
+      const { parent } = await seedParent()
+      const csv = [`${header},quantity_used`, `${parent.id},PlateDef,B01,C1,0`, `${parent.id},PlateDef,B02,C2,-100`].join('\n')
+
+      const validation = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(validation.rows.map((r) => r.error)).toEqual([
+        'Quantity used must be greater than 0 (got 0).',
+        'Quantity used must be greater than 0 (got -100).',
+      ])
+
+      const result = await importDerivationsFromCsv(testDb, csv, { settings })
+
+      expect(result.rows.find((r) => !r.success && r.index === 0)?.error).toBe(
+        'Row 1: Quantity used must be greater than 0 (got 0). No derivations were created; please fix the error and try again.',
+      )
+      const after = await testDb.select().from(storageContainer).where(eq(storageContainer.id, parent.id)).get()
+      expect(after?.remainingQuantity).toBe(10)
+    })
+
+    it('rejects a shared quantity used of 0 or less', async () => {
+      const { parent } = await seedParent()
+      const csv = [header, `${parent.id},PlateDef,B01,C1`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, { ...settings, quantityUsed: -1 })
+
+      expect(result.rows[0].error).toBe('Quantity used must be greater than 0 (got -1).')
+    })
+
+    it('rejects a negative Child container quantity', async () => {
+      const { parent } = await seedParent()
+      const csv = [`${header},quantity`, `${parent.id},PlateDef,B01,C1,-2`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows[0].error).toBe('Child container: Total quantity must be 0 or more (got -2).')
+    })
+
+    it('rejects rows that together draw more than the Parent container holds', async () => {
+      const { parent } = await seedParent()
+      const csv = [
+        `${header},quantity_used`,
+        `${parent.id},PlateDef,B01,C1,6`,
+        `${parent.id},PlateDef,B02,C2,4`,
+        `${parent.id},PlateDef,B03,C3,1`,
+      ].join('\n')
+
+      const validation = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(validation.rows.map((r) => r.valid)).toEqual([true, true, false])
+      expect(validation.rows[2].error).toBe(
+        "Quantity used (1) exceeds the Parent container's remaining quantity (0). Earlier rows in this file draw from the same Parent container.",
+      )
+
+      const result = await importDerivationsFromCsv(testDb, csv, { settings })
+
+      expect(result.rows.find((r) => r.index === 2)?.error).toBe(
+        "Row 3: Quantity used (1) exceeds the Parent container's remaining quantity (0). No derivations were created; please fix the error and try again.",
+      )
+      const after = await testDb.select().from(storageContainer).where(eq(storageContainer.id, parent.id)).get()
+      expect(after?.remainingQuantity).toBe(10)
+    })
+
+    it('rejects a single row drawing more than the Parent container holds', async () => {
+      const { parent } = await seedParent()
+      const csv = [`${header},quantity_used`, `${parent.id},PlateDef,B01,C1,11`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows[0].error).toBe("Quantity used (11) exceeds the Parent container's remaining quantity (10).")
     })
 
     it('rejects paper rows whose box does not exist', async () => {

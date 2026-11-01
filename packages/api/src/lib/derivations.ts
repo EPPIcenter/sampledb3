@@ -1,4 +1,4 @@
-import type { ContainerWriteInput } from '@sampledb/contract'
+import { containerQuantityBoundsError, quantityDrawError, quantityUsedError, type ContainerWriteInput } from '@sampledb/contract'
 import type { Database } from '../db/client'
 import type { ExtractTablesWithRelations } from 'drizzle-orm'
 import type { SQLiteTransaction } from 'drizzle-orm/sqlite-core'
@@ -14,9 +14,11 @@ import { and, eq, isNull, sql } from 'drizzle-orm'
 import { validateContainerTypeForSpecimenType } from '../lib/validation'
 import { getDefaultUnit } from './defaults'
 import { utcNow } from './datetime'
+import { isIsoCalendarDate } from './date-filters'
 import { createContainerForSpecimen, pickContainerQuantity } from './container-creation'
 import { withWriteTransaction } from '../db/write-transaction'
 import { insertedRow } from './inserted-row'
+import { ValidationError } from './error-handler'
 
 export type DerivationType = string
 
@@ -37,7 +39,8 @@ export interface CreateDerivationInput {
 }
 
 export interface DerivationWarning {
-  code: 'INSUFFICIENT_PARENT_QUANTITY' | 'PARENT_QUANTITY_ZERO_OR_NEGATIVE' | 'INCOMPATIBLE_UNITS'
+  // Never produced: units are not converted or compared yet. Quantity bounds are errors (derivationQuantityError).
+  code: 'INCOMPATIBLE_UNITS'
   message: string
 }
 
@@ -66,6 +69,13 @@ async function findOrCreateDerivedSpecimen(
 
   if (!parentSpecimen) {
     throw new Error('Parent specimen not found')
+  }
+  // The child is the same collection event, so it takes the parent's date as stored. Refuse to
+  // copy a date that isn't YYYY-MM-DD rather than spread it to another Specimen (issue #104).
+  if (parentSpecimen.collectionDate != null && !isIsoCalendarDate(parentSpecimen.collectionDate)) {
+    throw new Error(
+      `Parent specimen ${parentSpecimen.id} has collection date '${parentSpecimen.collectionDate}', which is not YYYY-MM-DD. Correct it before deriving from it.`,
+    )
   }
 
   const type = await database
@@ -147,46 +157,45 @@ async function resolveUnitIdForChild(
   return getDefaultUnit(database as Database, containerType)
 }
 
-async function adjustParentQuantity(
+/**
+ * Why this Derivation's quantities are out of bounds, or null. The Child container's quantity
+ * starts as both its total and remaining; a quantity used must be greater than 0 and, when it
+ * reduces the Parent container, no more than the Parent container's remaining quantity.
+ */
+function derivationQuantityError(
+  parent: typeof storageContainer.$inferSelect,
+  input: CreateDerivationInput,
+): string | null {
+  if (input.quantity != null) {
+    const childError = containerQuantityBoundsError({ totalQuantity: input.quantity, remainingQuantity: input.quantity })
+    if (childError) return `Child container: ${childError}`
+  }
+  if (input.quantityUsed == null) return null
+  return (input.reduceParentQuantity ?? true)
+    ? quantityDrawError(input.quantityUsed, parent.remainingQuantity)
+    : quantityUsedError(input.quantityUsed)
+}
+
+async function reduceParentQuantity(
   database: DatabaseOrTransaction,
   parent: typeof storageContainer.$inferSelect,
-  quantityUsed?: number,
-  reduceParentQuantity?: boolean,
-): Promise<{ updatedParent: typeof storageContainer.$inferSelect; warnings: DerivationWarning[] }> {
-  const warnings: DerivationWarning[] = []
-
-  if (!reduceParentQuantity || quantityUsed == null) {
-    return { updatedParent: parent, warnings }
+  quantityUsed: number | undefined,
+  reduce: boolean,
+): Promise<typeof storageContainer.$inferSelect> {
+  if (!reduce || quantityUsed == null || parent.remainingQuantity == null) {
+    return parent
   }
-
-  if (parent.remainingQuantity == null) {
-    return { updatedParent: parent, warnings }
-  }
-
-  if (parent.remainingQuantity <= 0) {
-    warnings.push({
-      code: 'PARENT_QUANTITY_ZERO_OR_NEGATIVE',
-      message: 'Parent container remaining quantity is zero or negative; quantity reduction will be clamped.',
-    })
-  } else if (parent.remainingQuantity < quantityUsed) {
-    warnings.push({
-      code: 'INSUFFICIENT_PARENT_QUANTITY',
-      message: 'Parent container remaining quantity is less than quantity used; quantity reduction will proceed and be clamped at zero.',
-    })
-  }
-
-  const newRemaining = Math.max(0, parent.remainingQuantity - quantityUsed)
 
   const [updated] = await database
     .update(storageContainer)
     .set({
-      remainingQuantity: newRemaining,
+      remainingQuantity: parent.remainingQuantity - quantityUsed,
       lastUpdated: utcNow(),
     })
     .where(eq(storageContainer.id, parent.id))
     .returning()
 
-  return { updatedParent: updated, warnings }
+  return updated
 }
 
 export async function createDerivation(
@@ -211,6 +220,11 @@ async function createDerivationInTx(
 
   if (!parent) {
     throw new Error('Parent container not found')
+  }
+
+  const quantityError = derivationQuantityError(parent, input)
+  if (quantityError) {
+    throw new ValidationError(quantityError)
   }
 
   const derivedSpecimenId = await findOrCreateDerivedSpecimen(database, parent.specimenId, input.specimenTypeName)
@@ -256,7 +270,7 @@ async function createDerivationInTx(
     throw new Error('Child container not found after creation')
   }
 
-  const { updatedParent, warnings } = await adjustParentQuantity(
+  const updatedParent = await reduceParentQuantity(
     database,
     parent,
     input.quantityUsed,
@@ -290,6 +304,6 @@ async function createDerivationInTx(
     parentContainer: updatedParent,
     childContainer: child,
     specimen: derivedSpec,
-    warnings,
+    warnings: [],
   }
 }

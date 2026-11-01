@@ -9,11 +9,15 @@ import {
   box,
   bag,
   sheet,
+  storageContainer,
 } from '../db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
+import { utcNow } from './datetime'
 import { resolveCollection, resolveSheetsByName, type CollectionType } from './collections/collection-resolve'
 import { checkGridPositionOccupancy } from './container-occupancy'
 import { normalizePosition } from './normalize-position'
+import { parseGridPosition, type GridCollectionType } from '@sampledb/contract'
+import { AmbiguousBarcodeError, resolveContainerByBarcode } from './identifier-resolution'
 import type { ContainerSubtype } from './container-placement'
 
 /** Staging prefix for position updates so swaps on one plate do not violate UNIQUE(collection_id, position) mid-transaction. */
@@ -61,14 +65,21 @@ export interface ValidationError {
   error: string
 }
 
+/**
+ * Outcome of a move. `success` is true only when every row moved. A best-effort move can
+ * move some rows (`moved > 0`) and still report `errors` for the rest; those moves are
+ * committed.
+ */
 export interface MoveResult {
   success: boolean
   moved: number
   errors?: ValidationError[]
 }
 
-/** Collections whose containers sit at grid positions. */
-type GridCollectionType = 'cryovial_box' | 'micronix_plate'
+/** Who is moving: recorded as each moved Container's `updated_by`. */
+export interface MoveActor {
+  userId: number | null
+}
 
 /**
  * Resolve container by position and collection
@@ -154,55 +165,6 @@ export async function resolveContainerByPosition(
 }
 
 /**
- * Resolve container by barcode
- */
-export async function resolveContainerByBarcode(database: Database, barcode: string): Promise<ContainerInfo | null> {
-  const micronix = await database.select().from(micronixTube).where(eq(micronixTube.barcode, barcode)).get()
-  if (micronix) {
-    const plate = await database.select({ name: micronixPlate.name }).from(micronixPlate).where(eq(micronixPlate.id, micronix.collectionId)).get()
-    return {
-      containerId: micronix.id,
-      containerType: 'micronix_tube',
-      currentCollectionId: micronix.collectionId,
-      currentCollectionName: plate?.name || null,
-      currentCollectionType: 'micronix_plate',
-      currentPosition: micronix.position || null,
-      barcode: micronix.barcode,
-    }
-  }
-
-  const cryovial = await database.select().from(cryovialTube).where(eq(cryovialTube.barcode, barcode)).get()
-  if (cryovial) {
-    const boxRec = await database.select({ name: cryovialBox.name }).from(cryovialBox).where(eq(cryovialBox.id, cryovial.collectionId)).get()
-    return {
-      containerId: cryovial.id,
-      containerType: 'cryovial_tube',
-      currentCollectionId: cryovial.collectionId,
-      currentCollectionName: boxRec?.name || null,
-      currentCollectionType: 'cryovial_box',
-      currentPosition: cryovial.position || null,
-      barcode: cryovial.barcode || null,
-    }
-  }
-
-  const paperRec = await database.select().from(paper).where(eq(paper.sublabel, barcode)).get()
-  if (paperRec) {
-    const sheetRec = await database.select({ name: sheet.name }).from(sheet).where(eq(sheet.id, paperRec.sheetId)).get()
-    return {
-      containerId: paperRec.id,
-      containerType: 'paper',
-      currentCollectionId: paperRec.sheetId,
-      currentCollectionName: sheetRec?.name || null,
-      currentCollectionType: 'sheet',
-      currentPosition: null,
-      barcode: paperRec.sublabel || null,
-    }
-  }
-
-  return null
-}
-
-/**
  * Check position availability
  */
 export async function checkPositionAvailability(
@@ -242,7 +204,15 @@ export interface ContainerIdentifier {
  */
 export async function resolveContainerByContainerId(database: Database, containerId: number): Promise<ContainerInfo | null> {
   const micronix = await database.select().from(micronixTube).where(eq(micronixTube.id, containerId)).get()
-  if (micronix) return resolveContainerByBarcode(database, micronix.barcode)
+  if (micronix) return {
+    containerId: micronix.id,
+    containerType: 'micronix_tube',
+    currentCollectionId: micronix.collectionId,
+    currentCollectionName: (await database.select({ name: micronixPlate.name }).from(micronixPlate).where(eq(micronixPlate.id, micronix.collectionId)).get())?.name || null,
+    currentCollectionType: 'micronix_plate',
+    currentPosition: micronix.position,
+    barcode: micronix.barcode,
+  }
 
   const cryovial = await database.select().from(cryovialTube).where(eq(cryovialTube.id, containerId)).get()
   if (cryovial) return {
@@ -281,7 +251,8 @@ export async function resolveContainerByContainerId(database: Database, containe
 }
 
 /**
- * Resolve container by identifier
+ * Resolve container by identifier. Throws `AmbiguousBarcodeError` when a barcode matches
+ * more than one Container.
  */
 export async function resolveContainerByIdentifier(database: Database, identifier: ContainerIdentifier): Promise<ContainerInfo | null> {
   if (identifier.type === 'barcode' && identifier.barcode) {
@@ -298,21 +269,26 @@ export async function resolveContainerByIdentifier(database: Database, identifie
   return null
 }
 
-export async function resolveContainersByIdentifiers(database: Database, identifiers: ContainerIdentifier[]): Promise<Map<string, ContainerInfo>> {
-  const results = new Map<string, ContainerInfo>()
+export function containerIdentifierKey(identifier: ContainerIdentifier): string {
+  return identifier.type === 'barcode' ? identifier.barcode! : identifier.type === 'position' ? `${identifier.sourceCollectionName}:${identifier.sourcePosition}` : `container_${identifier.containerId}`
+}
+
+/** What each identifier resolved to, by `containerIdentifierKey`; identifiers that match nothing are absent. */
+export async function resolveContainersByIdentifiers(
+  database: Database,
+  identifiers: ContainerIdentifier[],
+): Promise<Map<string, { container: ContainerInfo } | { ambiguous: AmbiguousBarcodeError }>> {
+  const results = new Map<string, { container: ContainerInfo } | { ambiguous: AmbiguousBarcodeError }>()
   for (const identifier of identifiers) {
-    const container = await resolveContainerByIdentifier(database, identifier)
-    if (container) {
-      const key = identifier.type === 'barcode' ? identifier.barcode! : identifier.type === 'position' ? `${identifier.sourceCollectionName}:${identifier.sourcePosition}` : `container_${identifier.containerId}`
-      results.set(key, container)
+    try {
+      const container = await resolveContainerByIdentifier(database, identifier)
+      if (container) results.set(containerIdentifierKey(identifier), { container })
+    } catch (error) {
+      if (!(error instanceof AmbiguousBarcodeError)) throw error
+      results.set(containerIdentifierKey(identifier), { ambiguous: error })
     }
   }
   return results
-}
-
-export async function resolveContainersByBarcodes(database: Database, barcodes: string[]): Promise<Map<string, ContainerInfo>> {
-    const identifiers: ContainerIdentifier[] = barcodes.map(b => ({ type: 'barcode', barcode: b }))
-    return resolveContainersByIdentifiers(database, identifiers)
 }
 
 export function inferCollectionTypeFromContainers(containers: ContainerInfo[]): { valid: boolean; collectionType: CollectionType | null; error?: string } {
@@ -326,21 +302,24 @@ export function inferCollectionTypeFromContainers(containers: ContainerInfo[]): 
   return { valid: true, collectionType: Array.from(collectionTypes)[0] }
 }
 
-export async function executeMoves(database: Database, request: BatchMoveRequest): Promise<MoveResult> {
+export async function executeMoves(
+  database: Database,
+  request: BatchMoveRequest,
+  actor: MoveActor = { userId: null },
+): Promise<MoveResult> {
   try {
-    const { mappings, atomicMode = 'all_or_nothing' } = request
-    // Normalize target positions ("b1" -> "B01") so writes, conflict keys, and occupancy checks agree.
-    const moves = request.moves.map((move) => ({
-      ...move,
-      targetPosition: normalizePosition(move.targetPosition) ?? '',
-    }))
+    const { mappings, moves, atomicMode = 'all_or_nothing' } = request
     const errors: ValidationError[] = []
 
-    const resolvedMoves = await Promise.all(moves.map(async (move, index) => ({
-      row: index + 1,
-      move,
-      info: await resolveContainerByIdentifier(database, move.identifier),
-    })))
+    const resolvedMoves = await Promise.all(moves.map(async (move, index) => {
+      try {
+        return { row: index + 1, move, info: await resolveContainerByIdentifier(database, move.identifier), error: 'Container not found' }
+      } catch (error) {
+        // A barcode on several Containers fails its row instead of moving whichever comes first.
+        if (!(error instanceof AmbiguousBarcodeError)) throw error
+        return { row: index + 1, move, info: null, error: error.message }
+      }
+    }))
 
     const validResolvedMoves: Array<{
       row: number
@@ -351,7 +330,7 @@ export async function executeMoves(database: Database, request: BatchMoveRequest
 
     for (const resolved of resolvedMoves) {
       if (!resolved.info) {
-        errors.push({ row: resolved.row, error: 'Container not found' })
+        errors.push({ row: resolved.row, error: resolved.error })
         continue
       }
       validResolvedMoves.push({
@@ -374,9 +353,17 @@ export async function executeMoves(database: Database, request: BatchMoveRequest
 
     for (const m of validResolvedMoves) {
       const requiresPosition = m.info.containerType === 'micronix_tube' || m.info.containerType === 'cryovial_tube' || m.info.containerType === 'static_well'
-      if (requiresPosition && (!m.move.targetPosition || typeof m.move.targetPosition !== 'string' || m.move.targetPosition.trim() === '')) {
+      if (!requiresPosition) continue
+      if (!m.move.targetPosition || typeof m.move.targetPosition !== 'string' || m.move.targetPosition.trim() === '') {
         errors.push({ row: m.row, error: `target_position is required for ${m.info.containerType}` })
+        continue
       }
+      if (collectionType !== 'micronix_plate' && collectionType !== 'cryovial_box') continue
+      // Grid position rule: store "b1" as "B01" so writes, conflict keys, and occupancy checks
+      // agree, and reject a position the plate or box does not have.
+      const parsed = parseGridPosition(m.move.targetPosition, collectionType)
+      if (parsed.ok) m.move = { ...m.move, targetPosition: parsed.position }
+      else errors.push({ row: m.row, error: parsed.error })
     }
 
     if (atomicMode === 'all_or_nothing' && errors.length > 0) {
@@ -548,6 +535,15 @@ export async function executeMoves(database: Database, request: BatchMoveRequest
             tx.update(staticWell).set({ collectionId: targetCollectionId, position: move.targetPosition }).where(eq(staticWell.id, info.containerId)).run()
             break
         }
+      }
+
+      // A move changes the Container's placement, so record when and by whom.
+      const now = utcNow()
+      for (const { info } of finalMoves) {
+        tx.update(storageContainer)
+          .set({ lastUpdated: now, updatedBy: actor.userId })
+          .where(eq(storageContainer.id, info.containerId))
+          .run()
       }
     })
 

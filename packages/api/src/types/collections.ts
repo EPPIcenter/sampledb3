@@ -141,7 +141,10 @@ export interface SheetResponse extends Sheet {
  */
 export interface MicronixPlateDetailResponse {
   plate: MicronixPlateResponse
+  /** Placed Containers keyed by grid cell (A01–H12). */
   wells: Record<string, WellEntry>
+  /** Containers with no grid position, or a stored position that is not a plate cell. */
+  unplaced: WellEntry[]
 }
 
 /**
@@ -149,7 +152,10 @@ export interface MicronixPlateDetailResponse {
  */
 export interface CryovialBoxDetailResponse {
   box: CryovialBoxResponse
+  /** Placed Containers keyed by grid cell (A01–J10). */
   positions: Record<string, CryovialTubeEntry[]>
+  /** Containers with no grid position, or a stored position that is not a box cell. */
+  unplaced: CryovialTubeEntry[]
 }
 
 /**
