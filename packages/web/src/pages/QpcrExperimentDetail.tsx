@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api/client'
 import { containersApi, type ContainerDetail } from '../lib/api/containers'
+import { qpcrResultsUploadMessage } from '../lib/qpcr-results-upload-message'
 import { qpcrExperimentsApi } from '../lib/api/qpcr'
 import type { QpcrExperimentDetailResponse, QpcrExperimentWell } from '../lib/api/qpcr'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
@@ -147,6 +148,7 @@ export default function QpcrExperimentDetail() {
   const [plateError, setPlateError] = useState<string | null>(null)
   const [resultsUploading, setResultsUploading] = useState(false)
   const [resultsError, setResultsError] = useState<string | null>(null)
+  const [resultsMessage, setResultsMessage] = useState<string | null>(null)
   const [templateDownloading, setTemplateDownloading] = useState<'biorad' | 'quant_studio' | null>(null)
   const instrumentSelectRef = useRef<HTMLSelectElement>(null)
   const [targets, setTargets] = useState<TargetRow[]>(() => [{ key: '1', targetName: DEFAULT_TARGET_NAME, fluorophore: DEFAULT_FLUOROPHORE, reporter: DEFAULT_REPORTER }])
@@ -951,6 +953,11 @@ export default function QpcrExperimentDetail() {
                   {resultsError}
                 </p>
               )}
+              {resultsMessage && (
+                <p className="text-sm text-app-text rounded-lg bg-app-surface px-3 py-2" role="status">
+                  {resultsMessage}
+                </p>
+              )}
               <div className="flex flex-wrap items-end gap-3">
                 <div>
                   <label className="block text-xs font-medium text-app-text-muted mb-1">Instrument</label>
@@ -972,12 +979,14 @@ export default function QpcrExperimentDetail() {
                       const file = e.target.files?.[0]
                       if (!file || !id) return
                       setResultsError(null)
+                      setResultsMessage(null)
                       setResultsUploading(true)
                       try {
                         const buf = await file.arrayBuffer()
                         const base64 = bytesToBase64(new Uint8Array(buf))
                         const resultInstrument = (instrumentSelectRef.current?.value as 'Biorad_CFX' | 'QuantStudio' | undefined) ?? 'Biorad_CFX'
-                        await qpcrExperimentsApi.uploadResults(parseInt(id), { fileContent: base64, fileName: file.name, instrumentType: resultInstrument })
+                        const uploaded = await qpcrExperimentsApi.uploadResults(parseInt(id), { fileContent: base64, fileName: file.name, instrumentType: resultInstrument })
+                        setResultsMessage(qpcrResultsUploadMessage(uploaded))
                         invalidateQpcrExperimentQueries(queryClient)
                         loadData()
                       } catch (err: unknown) {

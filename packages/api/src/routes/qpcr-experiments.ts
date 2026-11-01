@@ -643,14 +643,14 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         parseResult = await parseQuantStudioXls(buffer, data.fileName)
       }
 
-      const runRow = await recordQpcrResults(database, {
+      const recorded = await recordQpcrResults(database, {
         experimentId: id,
         instrumentType: data.instrumentType,
         parseResult,
         userId: (c.get('user') as { id: number } | undefined)?.id ?? null,
       })
 
-      return c.json({ run: runRow, wellResultCount: parseResult.wellResults.length, amplificationCount: parseResult.amplificationData.length }, 201)
+      return c.json(recorded, 201)
     } catch (error) {
       if (error instanceof z.ZodError) {
         return c.json({ error: 'Validation error', details: error.issues, errorCode: 'VALIDATION_ERROR' }, 400)

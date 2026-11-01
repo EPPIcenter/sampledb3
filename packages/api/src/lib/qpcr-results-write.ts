@@ -15,10 +15,24 @@ function wellTargetKey(wellPosition: string, targetName: string | null): string 
   return `${wellPosition}\t${targetName ?? ''}`
 }
 
+/** What an upload stored, and the amplification rows it left out. */
+export interface RecordedQpcrResults {
+  run: typeof qpcrRun.$inferSelect
+  wellResultCount: number
+  amplificationCount: number
+  /**
+   * Amplification rows whose well and target have no row in the results section. QuantStudio
+   * exports a curve for all 96 wells but a result only for wells set up with a sample, so these
+   * are empty wells; the upload leaves them out and reports them instead.
+   */
+  skippedAmplification: { rowCount: number; wellPositions: string[] }
+}
+
 /**
  * Record a parsed qPCR result file against an experiment: the run, its well results, their
  * amplification data, and the experiment's `results_uploaded` status. All of it commits in one
  * transaction, so a failure partway leaves no run or well result behind and a retry starts clean.
+ * Amplification rows with no matching well result are not stored; the result counts them.
  */
 export async function recordQpcrResults(
   database: Database,
@@ -28,7 +42,7 @@ export async function recordQpcrResults(
     parseResult: QpcrParseResult
     userId: number | null
   },
-): Promise<typeof qpcrRun.$inferSelect> {
+): Promise<RecordedQpcrResults> {
   const { experimentId, instrumentType, parseResult, userId } = input
   const now = utcNow()
 
@@ -83,9 +97,15 @@ export async function recordQpcrResults(
     }
 
     const ampRows: Array<typeof qpcrAmplificationData.$inferInsert> = []
+    let skippedRowCount = 0
+    const skippedWells = new Set<string>()
     for (const row of parseResult.amplificationData) {
       const wellResultId = wellResultIds.get(wellTargetKey(row.wellPosition, row.targetName))
-      if (wellResultId == null) continue
+      if (wellResultId == null) {
+        skippedRowCount++
+        skippedWells.add(row.wellPosition)
+        continue
+      }
       ampRows.push({
         qpcrWellResultId: wellResultId,
         cycle: row.cycle,
@@ -102,6 +122,11 @@ export async function recordQpcrResults(
       .set({ status: 'results_uploaded', lastUpdated: now, updatedBy: userId })
       .where(eq(qpcrExperiment.id, experimentId))
 
-    return runRow
+    return {
+      run: runRow,
+      wellResultCount: wellResultRows.length,
+      amplificationCount: ampRows.length,
+      skippedAmplification: { rowCount: skippedRowCount, wellPositions: [...skippedWells] },
+    }
   })
 }

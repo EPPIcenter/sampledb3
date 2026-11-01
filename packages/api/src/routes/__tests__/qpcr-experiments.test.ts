@@ -145,6 +145,66 @@ describe('qPCR Experiments Template', () => {
       expect(amp).toHaveLength(2)
     })
 
+    it('skips and reports amplification rows for a well with no result row', async () => {
+      // As in a QuantStudio export: A1 has a sample and a result; A2 is an empty well, so it has
+      // a flat curve with no target name in Amplification Data and no row in Results.
+      const XLSX = await import('xlsx')
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.aoa_to_sheet([
+          ['Well', 'Well Position', 'Sample Name', 'Target Name', 'Task', 'CT'],
+          [1, 'A1', 'S1', 'Target 1', 'UNKNOWN', 22.1],
+        ]),
+        'Results',
+      )
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.aoa_to_sheet([
+          ['Well', 'Well Position', 'Cycle', 'Target Name', 'Rn', 'Delta Rn'],
+          [1, 'A1', 1, 'Target 1', 0.5, 0.01],
+          [1, 'A1', 2, 'Target 1', 0.6, 0.02],
+          [2, 'A2', 1, '', 0.4, 0],
+          [2, 'A2', 2, '', 0.4, 0],
+          [2, 'A2', 3, '', 0.4, 0],
+        ]),
+        'Amplification Data',
+      )
+      const fileContent = (XLSX.write(wb, { type: 'buffer', bookType: 'xls' }) as Buffer).toString('base64')
+      const id = await createExperiment()
+
+      const res = await ctx.request(`/api/qpcr-experiments/${id}/results`, {
+        method: 'POST',
+        json: { fileContent, fileName: 'run.xls', instrumentType: 'QuantStudio' },
+      })
+
+      expect(res.status).toBe(201)
+      const body = (await res.json()) as {
+        wellResultCount: number
+        amplificationCount: number
+        skippedAmplification: { rowCount: number; wellPositions: string[] }
+      }
+      expect(body.wellResultCount).toBe(1)
+      expect(body.amplificationCount).toBe(2)
+      expect(body.skippedAmplification).toEqual({ rowCount: 3, wellPositions: ['A02'] })
+      expect(await countRows()).toEqual({ runs: 1, wellResults: 1, amplification: 2 })
+    })
+
+    it('reports no skipped amplification rows for a Bio-Rad file, which has none', async () => {
+      const csv = ['Well,Fluor,Target,Content,Sample,Cq,Starting Quantity (SQ),Cq Mean', 'A01,FAM,,Unkn,S1,24.6,10140,24.6'].join('\n')
+      const id = await createExperiment()
+
+      const res = await ctx.request(`/api/qpcr-experiments/${id}/results`, {
+        method: 'POST',
+        json: { fileContent: Buffer.from(csv).toString('base64'), fileName: 'run.csv', instrumentType: 'Biorad_CFX' },
+      })
+
+      expect(res.status).toBe(201)
+      const body = (await res.json()) as { amplificationCount: number; skippedAmplification: { rowCount: number } }
+      expect(body.amplificationCount).toBe(0)
+      expect(body.skippedAmplification.rowCount).toBe(0)
+    })
+
     async function createExperiment(): Promise<number> {
       const res = await ctx.request('/api/qpcr-experiments', {
         method: 'POST',
