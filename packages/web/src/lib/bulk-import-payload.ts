@@ -175,7 +175,7 @@ export function toBulkCombinedImportRequest(
   }
 }
 
-/** Combined import validate payload (includes rowIndex for CSV alignment). */
+/** Combined import validate payload (includes rowIndex, the file row, for CSV alignment). */
 export function buildBulkCombinedRequestPayload(
   data: Record<string, unknown>[],
   opts: {
@@ -184,6 +184,8 @@ export function buildBulkCombinedRequestPayload(
     /** Pass component state: missing collections with locations for full_file create. */
     missingCollections: MissingCollectionForPayload[]
     atomicMode: BulkCombinedAtomicMode
+    /** Spreadsheet row of each `data` item; sent as rowIndex so errors name the file row. */
+    fileRows?: number[]
   }
 ): BulkCombinedValidateRequest {
   const { fixedStudyShortCode, missingCollections } = opts
@@ -213,7 +215,7 @@ export function buildBulkCombinedRequestPayload(
       specimenTypeName: spec.specimenTypeName as string,
       collectionDate: spec.collectionDate as string | undefined,
       container: containerData,
-      rowIndex: rowIndex + 1,
+      rowIndex: opts.fileRows?.[rowIndex] ?? rowIndex + 1,
     })
   }
 

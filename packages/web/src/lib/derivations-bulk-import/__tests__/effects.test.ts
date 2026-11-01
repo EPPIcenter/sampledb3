@@ -52,6 +52,7 @@ describe('validateDerivationsCsv', () => {
         result: emptyValidation(),
         headers: ['a', 'b'],
         rows: [{ a: '1', b: '2' }],
+        fileRows: [2],
       },
       { type: 'STEP_SET', step: 'review' },
     ])

@@ -5,6 +5,7 @@ import BulkImportFlow from '../BulkImportFlow'
 import { importsApi } from '../../lib/api/imports'
 import { specimenTypesApi } from '../../lib/api/reference-data'
 import { collectionsApi } from '../../lib/api/collections'
+import { specimensApi } from '../../lib/api/specimens'
 
 vi.mock('../LocationPicker', () => ({
   default: ({ onChange }: { onChange: (id: number | null) => void }) => (
@@ -294,6 +295,110 @@ describe('BulkImportFlow', () => {
         locationId: 10,
         barcode: 'plate 7',
       })
+    })
+  })
+
+  describe('errors name the file row', () => {
+    /** Upload `text` and validate it; header is row 1, so the file's rows are numbered as a spreadsheet shows them. */
+    async function validateCsv(
+      text: string,
+      opts: { importType: 'specimens' | 'combined'; containerType: string; perSubject?: boolean },
+    ) {
+      const user = userEvent.setup()
+      await render(<BulkImportFlow fixedStudyShortCode="ST" />, { initialEntries: ['/import?step=upload'] })
+      await user.selectOptions(screen.getByLabelText(/import type/i), opts.importType)
+      await user.selectOptions(screen.getByLabelText(/container type/i), opts.containerType)
+      if (opts.perSubject) await user.click(screen.getByRole('radio', { name: /per subject/i }))
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      await user.upload(fileInput, new File([text], 'i.csv', { type: 'text/csv' }))
+      await act(async () => {
+        fireEvent.submit(fileInput.closest('form')!)
+      })
+    }
+
+    const fileProto = File.prototype as { text?: () => Promise<string> }
+    const originalText = fileProto.text
+    beforeAll(() => {
+      fileProto.text = function (this: File) {
+        return new Promise<string>((resolve) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.readAsText(this)
+        })
+      }
+    })
+    afterAll(() => {
+      if (originalText) fileProto.text = originalText
+      else delete fileProto.text
+    })
+
+    beforeEach(() => {
+      // Every plate exists, so validation goes straight to import.
+      vi.mocked(collectionsApi.check).mockImplementation(({ collections }) =>
+        Promise.resolve({ results: collections.map((c) => ({ ...c, exists: true, id: 1 })) }),
+      )
+    })
+
+    // Row 1 header; S1 on rows 2 and 5, S2 on row 3, row 4 blank.
+    const combinedCsv =
+      'subject_name,specimen_type_name,plate_name,barcode,position\n' +
+      'S1,Serum,P1,MT1,A01\n' +
+      'S2,Serum,P1,MT2,A02\n' +
+      ',,,,\n' +
+      'S1,Plasma,P1,MT3,A03\n'
+
+    it('numbers a specimens validation error by its file row when a blank row precedes it', async () => {
+      vi.mocked(specimensApi.validateBulk).mockResolvedValue({
+        valid: false,
+        errors: [{ index: 1, message: "Subject 'S2' not found" }],
+      })
+      await validateCsv('subject_name,specimen_type_name\nS1,Serum\n\nS2,Plasma\n', {
+        importType: 'specimens',
+        containerType: 'none',
+      })
+
+      expect(await screen.findByText("Row 4: Subject 'S2' not found")).toBeInTheDocument()
+    })
+
+    it('numbers a combined validation error on a specimen grouped under an earlier subject by its file row', async () => {
+      vi.mocked(importsApi.bulkCombinedValidate).mockImplementation((payload) =>
+        Promise.resolve({
+          valid: false,
+          errors: [
+            {
+              subjectIndex: 0,
+              specimenIndex: 1,
+              rowIndex: payload.subjects[0]!.specimens[1]!.rowIndex,
+              message: 'Position A03 is taken',
+            },
+          ],
+        }),
+      )
+      await validateCsv(combinedCsv, { importType: 'combined', containerType: 'micronix_tube' })
+
+      expect(await screen.findByText('Row 5: Position A03 is taken')).toBeInTheDocument()
+    })
+
+    it('numbers a combined subject error without a row index by the subject’s first file row', async () => {
+      vi.mocked(importsApi.bulkCombinedValidate).mockResolvedValue({
+        valid: false,
+        errors: [{ subjectIndex: 1, message: 'Invalid subject name' }],
+      })
+      await validateCsv(combinedCsv, { importType: 'combined', containerType: 'micronix_tube' })
+
+      expect(await screen.findByText('Row 3: Invalid subject name')).toBeInTheDocument()
+    })
+
+    it('names every file row of a subject that failed in a per-subject import', async () => {
+      vi.mocked(importsApi.bulkCombinedValidate).mockResolvedValue({ valid: true, errors: [] })
+      vi.mocked(importsApi.bulkCombined).mockResolvedValue({
+        summary: { subjectsCreated: 1, subjectsUpdated: 0, specimensCreated: 1, containersCreated: 1 },
+        results: [],
+        errors: [{ index: 0, error: "Subject 'S1': Position A03 is taken" }],
+      })
+      await validateCsv(combinedCsv, { importType: 'combined', containerType: 'micronix_tube', perSubject: true })
+
+      expect(await screen.findByText("Rows 2, 5: Subject 'S1': Position A03 is taken")).toBeInTheDocument()
     })
   })
 })

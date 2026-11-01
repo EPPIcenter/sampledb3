@@ -1,18 +1,26 @@
-import { parseCsv, serializeCsv } from '@sampledb/contract'
+import { serializeCsv } from '@sampledb/contract'
+import { parseCsvFileRows } from '../csv-file-rows'
 
-/** Parse CSV text into header-keyed rows via the shared contract parser. */
-export function parseFullCsv(csv: string): { headers: string[]; rows: Record<string, string>[] } {
-  const cells = parseCsv(csv).filter(row => !(row.length === 1 && row[0].trim() === ''))
-  if (cells.length < 2) return { headers: [], rows: [] }
-  const headers = cells[0].map(h => h.trim())
-  const rows = cells.slice(1).map(cols => {
+/**
+ * Parse CSV text into header-keyed rows, dropping rows whose cells are all blank as the
+ * API does. `fileRows[i]` is the spreadsheet row of `rows[i]`, counting the header as row 1.
+ */
+export function parseFullCsv(csv: string): {
+  headers: string[]
+  rows: Record<string, string>[]
+  fileRows: number[]
+} {
+  const parsed = parseCsvFileRows(csv)
+  if (!parsed || parsed.rows.length === 0) return { headers: [], rows: [], fileRows: [] }
+  const headers = parsed.header.map(h => h.trim())
+  const rows = parsed.rows.map(({ cells }) => {
     const row: Record<string, string> = {}
     headers.forEach((header, j) => {
-      row[header] = cols[j]?.trim() ?? ''
+      row[header] = cells[j]?.trim() ?? ''
     })
     return row
   })
-  return { headers, rows }
+  return { headers, rows, fileRows: parsed.rows.map(r => r.fileRow) }
 }
 
 /** First few data rows for the upload-step preview table. */

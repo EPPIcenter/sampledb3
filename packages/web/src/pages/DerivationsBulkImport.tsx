@@ -14,6 +14,7 @@ import {
   getRequiredAndOptionalColumns,
   parseCsvPreview,
   resolveTemplateParentType,
+  selectFileRow,
   type ParentContainerType,
   type SourceType,
 } from '../lib/derivations-bulk-import'
@@ -79,6 +80,7 @@ export default function DerivationsBulkImport() {
   const { specimenTypes, units, allowedContainerTypes, bootstrapLoading, bootstrapError, containerTypesError } =
     bootstrap
   const formDisabled = workflowLoading || bootstrapLoading
+  const fileRow = (index: number) => selectFileRow(state, index)
   const invalidValidationRows = validationResult?.rows.filter((row) => !row.valid && row.error) ?? []
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -776,7 +778,7 @@ export default function DerivationsBulkImport() {
                   <ul className="list-disc list-inside">
                     {invalidValidationRows.map((row) => (
                       <li key={row.index}>
-                        Row {row.index + 1}: {row.error}
+                        Row {fileRow(row.index)}: {row.error}
                       </li>
                     ))}
                   </ul>
@@ -797,7 +799,7 @@ export default function DerivationsBulkImport() {
                   <tbody className="divide-y divide-app-border">
                     {reviewRows.map((row, rowIndex) => (
                       <tr key={rowIndex} className="hover:bg-app-surface">
-                        <td className="px-3 py-1.5 text-app-text-muted">{rowIndex + 1}</td>
+                        <td className="px-3 py-1.5 text-app-text-muted">{fileRow(rowIndex)}</td>
                         {reviewHeaders.map((header) => (
                           <td key={header} className="px-3 py-1.5">
                             <input
@@ -951,7 +953,7 @@ export default function DerivationsBulkImport() {
                         className={row.valid ? 'bg-app-trend-up/10' : 'bg-app-trend-down/10'}
                       >
                         <td className="px-3 py-2 text-sm text-app-text">
-                          {row.index + 1}
+                          {fileRow(row.index)}
                         </td>
                         <td className="px-3 py-2 text-sm">
                           {row.valid ? (
@@ -1081,7 +1083,7 @@ export default function DerivationsBulkImport() {
                           className={row.success ? 'bg-app-trend-up/10' : 'bg-app-trend-down/10'}
                         >
                           <td className="px-3 py-2 text-sm text-app-text">
-                            {row.index + 1}
+                            {fileRow(row.index)}
                           </td>
                           <td className="px-3 py-2 text-sm">
                             {row.success ? (
