@@ -258,6 +258,10 @@ _Avoid_: Stuffing paper spot ids into `collection.barcode`; sending JSON `null` 
 The application — a specimen inventory and workflow system for research and clinical labs.
 _Avoid_: LIMS (unless describing the broader category externally), ELN, SRA submission system (not available today)
 
+**Data fix**:
+A one-time SQL change that one install's operator runs by hand against that install's database with `bun run data-fix` in `packages/api`, to carry out decisions about that install's own data. Unlike a numbered migration, it ships to no other install, so it may name that install's rows by id. The runner copies the database first, refuses a database below the current schema version, runs the fix in one transaction, and records it in `data_fix_log` so it runs only once. The EPPIcenter lab's fixes live in `ops/data-fixes/`.
+_Avoid_: Migration (for a change to one install's data); a migration changes every install's schema.
+
 ## Scope
 
 What SampleDB is and is not — for product descriptions and documentation.

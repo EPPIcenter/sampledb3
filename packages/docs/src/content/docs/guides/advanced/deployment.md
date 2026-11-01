@@ -98,6 +98,37 @@ The app must be running. Refresh the browser to see the demo data. See [Generati
 | `AWS_SECRET_ACCESS_KEY` | When using S3/S3-compatible | Same as above |
 | `AWS_DEFAULT_REGION` | When using S3/S3-compatible | Same as above |
 
+## One-time data fixes
+
+A **data fix** is a SQL file that changes your own data once, such as clearing placeholder values or merging two records your lab decided are the same. It is not a schema migration: migrations ship with SampleDB and run on every install at startup, while a data fix belongs to one install and runs only when an operator runs it by hand.
+
+**Data fix files are site-specific.** A fix names rows by the ids they have in the database it was written for and carries out that lab's decisions. The files in the repository's `ops/data-fixes/` directory are the EPPIcenter lab's fixes for its own database. Don't run them on yours: at best they abort, at worst they change unrelated rows. Write your own fix for your own data.
+
+The runner, `packages/api/src/scripts/data-fix.ts`:
+
+- refuses a database that is not at the schema version of the SampleDB build you run it from. Start that version of SampleDB on the database once so it migrates, then stop it.
+- copies the database next to its file first, named `<file>.pre-data-fix-<fix name>-<UTC timestamp>.bak`.
+- runs the whole file in one transaction, so a statement that fails, or a guard in the file that aborts, leaves the database unchanged.
+- records the fix's name, time and checksum in a `data_fix_log` table. Running it again does nothing and says when it ran. Running a changed file under the same name is refused.
+- with `--dry-run`, runs the fix in a transaction that is rolled back, prints the rows each statement would change, and writes no copy.
+
+The fix's name is its file name without `.sql`, so give each fix a dated, descriptive name such as `2026-11-01-clear-placeholder-dates.sql`. Separate statements with `--> statement-breakpoint`, as migrations do. A `--` comment line just above a statement labels it in the output.
+
+Stop SampleDB, take a restic backup, then dry-run and run the fix with the same image the app runs. With Docker Compose, mount the directory holding the fix:
+
+```bash
+docker compose stop sampledb3
+docker compose run --rm -v /path/to/fixes:/fixes:ro sampledb3 \
+  bun /app/packages/api/dist/scripts/data-fix.js /fixes/2026-11-01-clear-placeholder-dates.sql --dry-run
+docker compose run --rm -v /path/to/fixes:/fixes:ro sampledb3 \
+  bun /app/packages/api/dist/scripts/data-fix.js /fixes/2026-11-01-clear-placeholder-dates.sql
+docker compose up -d
+```
+
+The runner uses `DATABASE_PATH`, which the Compose service sets; pass `--db=<path>` to use another file. From a source checkout, run `bun run data-fix <absolute path to fix.sql> --db=<path> [--dry-run]` in `packages/api`.
+
+Afterwards, open the [integrity report](/docs/guides/advanced/data-integrity/) (**Admin → Data Integrity**) to check the result. Keep the `.bak` copy until you've checked the app and the next restic backup has run, as for [the copy before schema migrations](/docs/guides/advanced/backup-and-restore/#copy-before-schema-migrations).
+
 ---
 
 ## Backup
