@@ -81,3 +81,11 @@ export {
   PAPER_DERIVATION_USE_SUBLABEL_NOT_POSITION,
   type PaperInboundWriteFields,
 } from './paper-container-inbound'
+export {
+  GRID_GEOMETRY,
+  gridPositionRange,
+  parseGridPosition,
+  type GridCollectionType,
+  type GridGeometry,
+  type GridPositionResult,
+} from './grid-position'

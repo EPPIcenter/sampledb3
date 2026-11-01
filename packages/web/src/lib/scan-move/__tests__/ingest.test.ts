@@ -82,6 +82,20 @@ describe('cryovial ingest', () => {
     expect(file.inferredMatches).toEqual([])
   })
 
+  it('flags a target position outside the box or not a grid position, by CSV row', () => {
+    const text = [
+      'source_collection_name,source_position,target_position',
+      'BOX-BETA,--A01,j10',
+      'BOX-BETA,A02,K01',
+      'BOX-BETA,A03,hello world',
+    ].join('\n')
+    const file = ingestScanCsvText(cryovialScanMoveVariant, fileSource('box-alpha.csv'), text, { collections: boxes })
+    expect(file.validationErrors).toEqual([
+      { row: 2, error: 'Position "K01" is outside a cryovial box (A01–J10)' },
+      { row: 3, error: expect.stringContaining('Position "hello world" is not a grid position') },
+    ])
+  })
+
   it('requires a manual choice when multiple boxes match the filename case-insensitively', () => {
     const text = 'source_collection_name,source_position,target_position\nBOX-BETA,A01,B01'
     const file = ingestScanCsvText(cryovialScanMoveVariant, fileSource('box-alpha.csv'), text, {

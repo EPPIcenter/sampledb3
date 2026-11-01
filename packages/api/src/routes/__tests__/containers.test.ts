@@ -294,6 +294,19 @@ describe('Containers API', () => {
       expect(row?.comment).toBeNull()
     })
 
+    it.each(['Z99', 'hello world', 'b1'])('never writes a grid position, even %s', async (position) => {
+      // Container edit sets no Grid position; a move changes it under the Grid position rule.
+      const boxRecord = await createTestCryovialBox(ctx.db, { name: `BOX-POS-${Date.now()}`, locationId: testLocation.id })
+      const container = await createTestStorageContainer(ctx.db, { unitId: testUnit.id })
+      await createTestCryovialTube(ctx.db, { containerId: container.id, collectionId: boxRecord.id, barcode: 'POS-1', position: 'A01' })
+
+      const res = await ctx.request(`/api/containers/${container.id}`, { method: 'PATCH', json: { comment: 'moved?', position } })
+
+      expect(res.status).toBe(200)
+      const row = await ctx.db.select().from(cryovialTube).where(eq(cryovialTube.id, container.id)).get()
+      expect(row?.position).toBe('A01')
+    })
+
     it('returns 400 when cryovial_tube barcode is already in use', async () => {
       const now = utcNow()
       const [boxRecord] = await ctx.db

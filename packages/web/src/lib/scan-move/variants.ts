@@ -1,3 +1,4 @@
+import { parseGridPosition } from '@sampledb/contract'
 import { inferDestinationPlateForScan } from '../plate-destination-inference'
 import { parseScannerPlateCsv, validateScannerPlateCsv } from '../scanner-plate-csv'
 import { parseBuiltinMoveCsv } from './ingest'
@@ -89,7 +90,15 @@ export const cryovialScanMoveVariant: ScanMoveVariant = {
   capabilities: { createDestinations: true, relocationValidation: false },
 
   parseAndValidate(text) {
-    return parseBuiltinMoveCsv(text, CRYOVIAL_MOVE_CSV_SPEC)
+    const { csvRows, errors } = parseBuiltinMoveCsv(text, CRYOVIAL_MOVE_CSV_SPEC)
+    // Grid position rule on the target only: a legacy source position must still resolve.
+    csvRows.forEach((row, i) => {
+      const target = csvCell(row, 'target_position')
+      if (target === '') return
+      const parsed = parseGridPosition(target, 'cryovial_box')
+      if (!parsed.ok) errors.push({ row: i + 1, error: parsed.error })
+    })
+    return { csvRows, errors }
   },
 
   inferDestination(filename, _csvRows, ctx): ScanMoveInference {

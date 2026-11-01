@@ -14,6 +14,7 @@ import { eq, and, isNull } from 'drizzle-orm'
 import { resolveCollection, resolveSheetsByName, type CollectionType } from './collections/collection-resolve'
 import { checkGridPositionOccupancy } from './container-occupancy'
 import { normalizePosition } from './normalize-position'
+import { parseGridPosition } from '@sampledb/contract'
 import type { ContainerSubtype } from './container-placement'
 
 /** Staging prefix for position updates so swaps on one plate do not violate UNIQUE(collection_id, position) mid-transaction. */
@@ -328,12 +329,7 @@ export function inferCollectionTypeFromContainers(containers: ContainerInfo[]): 
 
 export async function executeMoves(database: Database, request: BatchMoveRequest): Promise<MoveResult> {
   try {
-    const { mappings, atomicMode = 'all_or_nothing' } = request
-    // Normalize target positions ("b1" -> "B01") so writes, conflict keys, and occupancy checks agree.
-    const moves = request.moves.map((move) => ({
-      ...move,
-      targetPosition: normalizePosition(move.targetPosition) ?? '',
-    }))
+    const { mappings, moves, atomicMode = 'all_or_nothing' } = request
     const errors: ValidationError[] = []
 
     const resolvedMoves = await Promise.all(moves.map(async (move, index) => ({
@@ -374,9 +370,17 @@ export async function executeMoves(database: Database, request: BatchMoveRequest
 
     for (const m of validResolvedMoves) {
       const requiresPosition = m.info.containerType === 'micronix_tube' || m.info.containerType === 'cryovial_tube' || m.info.containerType === 'static_well'
-      if (requiresPosition && (!m.move.targetPosition || typeof m.move.targetPosition !== 'string' || m.move.targetPosition.trim() === '')) {
+      if (!requiresPosition) continue
+      if (!m.move.targetPosition || typeof m.move.targetPosition !== 'string' || m.move.targetPosition.trim() === '') {
         errors.push({ row: m.row, error: `target_position is required for ${m.info.containerType}` })
+        continue
       }
+      if (collectionType !== 'micronix_plate' && collectionType !== 'cryovial_box') continue
+      // Grid position rule: store "b1" as "B01" so writes, conflict keys, and occupancy checks
+      // agree, and reject a position the plate or box does not have.
+      const parsed = parseGridPosition(m.move.targetPosition, collectionType)
+      if (parsed.ok) m.move = { ...m.move, targetPosition: parsed.position }
+      else errors.push({ row: m.row, error: parsed.error })
     }
 
     if (atomicMode === 'all_or_nothing' && errors.length > 0) {

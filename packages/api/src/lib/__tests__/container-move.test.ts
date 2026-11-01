@@ -4,6 +4,8 @@ import {
   createTestStorageType,
   createTestLocation,
   createTestMicronixPlate,
+  createTestCryovialBox,
+  createTestCryovialTube,
   createTestSpecimenType,
   createTestSpecimen,
   createTestUnit,
@@ -21,7 +23,7 @@ import {
   type ContainerInfo,
 } from '../container-move'
 import { storageContainer } from '../../db/schema'
-import { micronixTube, staticWell, paper } from '../../db/schema'
+import { micronixTube, cryovialTube, staticWell, paper } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { utcNow } from '../datetime'
 
@@ -555,6 +557,76 @@ describe('container-move', () => {
       expect(tubes.find((t) => t.barcode === 'MT-T9')?.position).toBe('D01')
     })
 
+    it.each([
+      { target: 'Z99', reason: 'outside' },
+      { target: 'I01', reason: 'outside' },
+      { target: 'A13', reason: 'outside' },
+      { target: 'hello world', reason: 'not a grid position' },
+      { target: '--A01', reason: 'not a grid position' },
+    ])('rejects a move to $target on a plate and writes nothing', async ({ target, reason }) => {
+      const { plate, addTube } = await setupPlate()
+      await addTube('MT-OK', 'A01')
+      await addTube('MT-BAD', 'A02')
+
+      const result = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: plate.name, toCollectionName: plate.name }],
+        moves: [
+          { identifier: { type: 'barcode', barcode: 'MT-OK' }, targetPosition: 'B01' },
+          { identifier: { type: 'barcode', barcode: 'MT-BAD' }, targetPosition: target },
+        ],
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.moved).toBe(0)
+      expect(result.errors).toEqual([{ row: 2, error: expect.stringContaining(`"${target}"`) }])
+      expect(result.errors?.[0]?.error).toContain(reason)
+      const tubes = await testDb.select().from(micronixTube).all()
+      expect(tubes.map((t) => [t.barcode, t.position])).toEqual([['MT-OK', 'A01'], ['MT-BAD', 'A02']])
+    })
+
+    it('best_effort moves the valid rows and skips an out-of-range one', async () => {
+      const { plate, addTube } = await setupPlate()
+      await addTube('MT-OK', 'A01')
+      await addTube('MT-BAD', 'A02')
+
+      const result = await executeMoves(testDb, {
+        atomicMode: 'best_effort',
+        mappings: [{ fromCollectionName: plate.name, toCollectionName: plate.name }],
+        moves: [
+          { identifier: { type: 'barcode', barcode: 'MT-OK' }, targetPosition: 'b1' },
+          { identifier: { type: 'barcode', barcode: 'MT-BAD' }, targetPosition: 'H13' },
+        ],
+      })
+
+      expect(result.moved).toBe(1)
+      expect(result.errors).toEqual([{ row: 2, error: expect.stringContaining('"H13" is outside a micronix plate') }])
+      const tubes = await testDb.select().from(micronixTube).all()
+      expect(tubes.map((t) => [t.barcode, t.position])).toEqual([['MT-OK', 'B01'], ['MT-BAD', 'A02']])
+    })
+
+    it('moves on a plate that holds legacy malformed positions, including a legacy tube itself', async () => {
+      const { plate, addTube } = await setupPlate()
+      await addTube('MT-LEGACY', 'A1145854300')
+      await addTube('MT-DASH', '--A01')
+      await addTube('MT-NEW', 'B01')
+
+      const result = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: plate.name, toCollectionName: plate.name }],
+        moves: [
+          { identifier: { type: 'barcode', barcode: 'MT-NEW' }, targetPosition: 'A01' },
+          { identifier: { type: 'barcode', barcode: 'MT-LEGACY' }, targetPosition: 'c1' },
+        ],
+      })
+
+      expect(result).toEqual({ success: true, moved: 2 })
+      const tubes = await testDb.select().from(micronixTube).all()
+      expect(Object.fromEntries(tubes.map((t) => [t.barcode, t.position]))).toEqual({
+        'MT-LEGACY': 'C01',
+        'MT-DASH': '--A01',
+        'MT-NEW': 'A01',
+      })
+    })
+
     it('resolves a static well by container_id', async () => {
       const { plate, addWell } = await setupPlate()
       const wellId = await addWell('A01')
@@ -562,6 +634,46 @@ describe('container-move', () => {
       const info = await resolveContainerByIdentifier(testDb, { type: 'container_id', containerId: wellId })
       expect(info?.containerType).toBe('static_well')
       expect(info?.currentCollectionName).toBe(plate.name)
+    })
+  })
+
+  describe('cryovial box grid positions', () => {
+    async function setupBox() {
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const box = await createTestCryovialBox(testDb, { name: 'CryoBox', locationId: location.id })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
+      const specimen = await createTestSpecimen(testDb, specimenType.id)
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const container = await createTestStorageContainer(testDb, { specimenId: specimen.id, unitId: unit.id })
+      await createTestCryovialTube(testDb, { containerId: container.id, collectionId: box.id, barcode: 'CV-1', position: 'A01' })
+      return box
+    }
+
+    it.each([
+      { target: 'j10', stored: 'J10' },
+      { target: 'I9', stored: 'I09' },
+    ])('stores $target in a box as $stored', async ({ target, stored }) => {
+      const box = await setupBox()
+      const result = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: box.name, toCollectionName: box.name }],
+        moves: [{ identifier: { type: 'barcode', barcode: 'CV-1' }, targetPosition: target }],
+      })
+      expect(result).toEqual({ success: true, moved: 1 })
+      const [tube] = await testDb.select().from(cryovialTube).all()
+      expect(tube.position).toBe(stored)
+    })
+
+    it.each(['K01', 'A11', 'H12'])('rejects %s, outside a box', async (target) => {
+      const box = await setupBox()
+      const result = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: box.name, toCollectionName: box.name }],
+        moves: [{ identifier: { type: 'barcode', barcode: 'CV-1' }, targetPosition: target }],
+      })
+      expect(result.success).toBe(false)
+      expect(result.errors).toEqual([{ row: 1, error: `Position "${target}" is outside a cryovial box (A01–J10)` }])
+      const [tube] = await testDb.select().from(cryovialTube).all()
+      expect(tube.position).toBe('A01')
     })
   })
 

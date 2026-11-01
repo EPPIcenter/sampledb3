@@ -132,7 +132,7 @@ Where a **Container** sits in the physical storage hierarchy — its **grid posi
 _Avoid_: Enrichment (implementation term); conflating placement with specimen or source lookups; placing paper directly on a box or bag without a sheet
 
 **Grid position**:
-The well or slot of a tube or well **Container** in its plate or box (e.g. A01). Optional: a tube or well may belong to a **Collection** with no grid position (legacy rows). At most one Container occupies a given grid position in a Collection; a missing position occupies no cell. Not applicable to **Paper**.
+The well or slot of a tube or well **Container** in its plate or box (e.g. A01): a row letter plus a two-digit column, inside the **Collection**'s geometry (micronix plate A01–H12, cryovial box A01–J10). Every write that sets one normalizes `a1` to `A01` and rejects anything else. Legacy rows may still hold malformed positions. Optional: a tube or well may belong to a **Collection** with no grid position (legacy rows). At most one Container occupies a given grid position in a Collection; a missing position occupies no cell. Not applicable to **Paper**.
 _Avoid_: Well (as the domain term); treating a missing position as occupying a slot; requiring every tube to have a position before it can exist in a Collection
 
 ### Export

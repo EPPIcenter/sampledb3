@@ -74,15 +74,20 @@ Column headers are case-insensitive. `Position`, `position`, `well_position`, an
 **With containers:** the same columns, plus container fields for the selected type. Optional `comment` is stored on each container. Collection identifier must use the column for that type (`plate_name`, `box_name`, or `bag_name`) so it matches the templates.
 
 - Micronix: `plate_name`, unique barcode, `position` (letter A-H plus two digits, for example `A01`).
-- Cryovial: `box_name`, `position`. Barcode is optional.
+- Cryovial: `box_name`, `position` (letter A-J plus a column 1-10, for example `A05`). Barcode is optional.
 - Paper: exactly one of `box_name` or `bag_name`, plus `sheet_name`. Optional `sublabel` for the spot.
 - Static wells: `plate_name` and `position`, same A01-H12 format as micronix.
 
 ## Position format
 
-For micronix and static wells, the stored form is a letter plus two zero-padded digits: `A01`. `A1` and `a1` are accepted and padded to `A01`. `B012` is not valid.
+A position is a row letter plus a column number. The stored form pads the column to two digits: `A1`, `a1`, and `a01` are all stored as `A01`. `B012`, `25`, and anything else that is not a letter plus a number is rejected.
 
-For cryovial tubes, match the box layout. Letter-number (`A5`) and numbered (`25`) positions are both accepted. Keep the format consistent within a box.
+The position must also fit the plate or box:
+
+- Micronix plates and static wells: rows A-H, columns 1-12 (`A01`-`H12`).
+- Cryovial boxes: rows A-J, columns 1-10 (`A01`-`J10`). This covers both 9×9 and 10×10 boxes.
+
+Validation names the row and the value of each position that breaks these rules, for example `Position "Z99" is outside a micronix plate (A01–H12)`.
 
 ## Multiple collection dates
 
@@ -97,7 +102,7 @@ In a longitudinal study, use one CSV row per collection. Each row creates a sepa
 - **Location cannot contain collections.** Pick a location that is allowed to hold collections, such as a freezer or shelf configured for that.
 - **Position already used / duplicate position.** That well is taken in the plate or box, or the same position appears twice in the file for the same collection.
 - **Barcode already exists / duplicate barcode.** The barcode is already in the database or appears twice in the file.
-- **Position format errors.** Use `A01` for micronix and static wells. Match the box layout for cryovial tubes.
+- **Position format errors.** Use a row letter plus a column number inside the plate or box: `A01`-`H12` for micronix and static wells, `A01`-`J10` for cryovial tubes.
 - **Invalid specimen type.** The name does not match Reference Data. Spelling and capitalization must match.
 
 For column rules and date formats, see [CSV file guidelines](/docs/guides/troubleshooting/csv-guidelines/).

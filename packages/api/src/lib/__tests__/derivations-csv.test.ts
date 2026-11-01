@@ -361,6 +361,30 @@ describe('derivations-csv', () => {
       expect(result.rows[2].error).toMatch(/more than once in your file/)
     })
 
+    it('rejects an out-of-range or garbage position in validation', async () => {
+      const { parent } = await seedParent()
+      const csv = [header, `${parent.id},PlateDef,b1,C1`, `${parent.id},PlateDef,Z99,C2`, `${parent.id},PlateDef,hello world,C3`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows.map((r) => r.valid)).toEqual([true, false, false])
+      expect(result.rows[1].error).toBe('Position "Z99" is outside a micronix plate (A01–H12)')
+      expect(result.rows[2].error).toContain('Position "hello world" is not a grid position')
+    })
+
+    it('imports a1 as A01 and refuses an out-of-range position', async () => {
+      const { parent } = await seedParent()
+
+      const bad = await importDerivationsFromCsv(testDb, [header, `${parent.id},PlateDef,I01,C1`].join('\n'), { settings })
+      expect(bad.rows[0]?.success).toBe(false)
+      expect(bad.rows[0]?.error).toContain('Position "I01" is outside a micronix plate')
+
+      const good = await importDerivationsFromCsv(testDb, [header, `${parent.id},PlateDef,b1,C1`].join('\n'), { settings })
+      expect(good.rows[0]?.success).toBe(true)
+      const child = await testDb.select().from(micronixTube).where(eq(micronixTube.barcode, 'C1')).get()
+      expect(child?.position).toBe('B01')
+    })
+
     it('warns about a mismatched source type even when the first row has no parent', async () => {
       const { parent, plate, unit } = await seedParent()
       const plasmaType = await createTestSpecimenType(testDb, { name: 'Plasma' })

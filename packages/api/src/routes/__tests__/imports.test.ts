@@ -12,7 +12,7 @@ import {
   createTestStorageType,
   createTestUnit,
 } from '../../__tests__/helpers/factories'
-import { studySubject, specimen, specimenTypeContainerType, containerTypeUnit, micronixPlate, cryovialBox, settings, storageContainer } from '../../db/schema'
+import { studySubject, specimen, specimenTypeContainerType, containerTypeUnit, micronixPlate, micronixTube, cryovialBox, settings, storageContainer } from '../../db/schema'
 import { setContainerDefaults } from '../../lib/settings'
 import { eq } from 'drizzle-orm'
 import { failInsertsWithUniqueViolation } from '../../__tests__/helpers/constraint-race'
@@ -493,6 +493,75 @@ describe('Imports API', () => {
       const data = (await res.json()) as { valid: boolean; errors: Array<{ message: string }> }
       expect(data.valid).toBe(false)
       expect(data.errors.some((e) => e.message.includes('cannot contain collections'))).toBe(true)
+    })
+
+    describe('Grid position rule', () => {
+      async function setupPlateImport() {
+        await createTestStudy(ctx.db, { title: 'Grid Study', shortCode: 'GRID' })
+        const specimenType = await createTestSpecimenType(ctx.db, { name: 'Blood' })
+        const storageType = await createTestStorageType(ctx.db, { name: 'Freezer', description: 'Test' })
+        const loc = await createTestLocation(ctx.db, {
+          name: 'Shelf',
+          parentId: null,
+          storageTypeId: String(storageType.id),
+          canContainCollections: true,
+        })
+        const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+        await ctx.db.insert(specimenTypeContainerType).values({ specimenTypeId: specimenType.id, containerType: 'micronix_tube' })
+        await ctx.db.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+        await setContainerDefaults(ctx.db, { micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' } })
+        const row = (rowIndex: number, barcode: string, position: string) => ({
+          subjectName: `S${rowIndex}`,
+          specimens: [
+            {
+              rowIndex,
+              specimenTypeName: 'Blood',
+              collectionDate: '2025-01-01',
+              container: {
+                containerType: 'micronix_tube',
+                barcode,
+                collection: { type: 'micronix_plate', name: 'GRID-P1', locationId: loc.id, position },
+              },
+            },
+          ],
+        })
+        return { row }
+      }
+
+      it.each([
+        { position: 'Z99', message: 'Position "Z99" is outside a micronix plate (A01–H12)' },
+        { position: 'A13', message: 'Position "A13" is outside a micronix plate (A01–H12)' },
+        { position: 'hello world', message: expect.stringContaining('Position "hello world" is not a grid position') },
+      ])('fails validation of $position with a row-numbered error', async ({ position, message }) => {
+        const { row } = await setupPlateImport()
+        const res = await ctx.request('/api/imports/bulk-combined/validate', {
+          method: 'POST',
+          json: { studyShortCode: 'GRID', atomicMode: 'full_file', subjects: [row(1, 'BC-1', 'a1'), row(2, 'BC-2', position)] },
+        })
+
+        expect(res.status).toBe(200)
+        const data = (await res.json()) as { valid: boolean; errors: Array<{ rowIndex?: number; message: string }> }
+        expect(data.valid).toBe(false)
+        expect(data.errors).toEqual([expect.objectContaining({ rowIndex: 2, message })])
+      })
+
+      it('rejects an out-of-range position on import with 400 and stores a1 as A01 otherwise', async () => {
+        const { row } = await setupPlateImport()
+        const bad = await ctx.request('/api/imports/bulk-combined', {
+          method: 'POST',
+          json: { studyShortCode: 'GRID', atomicMode: 'full_file', subjects: [row(1, 'BC-1', 'a1'), row(2, 'BC-2', 'Z99')] },
+        })
+        expect(bad.status).toBe(400)
+        expect(await ctx.db.select().from(micronixTube)).toHaveLength(0)
+
+        const good = await ctx.request('/api/imports/bulk-combined', {
+          method: 'POST',
+          json: { studyShortCode: 'GRID', atomicMode: 'full_file', subjects: [row(1, 'BC-1', 'a1'), row(2, 'BC-2', 'A2')] },
+        })
+        expect(good.status).toBe(201)
+        const tubes = await ctx.db.select().from(micronixTube)
+        expect(Object.fromEntries(tubes.map((t) => [t.barcode, t.position]))).toEqual({ 'BC-1': 'A01', 'BC-2': 'A02' })
+      })
     })
 
     it('returns valid: false when collection date is invalid (future)', async () => {

@@ -11,9 +11,12 @@ import {
   createTestUnit,
   createTestSpecimenTypeContainerType,
   createTestContainerTypeUnit,
+  createTestStorageContainer,
+  createTestMicronixTube,
 } from '../../../__tests__/helpers/factories'
 import type { Database } from '../../../db/client'
 import {
+  cryovialTube,
   micronixPlate,
   micronixTube,
   paper,
@@ -308,6 +311,48 @@ describe('Specimen registration', () => {
     expect(error.errors).toEqual([
       { entryIndex: 0, containerIndex: 0, field: 'position', message: 'Position is required for micronix tubes (e.g. A01).' },
     ])
+  })
+
+  describe('Grid position rule', () => {
+    it.each([
+      { position: 'Z99', message: 'Position "Z99" is outside a micronix plate (A01–H12)' },
+      { position: 'A13', message: 'Position "A13" is outside a micronix plate (A01–H12)' },
+      { position: 'I01', message: 'Position "I01" is outside a micronix plate (A01–H12)' },
+      { position: 'hello world', message: expect.stringContaining('Position "hello world" is not a grid position') },
+      { position: 'NA01', message: expect.stringContaining('Position "NA01" is not a grid position') },
+    ])('rejects $position on a plate and writes nothing', async ({ position, message }) => {
+      const error = await rejection([entry([tube('T1', { name: 'P1', position })])])
+
+      expect(error.errors).toEqual([{ entryIndex: 0, containerIndex: 0, field: 'position', message }])
+      expect(await count(specimen)).toBe(0)
+      expect(await count(storageContainer)).toBe(0)
+    })
+
+    it('accepts J10 in a cryovial box and rejects K01', async () => {
+      const box = (barcode: string, position: string): RegistrationContainer => ({
+        containerType: 'cryovial_tube',
+        barcode,
+        collection: { type: 'cryovial_box', name: 'BOX', locationId, position },
+      })
+      const error = await rejection([entry([box('C1', 'j10'), box('C2', 'K01')])])
+      expect(error.errors).toEqual([
+        { entryIndex: 0, containerIndex: 1, field: 'position', message: 'Position "K01" is outside a cryovial box (A01–J10)' },
+      ])
+
+      await registerSpecimens(db, [entry([box('C1', 'j10')])])
+      const [row] = await db.select().from(cryovialTube)
+      expect(row?.position).toBe('J10')
+    })
+
+    it('registers into a plate that holds a legacy malformed position', async () => {
+      const container = await createTestStorageContainer(db, { unitId })
+      await createTestMicronixTube(db, { containerId: container.id, collectionId: plate.id, barcode: 'LEGACY', position: '--A01' })
+
+      await registerSpecimens(db, [entry([tube('T1', { name: 'P1', position: 'A1' })])])
+
+      const rows = await db.select().from(micronixTube)
+      expect(Object.fromEntries(rows.map((r) => [r.barcode, r.position]))).toEqual({ LEGACY: '--A01', T1: 'A01' })
+    })
   })
 
   it('rejects a unit not allowed for the container type', async () => {

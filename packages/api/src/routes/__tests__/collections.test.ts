@@ -17,6 +17,8 @@ import {
   createTestStudySubject,
   createTestBox,
   createTestSheet,
+  createTestStorageContainer,
+  createTestMicronixTube,
 } from '../../__tests__/helpers/factories'
 import { setScannerConfigurations } from '../../lib/settings'
 import { eq } from 'drizzle-orm'
@@ -159,6 +161,48 @@ describe('Collections API', () => {
         json: { moves: 'not-an-array' },
       })
       expect(res.status).toBe(400)
+    })
+
+    it.each(['Z99', 'hello world'])('returns 400 naming the row for a move to %s and writes nothing', async (target) => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const loc = await createTestLocation(ctx.db, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'P96', locationId: loc.id })
+      const container = await createTestStorageContainer(ctx.db)
+      await createTestMicronixTube(ctx.db, { containerId: container.id, collectionId: plate.id, barcode: 'MT-1', position: 'A01' })
+
+      const res = await ctx.request('/api/collections/containers/move', {
+        method: 'POST',
+        json: {
+          mappings: [{ fromCollectionName: 'P96', toCollectionName: 'P96' }],
+          moves: [{ identifier: { type: 'barcode', barcode: 'MT-1' }, targetPosition: target }],
+        },
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.errors).toEqual([{ row: 1, error: expect.stringContaining(`Position "${target}"`) }])
+      const tube = ctx.db.select().from(micronixTube).where(eq(micronixTube.id, container.id)).get()
+      expect(tube?.position).toBe('A01')
+    })
+
+    it('stores a1 as A01', async () => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const loc = await createTestLocation(ctx.db, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'P96', locationId: loc.id })
+      const container = await createTestStorageContainer(ctx.db)
+      await createTestMicronixTube(ctx.db, { containerId: container.id, collectionId: plate.id, barcode: 'MT-1', position: 'B05' })
+
+      const res = await ctx.request('/api/collections/containers/move', {
+        method: 'POST',
+        json: {
+          mappings: [{ fromCollectionName: 'P96', toCollectionName: 'P96' }],
+          moves: [{ identifier: { type: 'barcode', barcode: 'MT-1' }, targetPosition: 'a1' }],
+        },
+      })
+
+      expect(res.status).toBe(200)
+      const tube = ctx.db.select().from(micronixTube).where(eq(micronixTube.id, container.id)).get()
+      expect(tube?.position).toBe('A01')
     })
 
     it('returns 401 when not authenticated', async () => {
