@@ -120,14 +120,30 @@ export async function getCryovialBoxDetail(database: Database, id: number) {
   }
 }
 
-async function getSheetContentsForParent(database: Database, sheets: (typeof sheet.$inferSelect)[]) {
-  return Promise.all(
-    sheets.map(async (s) => {
-      const papers = await database.select().from(paper).where(eq(paper.sheetId, s.id))
-      const paperEntries = await enrichPaperContainers(database, papers)
-      return { ...s, papers: paperEntries }
-    }),
-  )
+/**
+ * The Sheets of one box or bag, each with its papers. Papers load in one query joined to
+ * their Sheet's parent, so the number of queries does not grow with the number of Sheets.
+ */
+async function getSheetContentsForParent(database: Database, parent: { boxId: number } | { bagId: number }) {
+  const parentMatches = 'boxId' in parent ? eq(sheet.boxId, parent.boxId) : eq(sheet.bagId, parent.bagId)
+  const [sheets, papers] = await Promise.all([
+    database.select().from(sheet).where(parentMatches),
+    database
+      .select({ id: paper.id, sheetId: paper.sheetId, sublabel: paper.sublabel })
+      .from(paper)
+      .innerJoin(sheet, eq(sheet.id, paper.sheetId))
+      .where(parentMatches)
+      .orderBy(paper.id),
+  ])
+
+  const paperEntries = await enrichPaperContainers(database, papers)
+  const entriesBySheetId = new Map<number, typeof paperEntries>()
+  papers.forEach((p, i) => {
+    const entries = entriesBySheetId.get(p.sheetId) ?? []
+    entries.push(paperEntries[i])
+    entriesBySheetId.set(p.sheetId, entries)
+  })
+  return sheets.map((s) => ({ ...s, papers: entriesBySheetId.get(s.id) ?? [] }))
 }
 
 export async function getGenericBoxDetail(database: Database, id: number) {
@@ -135,8 +151,7 @@ export async function getGenericBoxDetail(database: Database, id: number) {
   if (!boxRecord) return null
 
   const loc = await database.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
-  const sheets = await database.select().from(sheet).where(eq(sheet.boxId, id))
-  const sheetContents = await getSheetContentsForParent(database, sheets)
+  const sheetContents = await getSheetContentsForParent(database, { boxId: id })
 
   return {
     box: {
@@ -153,8 +168,7 @@ export async function getBagDetail(database: Database, id: number) {
   if (!bagRecord) return null
 
   const loc = await database.select().from(location).where(eq(location.id, bagRecord.locationId)).get()
-  const sheets = await database.select().from(sheet).where(eq(sheet.bagId, id))
-  const contents = await getSheetContentsForParent(database, sheets)
+  const contents = await getSheetContentsForParent(database, { bagId: id })
 
   return {
     bag: {
@@ -197,7 +211,8 @@ export async function getSheetDetail(database: Database, id: number) {
     parentBag = parent?.bag ? { id: parent.bag.id, name: parent.bag.name } : null
   }
 
-  const papers = await database.select().from(paper).where(eq(paper.sheetId, id))
+  // By id: paper_sheet_id_sublabel_idx would otherwise return them in sublabel order.
+  const papers = await database.select().from(paper).where(eq(paper.sheetId, id)).orderBy(paper.id)
   const paperEntries = await enrichPaperContainers(database, papers)
 
   return {

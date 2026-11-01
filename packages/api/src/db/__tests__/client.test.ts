@@ -27,14 +27,22 @@ describe('Database Client', () => {
   it('creates error_logs table when missing even if study and settings exist', () => {
     // Simulate database created before error_logs was added to schema
     const db = new Database(testDbPath)
-    db.exec('CREATE TABLE study (id INTEGER PRIMARY KEY)')
+    db.exec('CREATE TABLE study (id INTEGER PRIMARY KEY, title TEXT, short_code TEXT)')
     db.exec('CREATE TABLE settings (key TEXT, user_id INTEGER, value TEXT, PRIMARY KEY (key, user_id))')
     db.exec(`CREATE TABLE micronix_tube (id INTEGER PRIMARY KEY, collection_id INTEGER NOT NULL, barcode TEXT, position TEXT)`)
     db.exec(`CREATE TABLE cryovial_tube (id INTEGER PRIMARY KEY, collection_id INTEGER NOT NULL, barcode TEXT, position TEXT)`)
     db.exec(`CREATE TABLE static_well (id INTEGER PRIMARY KEY, collection_id INTEGER NOT NULL, position TEXT)`)
     db.exec(`CREATE TABLE study_subject (id INTEGER PRIMARY KEY, study_id INTEGER NOT NULL, name TEXT NOT NULL)`)
     db.exec(`CREATE TABLE sheet (id INTEGER PRIMARY KEY, name TEXT NOT NULL, box_id INTEGER, bag_id INTEGER)`)
-    db.exec(`CREATE TABLE specimen (id INTEGER PRIMARY KEY, specimen_type_id INTEGER NOT NULL, collection_date DATE)`)
+    db.exec(`CREATE TABLE specimen (id INTEGER PRIMARY KEY, study_subject_id INTEGER, control_batch_id INTEGER, specimen_type_id INTEGER NOT NULL, collection_date DATE)`)
+    // Tables migration 011 indexes
+    db.exec(`CREATE TABLE storage_container (id INTEGER PRIMARY KEY, specimen_id INTEGER)`)
+    db.exec(`CREATE TABLE storage_container_tag (storage_container_id INTEGER, tag_id INTEGER)`)
+    db.exec(`CREATE TABLE control_batch (id INTEGER PRIMARY KEY, control_definition_id INTEGER)`)
+    db.exec(`CREATE TABLE location (id INTEGER PRIMARY KEY, parent_id INTEGER, path TEXT)`)
+    db.exec(`CREATE TABLE micronix_plate (id INTEGER PRIMARY KEY, location_id INTEGER)`)
+    db.exec(`CREATE TABLE cryovial_box (id INTEGER PRIMARY KEY, location_id INTEGER)`)
+    db.exec(`CREATE TABLE bag (id INTEGER PRIMARY KEY, location_id INTEGER)`)
     // Intentionally omit paper — migration 003 preflight creates legacy stub
     // Intentionally do NOT create error_logs
     const before = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='error_logs'").get()

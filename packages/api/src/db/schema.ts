@@ -228,6 +228,14 @@ export const specimen = sqliteTable('specimen', {
   controlBatchIdIdx: index('specimen_control_batch_id_idx').on(table.controlBatchId),
   collectionDateIdx: index('specimen_collection_date_idx').on(table.collectionDate),
   specimenTypeIdIdx: index('specimen_specimen_type_id_idx').on(table.specimenTypeId),
+  // One collection event, one Specimen. Production databases that predate these indexes
+  // hold duplicates, so migrations do not add them there.
+  subjectTypeDateUniq: uniqueIndex('idx_specimen_study_subject_type_date')
+    .on(table.studySubjectId, table.specimenTypeId, table.collectionDate)
+    .where(sql`${table.studySubjectId} IS NOT NULL`),
+  controlBatchTypeDateUniq: uniqueIndex('idx_specimen_control_batch_type_date')
+    .on(table.controlBatchId, table.specimenTypeId, table.collectionDate)
+    .where(sql`${table.controlBatchId} IS NOT NULL`),
 }))
 
 export const storageContainer = sqliteTable('storage_container', {
@@ -250,6 +258,7 @@ export const storageContainerTag = sqliteTable('storage_container_tag', {
   tagId: integer('tag_id').notNull().references(() => tag.id),
 }, (t) => ({
   pk: primaryKey(t.storageContainerId, t.tagId),
+  tagIdIdx: index('storage_container_tag_tag_id_idx').on(t.tagId),
 }))
 
 // Locations (hierarchical parent-child structure)
@@ -299,6 +308,10 @@ export const micronixTube = sqliteTable('micronix_tube', {
   collectionPositionUniq: uniqueIndex('micronix_tube_collection_position_idx')
     .on(table.collectionId, table.position)
     .where(sql`${table.position} IS NOT NULL`),
+  collectionIdIdx: index('micronix_tube_collection_id_idx').on(table.collectionId),
+  // Serves the case-insensitive barcode check (findContainersByBarcode with ignoreCase),
+  // which compares lower(trim(barcode)); SQLite uses the index only for that exact expression.
+  barcodeFoldedIdx: index('micronix_tube_barcode_folded_idx').on(sql`lower(trim(${table.barcode}))`),
 }))
 
 export const cryovialBox = sqliteTable('cryovial_box', {
@@ -323,6 +336,10 @@ export const cryovialTube = sqliteTable('cryovial_tube', {
   collectionPositionUniq: uniqueIndex('cryovial_tube_collection_position_idx')
     .on(table.collectionId, table.position)
     .where(sql`${table.position} IS NOT NULL`),
+  collectionIdIdx: index('cryovial_tube_collection_id_idx').on(table.collectionId),
+  barcodeIdx: index('cryovial_tube_barcode_idx').on(table.barcode),
+  // See micronix_tube_barcode_folded_idx.
+  barcodeFoldedIdx: index('cryovial_tube_barcode_folded_idx').on(sql`lower(trim(${table.barcode}))`),
 }))
 
 export const box = sqliteTable('box', {
@@ -364,13 +381,18 @@ export const sheet = sqliteTable('sheet', {
   `),
   unq: unique().on(t.name, t.boxId, t.bagId),
   boxNameUniq: uniqueIndex('sheet_box_name_idx').on(t.boxId, t.name).where(sql`${t.boxId} IS NOT NULL`),
+  // Sheets by box use sheet_box_name_idx: `box_id = ?` implies its `box_id IS NOT NULL`.
+  bagIdIdx: index('sheet_bag_id_idx').on(t.bagId),
 }))
 
 export const paper = sqliteTable('paper', {
   id: integer('id').primaryKey().references(() => storageContainer.id),
   sheetId: integer('sheet_id').notNull().references(() => sheet.id),
   sublabel: text('sublabel'),
-})
+}, (table) => ({
+  sheetIdSublabelIdx: index('paper_sheet_id_sublabel_idx').on(table.sheetId, table.sublabel),
+  sublabelIdx: index('paper_sublabel_idx').on(table.sublabel),
+}))
 
 export const staticWell = sqliteTable('static_well', {
   id: integer('id').primaryKey().references(() => storageContainer.id),
@@ -380,6 +402,7 @@ export const staticWell = sqliteTable('static_well', {
   collectionPositionUniq: uniqueIndex('static_well_collection_position_idx')
     .on(table.collectionId, table.position)
     .where(sql`${table.position} IS NOT NULL`),
+  collectionIdIdx: index('static_well_collection_id_idx').on(table.collectionId),
 }))
 
 // Additional reference tables
