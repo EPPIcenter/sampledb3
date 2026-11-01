@@ -1,7 +1,8 @@
 /**
  * Date filter bounds from a request (issue #104). Collection dates are stored as YYYY-MM-DD and
  * compared as strings, so a malformed bound such as `garbage` or `5/7/2024` would silently
- * match everything or nothing. These helpers reject it with a `ValidationError` (400) instead.
+ * match everything or nothing. (A stored date migration 008 could not read stays as it was;
+ * `isCalendarDate` in `sql-helpers.ts` keeps it out of a filter.) These helpers reject it with a `ValidationError` (400) instead.
  */
 import { ValidationError } from './error-handler'
 import { parseCollectionDate } from './validation'

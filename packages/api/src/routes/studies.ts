@@ -25,7 +25,7 @@ import { requireParam } from '../lib/common-validators'
 import { withWriteTransaction } from '../db/write-transaction'
 import { assertNotUsedInQpcr } from '../lib/qpcr-usage'
 import { insertedRow } from '../lib/inserted-row'
-import { timestampFilter } from '../lib/date-filters'
+import { isIsoCalendarDate, timestampFilter } from '../lib/date-filters'
 import { likeContains } from '../lib/sql-like'
 
 /** Short code prefix for tutorial namespace. Any study whose short code starts with this (case-insensitive) may be deleted by any member. Only admins may rename a study into or out of this namespace. */
@@ -396,9 +396,10 @@ studies.get('/:id/summary', authMiddleware, async (c) => {
     }))
 
     // Collection date range
-    const collectionDates = (specimens
+    // Only real YYYY-MM-DD dates: migration 008 leaves one it cannot read (`13/2/2024`) as it was.
+    const collectionDates = specimens
       .map(s => s.collectionDate)
-      .filter(Boolean) as string[])
+      .filter((date): date is string => date != null && isIsoCalendarDate(date))
       .sort()
 
     const collectionDateRange = collectionDates.length > 0
@@ -521,7 +522,7 @@ studies.get('/:id/timeline', authMiddleware, async (c) => {
       id: number
       studySubjectId: number
       specimenTypeId: number
-      collectionDate: string
+      collectionDate: string | null
     }>
 
     if (specimens.length === 0) {
@@ -545,7 +546,7 @@ studies.get('/:id/timeline', authMiddleware, async (c) => {
     // Group specimens by subject
     const specimensBySubject = new Map<number, Array<{
       id: number
-      collectionDate: string
+      collectionDate: string | null
       specimenTypeId: number
       specimenTypeName: string
     }>>()
@@ -570,7 +571,10 @@ studies.get('/:id/timeline', authMiddleware, async (c) => {
     }))
 
     // Calculate date range
-    const collectionDates = specimens.map(s => s.collectionDate).sort()
+    const collectionDates = specimens
+      .map(s => s.collectionDate)
+      .filter((date): date is string => date != null && isIsoCalendarDate(date))
+      .sort()
     const dateRange = collectionDates.length > 0
       ? {
           earliest: collectionDates[0],

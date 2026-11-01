@@ -4,6 +4,7 @@ import { inArray } from 'drizzle-orm'
 import { cache, cacheKeys } from '../cache'
 import { chunkArray, SQL_IN_CHUNK_SIZE } from '../sql-helpers'
 import { utcMonthOf } from '../datetime'
+import { isIsoCalendarDate } from '../date-filters'
 
 export type SpecimenAggregates = {
   total: number
@@ -26,7 +27,8 @@ function buildMonthlyTimeline(
   const monthMap = new Map<string, number>()
 
   specimens
-    .filter((s) => (dateField === 'collectionDate' ? s.collectionDate : true))
+    // Only real YYYY-MM-DD collection dates: migration 008 leaves one it cannot read as it was.
+    .filter((s) => (dateField === 'collectionDate' ? s.collectionDate != null && isIsoCalendarDate(s.collectionDate) : true))
     .forEach((s) => {
       const rawDate = dateField === 'collectionDate' ? s.collectionDate! : s.created
       // UTC month: `created` is a UTC timestamp and a collection date has no time of day.

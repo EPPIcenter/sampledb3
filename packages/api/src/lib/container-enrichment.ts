@@ -1,5 +1,6 @@
 import type { Database } from '../db/client'
 import { parseStoredTimestamp } from './datetime'
+import { isIsoCalendarDate } from './date-filters'
 import {
   resolveContainerPlacementBundle,
   type ContainerPlacement,
@@ -211,10 +212,11 @@ export function buildSpecimenCollectionSummary(
     containerTypeCounts[placement.containerType] = (containerTypeCounts[placement.containerType] || 0) + 1
   }
 
+  // Only real YYYY-MM-DD dates: migration 008 leaves one it cannot read (`13/2/2024`) as it was.
   const collectionDates = enrichedSpecimens
     .map((s) => s.collectionDate)
-    .filter(Boolean)
-    .sort() as string[]
+    .filter((date): date is string => date != null && isIsoCalendarDate(date))
+    .sort()
   const collectionDateRange = collectionDates.length > 0
     ? { earliest: collectionDates[0], latest: collectionDates[collectionDates.length - 1] }
     : null
@@ -222,7 +224,7 @@ export function buildSpecimenCollectionSummary(
   const timeline: SpecimenTimelineEntry[] = enrichedSpecimens
     .map((spec) => ({
       id: spec.id,
-      date: spec.collectionDate || spec.created,
+      date: spec.collectionDate != null && isIsoCalendarDate(spec.collectionDate) ? spec.collectionDate : spec.created,
       specimenTypeName: spec.specimenTypeName,
       specimenTypeId: spec.specimenTypeId,
     }))

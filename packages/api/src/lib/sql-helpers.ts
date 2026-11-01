@@ -1,4 +1,4 @@
-import { gte, lt, lte, type SQL } from 'drizzle-orm'
+import { gte, lt, lte, sql, type SQL } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
 import { shiftCalendarDate, toStoredTimestamp } from './datetime'
 
@@ -13,6 +13,15 @@ export function timestampAtOrAfter(column: SQLiteColumn, instant: Date): SQL {
 /** `column < instant` for a stored timestamp column; see `timestampAtOrAfter`. */
 export function timestampBefore(column: SQLiteColumn, instant: Date): SQL {
   return lt(column, toStoredTimestamp(instant))
+}
+
+/**
+ * `column` holds a real calendar date written YYYY-MM-DD. Migration 008 leaves a collection date
+ * it cannot read (`13/2/2024`) as it was, and compared as text such a value passes or fails a
+ * date bound by accident; add this condition to keep it out of every date filter.
+ */
+export function isCalendarDate(column: SQLiteColumn): SQL {
+  return sql`date(${column}) IS ${column}`
 }
 
 /**

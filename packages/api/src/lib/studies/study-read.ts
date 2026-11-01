@@ -4,6 +4,7 @@ import { study, studySubject } from '../../db/schema'
 import { and, eq, inArray, or, sql } from 'drizzle-orm'
 import { SQL_IN_CHUNK_SIZE, dateRangeConditions } from '../sql-helpers'
 import { likeContains } from '../sql-like'
+import { isIsoCalendarDate } from '../date-filters'
 
 export type ListStudiesParams = {
   search?: string
@@ -194,9 +195,10 @@ export async function getStudySummaries(
     const totalSpecimens = studySpecimens.length
     const totalContainers = containerCounts[id] || 0
 
-    const collectionDates = (studySpecimens
+    // Only real YYYY-MM-DD dates: migration 008 leaves one it cannot read (`13/2/2024`) as it was.
+    const collectionDates = studySpecimens
       .map((s) => s.collectionDate)
-      .filter(Boolean) as string[])
+      .filter((date): date is string => date != null && isIsoCalendarDate(date))
       .sort()
 
     const collectionDateRange = collectionDates.length > 0

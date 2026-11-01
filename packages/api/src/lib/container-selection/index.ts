@@ -10,8 +10,8 @@ import { CONTAINER_SUBTYPES, type ContainerSubtype } from '../container-placemen
 import { collectionDateFilter, timestampFilter } from '../date-filters'
 import {
   containerFilterConditions,
+  collectionDateConditions,
   containerTypeSql,
-  dateRangeConditions,
   sourceTypeCondition,
   specimenFilterConditions,
 } from './conditions'
@@ -85,7 +85,7 @@ async function selectionScopes(
 
   const filters = checkedDateFilters(selection.filters ?? {})
   if (selection.kind === 'subjects') checkSubjectDates(selection)
-  const collectionDate = dateRangeConditions(specimen.collectionDate, filters.collectionDate)
+  const collectionDate = collectionDateConditions(filters.collectionDate)
   let scopes: SelectionScope[]
   switch (selection.kind) {
     case 'study': {

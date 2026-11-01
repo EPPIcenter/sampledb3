@@ -6,7 +6,7 @@ import { idQueryParam } from '../query-params'
 import { ValidationError } from '../error-handler'
 import { findContainersByBarcode } from '../identifier-resolution'
 import { collectionDateFilter, timestampFilter } from '../date-filters'
-import { dateRangeConditions } from '../sql-helpers'
+import { dateRangeConditions, isCalendarDate } from '../sql-helpers'
 import { likeContains } from '../sql-like'
 
 export type ListSpecimensQuery = {
@@ -62,12 +62,18 @@ function isSpecimenSortColumn(value: string): value is SpecimenSortColumn {
 
 /**
  * ORDER BY for a sort. Specimens without a collection date come last in either direction,
+ * just after those whose collection date is not a real YYYY-MM-DD date (left by migration 008),
  * and the id breaks ties so that consecutive pages neither repeat nor skip a row.
  */
 function specimenOrderBy(sort: SpecimenSortColumn, order: SortOrder) {
   const direction = order === 'asc' ? asc : desc
   if (sort === 'collection_date') {
-    return [sql`${specimen.collectionDate} IS NULL`, direction(specimen.collectionDate), direction(specimen.id)]
+    return [
+      sql`${specimen.collectionDate} IS NULL`,
+      sql`NOT ${isCalendarDate(specimen.collectionDate)}`,
+      direction(specimen.collectionDate),
+      direction(specimen.id),
+    ]
   }
   return [direction(specimen.created), direction(specimen.id)]
 }
@@ -201,6 +207,7 @@ export async function listSpecimens(database: Database, query: ListSpecimensQuer
   if (collectionTo) {
     conditions.push(sql`${specimen.collectionDate} <= ${collectionTo}`)
   }
+  if (collectionFrom || collectionTo) conditions.push(isCalendarDate(specimen.collectionDate))
   conditions.push(...dateRangeConditions(specimen.created, createdFromBound, createdToBound))
 
   if (barcode) {

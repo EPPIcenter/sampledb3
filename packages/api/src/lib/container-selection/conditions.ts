@@ -16,7 +16,7 @@ import {
   storageContainerTag,
 } from '../../db/schema'
 import type { ContainerSubtype } from '../container-placement'
-import { dateToUpperBound } from '../sql-helpers'
+import { dateToUpperBound, isCalendarDate } from '../sql-helpers'
 import type { ContainerSelectionFilters, DateRange, SpecimenSourceType } from './types'
 
 /**
@@ -37,6 +37,15 @@ export function dateRangeConditions(column: SQLiteColumn, range: DateRange | und
     ...(range?.from ? [gte(column, range.from)] : []),
     ...(range?.to ? [dateToUpperBound(column, range.to)] : []),
   ]
+}
+
+/**
+ * Conditions for an inclusive range on the Specimen collection date. A bound also excludes a
+ * collection date that is not a real YYYY-MM-DD date (see `isCalendarDate`).
+ */
+export function collectionDateConditions(range: DateRange | undefined): SQL[] {
+  const conditions = dateRangeConditions(specimen.collectionDate, range)
+  return conditions.length > 0 ? [...conditions, isCalendarDate(specimen.collectionDate)] : []
 }
 
 /** Specimens of the given source type; undefined, every Specimen. */
