@@ -1,6 +1,19 @@
 import { gte, lt, lte, type SQL } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
-import { shiftCalendarDate } from './datetime'
+import { shiftCalendarDate, toStoredTimestamp } from './datetime'
+
+/**
+ * `column >= instant` for a stored timestamp column (`YYYY-MM-DD HH:MM:SS`, UTC). The bound is
+ * written in the stored format, so the text comparison orders the same as the instants.
+ */
+export function timestampAtOrAfter(column: SQLiteColumn, instant: Date): SQL {
+  return gte(column, toStoredTimestamp(instant))
+}
+
+/** `column < instant` for a stored timestamp column; see `timestampAtOrAfter`. */
+export function timestampBefore(column: SQLiteColumn, instant: Date): SQL {
+  return lt(column, toStoredTimestamp(instant))
+}
 
 /**
  * Upper bound for a "to" date filter. A bare YYYY-MM-DD includes that whole day, so a

@@ -1,4 +1,5 @@
 import type { Database } from '../db/client'
+import { parseStoredTimestamp } from './datetime'
 import {
   resolveContainerPlacementBundle,
   type ContainerPlacement,
@@ -225,7 +226,8 @@ export function buildSpecimenCollectionSummary(
       specimenTypeName: spec.specimenTypeName,
       specimenTypeId: spec.specimenTypeId,
     }))
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    // A collection date (YYYY-MM-DD) and a created timestamp are both UTC; read them alike.
+    .sort((a, b) => (parseStoredTimestamp(a.date)?.getTime() ?? 0) - (parseStoredTimestamp(b.date)?.getTime() ?? 0))
 
   const summary: SpecimenCollectionSummary = {
     totalSpecimens: enrichedSpecimens.length,

@@ -3,6 +3,7 @@ import { specimen, specimenType, study, studySubject } from '../../db/schema'
 import { inArray } from 'drizzle-orm'
 import { cache, cacheKeys } from '../cache'
 import { chunkArray, SQL_IN_CHUNK_SIZE } from '../sql-helpers'
+import { utcMonthOf } from '../datetime'
 
 export type SpecimenAggregates = {
   total: number
@@ -28,8 +29,9 @@ function buildMonthlyTimeline(
     .filter((s) => (dateField === 'collectionDate' ? s.collectionDate : true))
     .forEach((s) => {
       const rawDate = dateField === 'collectionDate' ? s.collectionDate! : s.created
-      const date = new Date(rawDate)
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      // UTC month: `created` is a UTC timestamp and a collection date has no time of day.
+      const monthKey = utcMonthOf(rawDate)
+      if (!monthKey) return
       monthMap.set(monthKey, (monthMap.get(monthKey) || 0) + 1)
     })
 
