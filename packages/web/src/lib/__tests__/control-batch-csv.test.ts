@@ -144,6 +144,51 @@ describe('control-batch-csv', () => {
     })
   })
 
+  describe('spreadsheet line numbers in errors', () => {
+    const availableTypes = [{ name: 'Whole Blood' }]
+
+    it('reports the spreadsheet line of a row after blank lines and a skipped row', () => {
+      const csv = [
+        'specimen_type_name,position,quantity', // line 1
+        'Whole Blood,A01,1', // line 2
+        '', // line 3
+        ',A02,1', // line 4: missing specimen type, skipped by the parser
+        ',,', // line 5: blank cells
+        'Unknown Type,A03,1', // line 6
+      ].join('\n')
+      const parsed = parseContainerCSV(csv, 'f.csv')
+      expect(parsed.errors).toEqual([expect.objectContaining({ row: 4, field: 'specimen_type_name' })])
+
+      const errors = validateCSVRows(parsed.rows, availableTypes, 'micronix_tube')
+      expect(errors).toEqual([expect.objectContaining({ row: 6, field: 'specimen_type_name' })])
+    })
+
+    it('reports the spreadsheet line of a row in a file without blank lines', () => {
+      const csv = 'specimen_type_name,position\nWhole Blood,A01\nWhole Blood,\n'
+      const parsed = parseContainerCSV(csv, 'f.csv')
+      const errors = validateCSVRows(parsed.rows, availableTypes, 'micronix_tube')
+      expect(errors).toEqual([expect.objectContaining({ row: 3, field: 'position' })])
+    })
+  })
+
+  describe('validateCSVRows quantity', () => {
+    const availableTypes = [{ name: 'Whole Blood' }]
+
+    it('accepts a quantity of 0, as the shared container quantity bounds do', () => {
+      const parsed = parseContainerCSV('specimen_type_name,quantity\nWhole Blood,0', 'f.csv')
+      expect(parsed.errors).toEqual([])
+      expect(parsed.rows[0]?.quantity).toBe(0)
+      expect(validateCSVRows(parsed.rows, availableTypes)).toEqual([])
+    })
+
+    it('rejects a negative quantity with the shared bounds message', () => {
+      const parsed = parseContainerCSV('specimen_type_name,quantity\nWhole Blood,-2', 'f.csv')
+      expect(validateCSVRows(parsed.rows, availableTypes)).toEqual([
+        { row: 2, field: 'quantity', error: 'Total quantity must be 0 or more (got -2).' },
+      ])
+    })
+  })
+
   describe('validateCSVRows', () => {
     const availableTypes = [{ name: 'Whole Blood' }, { name: 'Plasma' }]
 

@@ -6,7 +6,7 @@ import {
 } from '../../lib/control-batch-payload'
 import { settingsApi } from '../../lib/api/settings';
 import { getQueryErrorMessage } from '../../ui'
-import type { ControlDefinition, CreateBatchWithSpecimensRequest } from '../../lib/api/controls';
+import type { ControlDefinition, CreateManyBatchesItem } from '../../lib/api/controls';
 import { normalizePosition, groupRowsByDensity } from '../../lib/control-batch-csv'
 import type { BatchInfo, SpecimenTypeConfig, CSVFileData, CompositionStrains } from '../../pages/ControlBatchWizard'
 import { localToday } from '../../lib/date-utils'
@@ -149,14 +149,12 @@ export default function ReviewStep({
 
     setSubmitting(true)
     try {
-      const batchPayloads: CreateBatchWithSpecimensRequest[] = []
+      const batchPayloads: CreateManyBatchesItem[] = []
       for (const batchRow of multiBatchRows) {
         const definitionId = batchRow.candidates.length === 1
           ? batchRow.candidates[0]!.id
           : batchDefinitionSelections[batchRow.rowKey]
         if (definitionId == null) continue // eslint-disable-line @typescript-eslint/no-unnecessary-condition
-        const nameRes = await controlsApi.suggestBatchName(definitionId, productionDate)
-        const batchName = nameRes.name
         const specimensMap = new Map<string, FlatControlBatchContainer[]>()
         const file = batchRow.file
         for (const row of batchRow.rows) {
@@ -199,9 +197,10 @@ export default function ReviewStep({
           containers,
         }))
         batchPayloads.push({
+          // No name: the server names each batch inside the one transaction, so two files with
+          // the same density (same definition and date) get different names instead of colliding.
           batch: {
             controlDefinitionId: definitionId,
-            name: batchName,
             productionDate,
           },
           specimens: specimens.map(({ specimenTypeName, containers }) => ({
@@ -297,7 +296,7 @@ export default function ReviewStep({
                 collectionType: file.collectionType,
                 sublabel: row.sublabel,
                 sheetName: (row.sheet_name as string | undefined) || file.sheetName,
-                quantity: row.quantity || 1,
+                quantity: row.quantity ?? 1,
                 unitSymbol: row.unit_symbol || fallbackUnitForContainerType(file.containerType!),
               }
             : {
@@ -308,7 +307,7 @@ export default function ReviewStep({
                 collectionType: file.collectionType,
                 barcode: row.barcode,
                 position: row.position ? normalizePosition(row.position) : undefined,
-                quantity: row.quantity || 1,
+                quantity: row.quantity ?? 1,
                 unitSymbol: row.unit_symbol || fallbackUnitForContainerType(file.containerType!),
               }
 

@@ -6,12 +6,17 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createControlsRoutes } from '../controls'
-import { controlBatch, controlDefinition, specimen } from '../../db/schema'
+import { containerTypeUnit, controlBatch, controlDefinition, specimen, specimenTypeContainerType } from '../../db/schema'
+import { setContainerDefaults } from '../../lib/settings'
+import { utcNow } from '../../lib/datetime'
 import {
   createTestControlBatch,
   createTestControlDefinition,
+  createTestLocation,
+  createTestMicronixPlate,
   createTestSpecimen,
   createTestSpecimenType,
+  createTestStorageType,
   createTestStrain,
   createTestUnit,
 } from '../../__tests__/helpers/factories'
@@ -92,6 +97,41 @@ describe('Controls API', () => {
       expect(data.control).toBeDefined()
       expect(data.control.id).toBe(def.id)
       expect(data.control.name).toBe('Test Control Def')
+    })
+  })
+
+  describe(`POST ${BASE}/batches/create-many-with-specimens`, () => {
+    it('gives two unnamed batches with the same definition and date different names', async () => {
+      const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(ctx.db, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      await ctx.db.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+      const def = await createTestControlDefinition(ctx.db, { name: 'D100' })
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'DNA' })
+      await ctx.db.insert(specimenTypeContainerType).values({ specimenTypeId: specimenType.id, containerType: 'micronix_tube', created: utcNow() })
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const location = await createTestLocation(ctx.db, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'Plate1', locationId: location.id })
+      const tube = (barcode: string, position: string) => ({
+        containerType: 'micronix_tube',
+        barcode,
+        collection: { type: 'micronix_plate', id: plate.id, position },
+      })
+
+      const res = await ctx.request(`${BASE}/batches/create-many-with-specimens`, {
+        method: 'POST',
+        json: {
+          batches: [
+            { batch: { controlDefinitionId: def.id, productionDate: '2024-06-01' }, specimens: [{ specimenTypeName: 'DNA', containers: [tube('MT1', 'A01')] }] },
+            { batch: { controlDefinitionId: def.id, productionDate: '2024-06-01' }, specimens: [{ specimenTypeName: 'DNA', containers: [tube('MT2', 'A02')] }] },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(201)
+      const data = (await res.json()) as { batches: Array<{ batch: { name: string } }> }
+      expect(data.batches.map((b) => b.batch.name)).toEqual(['D100 2024-06-01', 'D100 2024-06-01 (1)'])
     })
   })
 
