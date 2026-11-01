@@ -38,7 +38,7 @@ describe('Database Client', () => {
     // Tables migration 011 indexes
     db.exec(`CREATE TABLE storage_container (id INTEGER PRIMARY KEY, specimen_id INTEGER)`)
     db.exec(`CREATE TABLE storage_container_tag (storage_container_id INTEGER, tag_id INTEGER)`)
-    db.exec(`CREATE TABLE control_batch (id INTEGER PRIMARY KEY, control_definition_id INTEGER)`)
+    db.exec(`CREATE TABLE control_batch (id INTEGER PRIMARY KEY, control_definition_id INTEGER, properties TEXT)`)
     db.exec(`CREATE TABLE location (id INTEGER PRIMARY KEY, parent_id INTEGER, path TEXT)`)
     db.exec(`CREATE TABLE micronix_plate (id INTEGER PRIMARY KEY, location_id INTEGER)`)
     db.exec(`CREATE TABLE cryovial_box (id INTEGER PRIMARY KEY, location_id INTEGER)`)

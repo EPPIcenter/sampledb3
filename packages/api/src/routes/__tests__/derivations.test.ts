@@ -206,6 +206,28 @@ describe('Derivations API', () => {
       expect(await parentRemaining()).toBe(0)
     })
 
+    it.each(['not a date', '2024-02-30', '2024-13-01', '3/5/2024', '1', ''])(
+      'returns 400 for a derivationDate of %j and changes nothing',
+      async (derivationDate) => {
+        const res = await derive({ derivationDate })
+
+        expect(res.status).toBe(400)
+        expect(((await res.json()) as { errorCode: string }).errorCode).toBe('VALIDATION_ERROR')
+        await expectNothingDerived()
+      },
+    )
+
+    it.each(['2024-01-02', '2024-01-02 10:30:00', '2024-01-02T10:30:00.000Z'])(
+      'stores a derivationDate of %j as sent',
+      async (derivationDate) => {
+        const res = await derive({ derivationDate })
+
+        expect(res.status).toBe(200)
+        const [row] = await ctx.db.select().from(containerDerivation)
+        expect(row?.derivationDate).toBe(derivationDate)
+      },
+    )
+
     it('does not bound a quantity used that leaves the Parent container unreduced', async () => {
       const res = await derive({ quantityUsed: 100, reduceParentQuantity: false })
 
@@ -272,6 +294,28 @@ describe('Derivations API', () => {
         'Nothing to update: send derivationDate, protocol, notes or properties.',
       )
       expect((await loadDerivation(d.id))?.protocol).toBe('P1')
+    })
+
+    it.each(['not a date', '2024-02-30', ''])(
+      'returns 400 for a derivationDate of %j and leaves the Derivation unchanged',
+      async (derivationDate) => {
+        const d = await createDerivationRow()
+        const res = await ctx.request(`${BASE}/derivations/${d.id}`, {
+          method: 'PATCH',
+          json: { derivationDate, protocol: 'P2' },
+        })
+        expect(res.status).toBe(400)
+        const row = await loadDerivation(d.id)
+        expect(row?.derivationDate).toBe(d.derivationDate)
+        expect(row?.protocol).toBe('P1')
+      },
+    )
+
+    it('lets an admin change a Derivation date to a valid date', async () => {
+      const d = await createDerivationRow()
+      const res = await ctx.request(`${BASE}/derivations/${d.id}`, { method: 'PATCH', json: { derivationDate: '2024-03-05' } })
+      expect(res.status).toBe(200)
+      expect((await loadDerivation(d.id))?.derivationDate).toBe('2024-03-05')
     })
 
     it('returns 403 to a member deleting a Derivation and keeps it', async () => {

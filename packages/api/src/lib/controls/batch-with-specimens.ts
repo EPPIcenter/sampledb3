@@ -196,7 +196,7 @@ export async function createBatchWithSpecimens(
     controlDefinitionId: number
     name: string
     productionDate: string | null
-    properties: string | null
+    properties: Record<string, unknown> | null
     created: string
     lastUpdated: string
   }
@@ -234,7 +234,7 @@ export async function createBatchWithSpecimens(
         controlDefinitionId: data.batch.controlDefinitionId,
         name: batchName,
         productionDate: data.batch.productionDate || null,
-        properties: data.batch.properties ? JSON.stringify(data.batch.properties) : null,
+        properties: data.batch.properties ?? null,
       })
       .returning()
 
@@ -281,7 +281,7 @@ export async function createBatchWithSpecimens(
         controlDefinitionId: batchRecord.controlDefinitionId,
         name: batchRecord.name,
         productionDate: batchRecord.productionDate,
-        properties: (batchRecord.properties as string | null) ?? null,
+        properties: (batchRecord.properties as Record<string, unknown> | null) ?? null,
         created: batchRecord.created,
         lastUpdated: batchRecord.lastUpdated,
       },

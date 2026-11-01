@@ -5,13 +5,26 @@
  */
 import { ValidationError } from './error-handler'
 import { parseCollectionDate } from './validation'
+import { parseStoredTimestamp } from './datetime'
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const TIMESTAMP = /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}(?::\d{2})?))?$/
+const DATE_OR_TIMESTAMP = /^(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?$/
 
 /** True when `value` is a real calendar date written YYYY-MM-DD. */
 export function isIsoCalendarDate(value: string): boolean {
   return ISO_DATE.test(value) && parseCollectionDate(value) === value
+}
+
+/**
+ * True when `value` is a real calendar date written YYYY-MM-DD, optionally followed by a time
+ * (`YYYY-MM-DD HH:MM[:SS[.fff]]` or the ISO `T` form, with an optional `Z` or `±HH:MM` zone).
+ * Rejects text `parseStoredTimestamp` alone would still read, such as `2024-02-30` (rolled over to
+ * March 1), `3/5/2024` or `1`.
+ */
+export function isDateOrTimestamp(value: string): boolean {
+  const match = DATE_OR_TIMESTAMP.exec(value)
+  return match != null && isIsoCalendarDate(match[1]) && parseStoredTimestamp(value) !== null
 }
 
 /**

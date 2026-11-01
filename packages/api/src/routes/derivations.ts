@@ -9,7 +9,7 @@ import {
 import { and, eq } from 'drizzle-orm'
 import { createDerivation } from '../lib/derivations'
 import { resolveSpecimenSource } from '../lib/specimens/provenance'
-import { createDerivationRequestSchema } from '../lib/derivation-schemas'
+import { createDerivationRequestSchema, derivationDateSchema } from '../lib/derivation-schemas'
 import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { requireParam, setsNoField } from '../lib/common-validators'
 import { handleRouteError, ValidationError } from '../lib/error-handler'
@@ -247,7 +247,7 @@ derivations.patch('/derivations/:id', adminMiddleware, async (c) => {
 
     const body = await c.req.json()
     const schema = z.object({
-      derivationDate: z.string().optional(),
+      derivationDate: derivationDateSchema.optional(),
       protocol: z.string().optional(),
       notes: z.string().optional(),
       properties: z.record(z.string(), z.any()).optional(),

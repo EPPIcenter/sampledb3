@@ -341,3 +341,12 @@ export async function getLocationHierarchyStats(database: Database, sqliteDataba
   }
 }
 
+/** How many Collections (micronix plates, cryovial boxes, boxes and bags) sit directly at a Location. */
+export async function countCollectionsAtLocation(database: Database, locationId: number): Promise<number> {
+  const counts = await Promise.all(
+    [micronixPlate, cryovialBox, box, bag].map((table) =>
+      database.select({ count: sql<number>`COUNT(*)` }).from(table).where(eq(table.locationId, locationId)).get(),
+    ),
+  )
+  return counts.reduce((total, row) => total + (row?.count ?? 0), 0)
+}

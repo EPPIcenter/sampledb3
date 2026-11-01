@@ -14,7 +14,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm'
 import { validateContainerTypeForSpecimenType } from '../lib/validation'
 import { getDefaultUnit } from './defaults'
 import { utcNow } from './datetime'
-import { isIsoCalendarDate } from './date-filters'
+import { isDateOrTimestamp, isIsoCalendarDate } from './date-filters'
 import { createContainerForSpecimen, pickContainerQuantity } from './container-creation'
 import { withWriteTransaction } from '../db/write-transaction'
 import { insertedRow } from './inserted-row'
@@ -220,6 +220,10 @@ async function createDerivationInTx(
 
   if (!parent) {
     throw new Error('Parent container not found')
+  }
+
+  if (input.derivationDate !== undefined && !isDateOrTimestamp(input.derivationDate)) {
+    throw new ValidationError(`Derivation date '${input.derivationDate}' is not a date (use YYYY-MM-DD)`)
   }
 
   const quantityError = derivationQuantityError(parent, input)

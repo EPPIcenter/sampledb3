@@ -1,5 +1,11 @@
 import { z } from 'zod'
 import { containerWriteInputSchema } from '@sampledb/contract'
+import { isDateOrTimestamp } from './date-filters'
+
+/** A Derivation date: YYYY-MM-DD, optionally with a time (see `isDateOrTimestamp`). */
+export const derivationDateSchema = z
+  .string()
+  .refine(isDateOrTimestamp, { message: 'derivationDate must be a date written YYYY-MM-DD, optionally followed by a time' })
 
 const legacyDerivationPlacementKeys = [
   'containerType',
@@ -42,7 +48,7 @@ export const createDerivationRequestSchema = z
       unitSymbol: z.string().optional(),
       quantityUsed: z.number().optional(),
       reduceParentQuantity: z.boolean().optional().default(true),
-      derivationDate: z.string().optional(),
+      derivationDate: derivationDateSchema.optional(),
       protocol: z.string().optional(),
       notes: z.string().optional(),
       properties: z.record(z.string(), z.any()).optional(),

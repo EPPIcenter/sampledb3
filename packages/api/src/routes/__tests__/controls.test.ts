@@ -128,6 +128,26 @@ describe('Controls API', () => {
       expect(data.batch.controlDefinitionId).toBe(definition.id)
     })
 
+    it('stores batch properties as a JSON object and reads them back as one', async () => {
+      const definition = await createTestControlDefinition(ctx.db, { name: 'Props Def', controlType: 'blood' })
+      const properties = { lead_person: 'Ann', nested: { strains: [1, 2] } }
+
+      const res = await ctx.request(`${BASE}/${definition.id}/batches`, {
+        method: 'POST',
+        json: { productionDate: '2024-01-01', properties },
+      })
+
+      expect(res.status).toBe(201)
+      const created = (await res.json()) as { batch: { id: number; properties: unknown } }
+      expect(created.batch.properties).toEqual(properties)
+      const stored = ctx.sqlite
+        .prepare('SELECT json_type(properties) AS type FROM control_batch WHERE id = ?')
+        .get(created.batch.id) as { type: string }
+      expect(stored.type).toBe('object')
+      const readRes = await ctx.request(`${BASE}/batches/${created.batch.id}`, { method: 'GET' })
+      expect(((await readRes.json()) as { batch: { properties: unknown } }).batch.properties).toEqual(properties)
+    })
+
     it('returns 404 when definition does not exist', async () => {
       const res = await ctx.request(`${BASE}/99999/batches`, {
         method: 'POST',

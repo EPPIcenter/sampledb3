@@ -25,6 +25,7 @@ import {
 } from '@sampledb/contract'
 import { createDerivation, type CreateDerivationInput } from './derivations'
 import { withWriteTransaction } from '../db/write-transaction'
+import { isDateOrTimestamp } from './date-filters'
 import { resolveParentContainerId } from './derivations/parent-container-resolver'
 import { findTubesUsingBarcode } from './identifier-resolution'
 import { checkGridPositionOccupancy } from './container-occupancy'
@@ -174,6 +175,10 @@ function rowValueError(row: DerivationCsvRow): string | null {
   const flag = row.reduce_parent_quantity
   if (flag != null && flag.trim() !== '' && !BOOLEAN_WORDS.has(flag.trim().toLowerCase())) {
     return `reduce_parent_quantity '${flag}' must be true or false`
+  }
+  const date = row.derivation_date
+  if (date != null && date.trim() !== '' && !isDateOrTimestamp(date)) {
+    return `derivation_date '${date}' is not a date (use YYYY-MM-DD)`
   }
   return null
 }

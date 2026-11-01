@@ -5,7 +5,14 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createLocationsRoutes } from '../locations'
-import { createTestStorageType, createTestLocation } from '../../__tests__/helpers/factories'
+import {
+  createTestBag,
+  createTestBox,
+  createTestCryovialBox,
+  createTestLocation,
+  createTestMicronixPlate,
+  createTestStorageType,
+} from '../../__tests__/helpers/factories'
 import { location } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 
@@ -135,6 +142,84 @@ describe('Locations API', () => {
       const [row] = await ctx.db.select().from(location).where(eq(location.id, root.id))
       expect(row.parentId).toBe(parent.id)
       expect(row.storageTypeId).toBeNull()
+    })
+  })
+  describe('PUT /api/locations/:id canContainCollections', () => {
+    async function collectionLocation() {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      return createTestLocation(ctx.db, { name: 'Shelf', storageTypeId: String(storageType.id), canContainCollections: true })
+    }
+
+    async function loadLocation(id: number) {
+      return ctx.db.select().from(location).where(eq(location.id, id)).get()
+    }
+
+    it('returns 409 naming how many Collections the Location holds, and changes nothing', async () => {
+      const shelf = await collectionLocation()
+      await createTestMicronixPlate(ctx.db, { name: 'P1', locationId: shelf.id })
+      await createTestMicronixPlate(ctx.db, { name: 'P2', locationId: shelf.id })
+      await createTestCryovialBox(ctx.db, { name: 'C1', locationId: shelf.id })
+      await createTestBox(ctx.db, { name: 'B1', locationId: shelf.id })
+      await createTestBag(ctx.db, { name: 'G1', locationId: shelf.id })
+
+      const res = await ctx.request(`/api/locations/${shelf.id}`, {
+        method: 'PUT',
+        cookie: ctx.cookies.admin,
+        json: { canContainCollections: false, description: 'changed' },
+      })
+
+      expect(res.status).toBe(409)
+      const body = (await res.json()) as { error: string; errorCode: string }
+      expect(body.errorCode).toBe('CONFLICT')
+      expect(body.error).toBe(
+        'Cannot turn off "can contain collections": this location holds 5 collections. Move them to another location first.',
+      )
+      const row = await loadLocation(shelf.id)
+      expect(row?.canContainCollections).toBe(true)
+      expect(row?.description).toBe(shelf.description)
+    })
+
+    it('says "1 collection" when the Location holds one', async () => {
+      const shelf = await collectionLocation()
+      await createTestBag(ctx.db, { name: 'G1', locationId: shelf.id })
+
+      const res = await ctx.request(`/api/locations/${shelf.id}`, {
+        method: 'PUT',
+        cookie: ctx.cookies.admin,
+        json: { canContainCollections: false },
+      })
+
+      expect(res.status).toBe(409)
+      expect(((await res.json()) as { error: string }).error).toContain('holds 1 collection.')
+    })
+
+    it('turns off canContainCollections on a Location that holds no Collections', async () => {
+      const shelf = await collectionLocation()
+      const other = await createTestLocation(ctx.db, { name: 'Other', storageTypeId: shelf.storageTypeId, canContainCollections: true })
+      await createTestMicronixPlate(ctx.db, { name: 'P1', locationId: other.id })
+
+      const res = await ctx.request(`/api/locations/${shelf.id}`, {
+        method: 'PUT',
+        cookie: ctx.cookies.admin,
+        json: { canContainCollections: false },
+      })
+
+      expect(res.status).toBe(200)
+      expect((await loadLocation(shelf.id))?.canContainCollections).toBe(false)
+    })
+
+    it('accepts canContainCollections: true on a Location that holds Collections', async () => {
+      const shelf = await collectionLocation()
+      await createTestMicronixPlate(ctx.db, { name: 'P1', locationId: shelf.id })
+
+      const res = await ctx.request(`/api/locations/${shelf.id}`, {
+        method: 'PUT',
+        cookie: ctx.cookies.admin,
+        json: { canContainCollections: true, description: 'changed' },
+      })
+
+      expect(res.status).toBe(200)
+      expect((await loadLocation(shelf.id))?.description).toBe('changed')
     })
   })
 })
