@@ -51,6 +51,7 @@ export function studiesPageMock(): MockApiOverrides {
   return {
     studiesApi: {
       list: vi.fn().mockResolvedValue(emptyStudiesList),
+      getSummaries: vi.fn().mockResolvedValue({ summaries: [] }),
     },
   }
 }

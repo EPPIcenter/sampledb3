@@ -77,7 +77,7 @@ export default function QpcrExperiments() {
     {
       key: 'name',
       label: 'Name',
-      sortable: true,
+      sortType: 'text',
       render: (_, row) => (
         <span className="font-medium text-app-text">
           {row.name?.trim() || `Experiment ${row.id}`}
@@ -87,7 +87,7 @@ export default function QpcrExperiments() {
     {
       key: 'status',
       label: 'Status',
-      sortable: true,
+      sortType: 'text',
       render: (_, row) => (
         <span className={`inline-flex ${getStatusPillClass(row.status)}`}>
           {getStatusLabel(row.status)}
@@ -97,7 +97,7 @@ export default function QpcrExperiments() {
     {
       key: 'templateFormat',
       label: 'Template',
-      sortable: true,
+      sortType: 'text',
       render: (_, row) => (
         <span className="text-app-text">
           {(TEMPLATE_LABELS as Record<string, string>)[row.templateFormat] ?? row.templateFormat}
@@ -107,7 +107,7 @@ export default function QpcrExperiments() {
     {
       key: 'plateBarcode',
       label: 'Plate',
-      sortable: true,
+      sortType: 'text',
       render: (val) => (
         <span className="text-app-text-muted">{typeof val === 'string' ? val.trim() || '—' : '—'}</span>
       ),
@@ -115,7 +115,6 @@ export default function QpcrExperiments() {
     {
       key: 'targets',
       label: 'Target(s)',
-      sortable: false,
       render: (_, row) => {
         const targets = row.targets ?? []
         const names = targets.map((t) => (t.targetName != null ? t.targetName.trim() : '')).filter(Boolean) // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- targetName may be omitted
@@ -127,7 +126,6 @@ export default function QpcrExperiments() {
     {
       key: 'assay',
       label: 'Assay',
-      sortable: false,
       render: (_, row) => {
         const targets = row.targets ?? []
         if (targets.length === 0) return <span className="text-app-text-muted">—</span>
@@ -144,7 +142,7 @@ export default function QpcrExperiments() {
     {
       key: 'wellCount',
       label: 'Wells',
-      sortable: true,
+      sortType: 'number',
       render: (_, row) =>
         row.wellCount != null ? (
           <span className="text-app-text-muted">{row.wellCount}</span>
@@ -155,7 +153,7 @@ export default function QpcrExperiments() {
     {
       key: 'runCount',
       label: 'Runs',
-      sortable: true,
+      sortType: 'number',
       render: (_, row) =>
         row.runCount != null ? (
           <span className="text-app-text-muted">{row.runCount}</span>
@@ -166,7 +164,7 @@ export default function QpcrExperiments() {
     {
       key: 'lastRunAt',
       label: 'Last run',
-      sortable: true,
+      sortType: 'date',
       render: (_, row) => (
         <span className="text-app-text-muted">{formatShortDate(row.lastRunAt ?? undefined)}</span>
       ),
@@ -174,7 +172,7 @@ export default function QpcrExperiments() {
     {
       key: 'created',
       label: 'Created',
-      sortable: true,
+      sortType: 'date',
       render: (val) => (
         <span className="text-app-text-muted">{formatShortDate(val as string | null)}</span>
       ),
@@ -182,7 +180,7 @@ export default function QpcrExperiments() {
     {
       key: 'lastUpdated',
       label: 'Updated',
-      sortable: true,
+      sortType: 'date',
       render: (val) => (
         <span className="text-app-text-muted">{formatShortDate(val as string | null)}</span>
       ),

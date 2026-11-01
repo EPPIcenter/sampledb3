@@ -113,13 +113,13 @@ export default function Specimens() {
     {
       key: 'collectionDate',
       label: 'Collected',
-      sortable: true,
+      sortType: 'date',
       render: (value) => formatTableDate(value as string),
     },
     {
       key: 'created',
       label: 'Created',
-      sortable: true,
+      sortType: 'date',
       render: (value) => formatTableDate(value as string),
     },
   ]

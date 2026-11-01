@@ -61,7 +61,7 @@ export default function ControlDefinitionDetail() {
     {
       key: 'name',
       label: 'Batch Name',
-      sortable: true,
+      sortType: 'text',
       render: (value, row) => (
         <Link to={`/blood-controls/batches/${row.id}`} className="dashboard-link hover:underline font-medium">
           {value}
@@ -71,7 +71,7 @@ export default function ControlDefinitionDetail() {
     {
       key: 'productionDate',
       label: 'Production Date',
-      sortable: true,
+      sortType: 'date',
       render: (value) => value ? (
         <span className="dashboard-stat-value">{formatDate(value)}</span>
       ) : <span className="text-app-text-muted italic">Not set</span>,
@@ -79,7 +79,7 @@ export default function ControlDefinitionDetail() {
     {
       key: 'inventoryTotal',
       label: 'Inventory',
-      sortable: true,
+      sortType: 'number',
       render: (_, row) => {
         const hasSpots = (row.spotCount ?? 0) > 0
         const hasMicronix = (row.micronixCount ?? 0) > 0

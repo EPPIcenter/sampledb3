@@ -23,8 +23,7 @@ After a **write**, ask:
 **Study create** (`useCreateStudy`):
 
 ```typescript
-queryClient.invalidateQueries({ queryKey: studyKeys.lists() })
-queryClient.invalidateQueries({ queryKey: studyKeys.infinite() })
+queryClient.invalidateQueries({ queryKey: studyKeys.all })
 invalidateDashboardQueries(queryClient)
 ```
 
