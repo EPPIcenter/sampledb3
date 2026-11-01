@@ -104,6 +104,51 @@ export interface ContainerWithInvalidGridPositionItem {
   position: string
 }
 
+/** Subject Specimens sharing a Subject, Specimen type and collection date (CONTEXT.md, Specimen identity). */
+export interface DuplicateSpecimenIdentityItem {
+  studyId: number
+  studyShortCode: string
+  subjectId: number
+  subjectName: string
+  specimenTypeId: number
+  specimenTypeName: string
+  /** Absent for undated Specimens. */
+  collectionDate?: string
+  specimenIds: number[]
+}
+
+export interface CaseVariantSubjectNameItem {
+  studyId: number
+  studyShortCode: string
+  subjects: Array<{ id: number; name: string }>
+}
+
+export interface CaseVariantCollectionNameItem {
+  type: CollectionType | 'sheet'
+  /** The box or bag holding the sheets; absent for other Collection types. */
+  parent?: { type: 'box' | 'bag'; id: number }
+  collections: Array<{ id: number; name: string }>
+}
+
+export interface ContainerInDisallowedContainerTypeItem {
+  id: number
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+  specimenId: number
+  specimenTypeId: number
+  specimenTypeName: string
+}
+
+export interface ExhaustedContainerWithRemainingQuantityItem {
+  id: number
+  comment: string
+  remainingQuantity: number
+}
+
+export interface SpecimenCollectionDateItem {
+  id: number
+  collectionDate: string
+}
+
 export interface IntegrityReport {
   emptyCollections: EmptyCollectionItem[]
   collectionsWithMissingLocation: CollectionWithMissingLocationItem[]
@@ -119,6 +164,13 @@ export interface IntegrityReport {
   containersWithNoGridPosition: ContainerWithNoGridPositionItem[]
   specimensWithNonIsoCollectionDate: SpecimenWithNonIsoCollectionDateItem[]
   containersWithInvalidGridPosition: ContainerWithInvalidGridPositionItem[]
+  duplicateSpecimenIdentities: DuplicateSpecimenIdentityItem[]
+  caseVariantSubjectNames: CaseVariantSubjectNameItem[]
+  caseVariantCollectionNames: CaseVariantCollectionNameItem[]
+  containersInDisallowedContainerType: ContainerInDisallowedContainerTypeItem[]
+  exhaustedContainersWithRemainingQuantity: ExhaustedContainerWithRemainingQuantityItem[]
+  specimensWithPlaceholderCollectionDate: SpecimenCollectionDateItem[]
+  specimensWithFutureCollectionDate: SpecimenCollectionDateItem[]
 }
 
 export interface CollectionWithMissingLocationItem {

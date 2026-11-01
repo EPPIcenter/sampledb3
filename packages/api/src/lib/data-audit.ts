@@ -18,9 +18,12 @@ import {
   storageContainerTag,
   paper,
   tag,
+  specimenType,
+  specimenTypeContainerType,
 } from '../db/schema'
-import { eq, inArray, isNotNull, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, inArray, isNotNull, sql } from 'drizzle-orm'
 import { isIsoCalendarDate } from './date-filters'
+import { foldNameCase, localToday, subjectNameKey } from './validation'
 import { isStoredGridPosition, type GridCollectionType } from '@sampledb/contract'
 
 export type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
@@ -360,6 +363,63 @@ export interface ContainerWithInvalidGridPositionItem {
   position: string
 }
 
+/**
+ * Subject Specimens that share a Subject, Specimen type and collection date (CONTEXT.md,
+ * Specimen identity). The lab chose to keep the legacy groups (issue #124, decision 7).
+ */
+export interface DuplicateSpecimenIdentityItem {
+  studyId: number
+  studyShortCode: string
+  subjectId: number
+  subjectName: string
+  specimenTypeId: number
+  specimenTypeName: string
+  /** Absent for undated Specimens. */
+  collectionDate?: string
+  specimenIds: number[]
+}
+
+/** Subjects in one Study whose names differ only by case (CONTEXT.md, Subject). */
+export interface CaseVariantSubjectNameItem {
+  studyId: number
+  studyShortCode: string
+  subjects: Array<{ id: number; name: string }>
+}
+
+/**
+ * Collections of one type whose names differ only by case or surrounding spaces. Sheets are
+ * compared within their box or bag.
+ */
+export interface CaseVariantCollectionNameItem {
+  type: CollectionType | 'sheet'
+  /** The box or bag holding the sheets; absent for other Collection types. */
+  parent?: { type: 'box' | 'bag'; id: number }
+  collections: Array<{ id: number; name: string }>
+}
+
+export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+
+/** Containers whose Container type is not one their Specimen type allows. */
+export interface ContainerInDisallowedContainerTypeItem {
+  id: number
+  containerType: ContainerType
+  specimenId: number
+  specimenTypeId: number
+  specimenTypeName: string
+}
+
+/** Containers commented "exhausted" whose remaining quantity is above 0, so they show as In Use. */
+export interface ExhaustedContainerWithRemainingQuantityItem {
+  id: number
+  comment: string
+  remainingQuantity: number
+}
+
+export interface SpecimenCollectionDateItem {
+  id: number
+  collectionDate: string
+}
+
 export interface IntegrityReport {
   emptyCollections: EmptyCollectionItem[]
   collectionsWithMissingLocation: CollectionWithMissingLocationItem[]
@@ -375,6 +435,13 @@ export interface IntegrityReport {
   containersWithNoGridPosition: ContainerWithNoGridPositionItem[]
   specimensWithNonIsoCollectionDate: SpecimenWithNonIsoCollectionDateItem[]
   containersWithInvalidGridPosition: ContainerWithInvalidGridPositionItem[]
+  duplicateSpecimenIdentities: DuplicateSpecimenIdentityItem[]
+  caseVariantSubjectNames: CaseVariantSubjectNameItem[]
+  caseVariantCollectionNames: CaseVariantCollectionNameItem[]
+  containersInDisallowedContainerType: ContainerInDisallowedContainerTypeItem[]
+  exhaustedContainersWithRemainingQuantity: ExhaustedContainerWithRemainingQuantityItem[]
+  specimensWithPlaceholderCollectionDate: SpecimenCollectionDateItem[]
+  specimensWithFutureCollectionDate: SpecimenCollectionDateItem[]
 }
 
 /** Collections (plates, boxes, bags) whose locationId does not exist in location. */
@@ -611,6 +678,176 @@ export async function listContainersWithInvalidGridPosition(db: Database): Promi
   return results
 }
 
+/** Group `items` by `key`, keeping only groups with more than one item, in first-seen order. */
+function groupsOfMany<T>(items: T[], key: (item: T) => string): T[][] {
+  const groups = new Map<string, T[]>()
+  for (const item of items) {
+    const k = key(item)
+    const group = groups.get(k)
+    if (group) group.push(item)
+    else groups.set(k, [item])
+  }
+  return [...groups.values()].filter((group) => group.length > 1)
+}
+
+/**
+ * Subject Specimens that share a Subject, Specimen type and collection date, including undated
+ * ones (CONTEXT.md, Specimen identity). Production has no unique index on this combination.
+ */
+export async function listDuplicateSpecimenIdentities(db: Database): Promise<DuplicateSpecimenIdentityItem[]> {
+  const groups = await db
+    .select({
+      subjectId: specimen.studySubjectId,
+      specimenTypeId: specimen.specimenTypeId,
+      collectionDate: specimen.collectionDate,
+      ids: sql<string>`group_concat(${specimen.id})`,
+    })
+    .from(specimen)
+    .where(isNotNull(specimen.studySubjectId))
+    .groupBy(specimen.studySubjectId, specimen.specimenTypeId, specimen.collectionDate)
+    .having(sql`COUNT(*) > 1`)
+    .orderBy(asc(specimen.studySubjectId), asc(specimen.specimenTypeId), asc(specimen.collectionDate))
+  if (groups.length === 0) return []
+  const subjectIds = [...new Set(groups.map((g) => g.subjectId!))]
+  const subjects = new Map(
+    (
+      await db
+        .select({ id: studySubject.id, name: studySubject.name, studyId: studySubject.studyId, shortCode: study.shortCode })
+        .from(studySubject)
+        .leftJoin(study, eq(study.id, studySubject.studyId))
+        .where(inArray(studySubject.id, subjectIds))
+    ).map((row) => [row.id, row]),
+  )
+  const typeNames = new Map((await db.select({ id: specimenType.id, name: specimenType.name }).from(specimenType)).map((row) => [row.id, row.name]))
+  return groups.map((group) => {
+    const subject = subjects.get(group.subjectId!)
+    return {
+      studyId: subject?.studyId ?? 0,
+      studyShortCode: subject?.shortCode ?? '',
+      subjectId: group.subjectId!,
+      subjectName: subject?.name ?? '',
+      specimenTypeId: group.specimenTypeId,
+      specimenTypeName: typeNames.get(group.specimenTypeId) ?? '',
+      ...(group.collectionDate == null ? {} : { collectionDate: String(group.collectionDate) }),
+      specimenIds: group.ids.split(',').map(Number).sort((a, b) => a - b),
+    }
+  })
+}
+
+/** Subjects in one Study whose names differ only by case, which the Subject name rule forbids. */
+export async function listCaseVariantSubjectNames(db: Database): Promise<CaseVariantSubjectNameItem[]> {
+  const subjects = await db
+    .select({ id: studySubject.id, name: studySubject.name, studyId: studySubject.studyId, shortCode: study.shortCode })
+    .from(studySubject)
+    .leftJoin(study, eq(study.id, studySubject.studyId))
+    .orderBy(asc(studySubject.studyId), asc(studySubject.id))
+  return groupsOfMany(subjects, (s) => subjectNameKey(s.studyId, s.name)).map((group) => ({
+    studyId: group[0]!.studyId,
+    studyShortCode: group[0]!.shortCode ?? '',
+    subjects: group.map((s) => ({ id: s.id, name: s.name })),
+  }))
+}
+
+/**
+ * Collections of one type (sheets: within one box or bag) whose names differ only by case or
+ * surrounding spaces. Names spelled exactly alike are not listed: plate, box and bag names are
+ * unique, and a bag may hold two sheets of the same name.
+ */
+export async function listCaseVariantCollectionNames(db: Database): Promise<CaseVariantCollectionNameItem[]> {
+  const topLevel: Array<{ type: CollectionType; rows: Array<{ id: number; name: string }> }> = [
+    { type: 'micronix_plate', rows: await db.select({ id: micronixPlate.id, name: micronixPlate.name }).from(micronixPlate).orderBy(micronixPlate.id) },
+    { type: 'cryovial_box', rows: await db.select({ id: cryovialBox.id, name: cryovialBox.name }).from(cryovialBox).orderBy(cryovialBox.id) },
+    { type: 'box', rows: await db.select({ id: box.id, name: box.name }).from(box).orderBy(box.id) },
+    { type: 'bag', rows: await db.select({ id: bag.id, name: bag.name }).from(bag).orderBy(bag.id) },
+  ]
+  const results: CaseVariantCollectionNameItem[] = []
+  const hasVariants = (group: Array<{ name: string }>) => new Set(group.map((c) => c.name)).size > 1
+  for (const { type, rows } of topLevel) {
+    for (const group of groupsOfMany(rows, (c) => foldNameCase(c.name)).filter(hasVariants)) {
+      results.push({ type, collections: group.map((c) => ({ id: c.id, name: c.name })) })
+    }
+  }
+  const sheets = await db.select({ id: sheet.id, name: sheet.name, boxId: sheet.boxId, bagId: sheet.bagId }).from(sheet).orderBy(sheet.id)
+  for (const group of groupsOfMany(sheets, (s) => `${s.boxId ?? ''}:${s.bagId ?? ''}:${foldNameCase(s.name)}`).filter(hasVariants)) {
+    const first = group[0]!
+    const parent = first.boxId != null ? { type: 'box' as const, id: first.boxId } : first.bagId != null ? { type: 'bag' as const, id: first.bagId } : undefined
+    results.push({
+      type: 'sheet',
+      ...(parent ? { parent } : {}),
+      collections: group.map((s) => ({ id: s.id, name: s.name })),
+    })
+  }
+  return results
+}
+
+/** Containers whose Container type their Specimen type does not allow (specimen_type_container_type). */
+export async function listContainersInDisallowedContainerType(db: Database): Promise<ContainerInDisallowedContainerTypeItem[]> {
+  const sources = [
+    { containerType: 'micronix_tube', table: micronixTube },
+    { containerType: 'cryovial_tube', table: cryovialTube },
+    { containerType: 'paper', table: paper },
+    { containerType: 'static_well', table: staticWell },
+  ] as const
+  const results: ContainerInDisallowedContainerTypeItem[] = []
+  for (const { containerType, table } of sources) {
+    const rows = await db
+      .select({
+        id: storageContainer.id,
+        specimenId: specimen.id,
+        specimenTypeId: specimenType.id,
+        specimenTypeName: specimenType.name,
+      })
+      .from(table)
+      .innerJoin(storageContainer, eq(storageContainer.id, table.id))
+      .innerJoin(specimen, eq(specimen.id, storageContainer.specimenId))
+      .innerJoin(specimenType, eq(specimenType.id, specimen.specimenTypeId))
+      .where(
+        sql`NOT EXISTS (SELECT 1 FROM ${specimenTypeContainerType} WHERE ${specimenTypeContainerType.specimenTypeId} = ${specimen.specimenTypeId} AND ${specimenTypeContainerType.containerType} = ${containerType})`,
+      )
+    for (const row of rows) results.push({ ...row, containerType })
+  }
+  return results.sort((a, b) => a.id - b.id)
+}
+
+/** Containers commented "exhausted" (any case) whose remaining quantity is above 0. */
+export async function listExhaustedContainersWithRemainingQuantity(db: Database): Promise<ExhaustedContainerWithRemainingQuantityItem[]> {
+  const rows = await db
+    .select({ id: storageContainer.id, comment: storageContainer.comment, remainingQuantity: storageContainer.remainingQuantity })
+    .from(storageContainer)
+    .where(and(sql`${storageContainer.comment} LIKE '%exhausted%'`, gt(storageContainer.remainingQuantity, 0)))
+    .orderBy(storageContainer.id)
+  return rows.map((row) => ({ id: row.id, comment: row.comment ?? '', remainingQuantity: row.remainingQuantity ?? 0 }))
+}
+
+/**
+ * Collection dates the legacy application stored for "unknown". Migration 013 cleared them
+ * (issue #124, decision 1); the report flags any that come back.
+ */
+export const PLACEHOLDER_COLLECTION_DATES = ['1970-01-01', '1999-09-09', '1899-12-30', '1111-01-01'] as const
+
+/** Specimens dated with a known placeholder collection date. */
+export async function listSpecimensWithPlaceholderCollectionDate(db: Database): Promise<SpecimenCollectionDateItem[]> {
+  const rows = await db
+    .select({ id: specimen.id, collectionDate: specimen.collectionDate })
+    .from(specimen)
+    .where(inArray(specimen.collectionDate, [...PLACEHOLDER_COLLECTION_DATES]))
+    .orderBy(specimen.id)
+  return rows.map((row) => ({ id: row.id, collectionDate: String(row.collectionDate) }))
+}
+
+/**
+ * Specimens with a YYYY-MM-DD collection date after today on the server. New dates in the future
+ * are refused on write; the lab corrects the legacy ones by hand (issue #124, decision 2).
+ */
+export async function listSpecimensWithFutureCollectionDate(db: Database): Promise<SpecimenCollectionDateItem[]> {
+  const rows = await db
+    .select({ id: specimen.id, collectionDate: specimen.collectionDate })
+    .from(specimen)
+    .where(and(sql`date(${specimen.collectionDate}) IS ${specimen.collectionDate}`, gt(specimen.collectionDate, localToday())))
+    .orderBy(specimen.id)
+  return rows.map((row) => ({ id: row.id, collectionDate: String(row.collectionDate) }))
+}
+
 /** Build full integrity report (all checks). */
 export async function getIntegrityReport(db: Database): Promise<IntegrityReport> {
   const [
@@ -628,6 +865,13 @@ export async function getIntegrityReport(db: Database): Promise<IntegrityReport>
     containersWithNoGridPosition,
     specimensWithNonIsoCollectionDate,
     containersWithInvalidGridPosition,
+    duplicateSpecimenIdentities,
+    caseVariantSubjectNames,
+    caseVariantCollectionNames,
+    containersInDisallowedContainerType,
+    exhaustedContainersWithRemainingQuantity,
+    specimensWithPlaceholderCollectionDate,
+    specimensWithFutureCollectionDate,
   ] = await Promise.all([
     listEmptyCollections(db),
     listCollectionsWithMissingLocation(db),
@@ -643,6 +887,13 @@ export async function getIntegrityReport(db: Database): Promise<IntegrityReport>
     listContainersWithNoGridPosition(db),
     listSpecimensWithNonIsoCollectionDate(db),
     listContainersWithInvalidGridPosition(db),
+    listDuplicateSpecimenIdentities(db),
+    listCaseVariantSubjectNames(db),
+    listCaseVariantCollectionNames(db),
+    listContainersInDisallowedContainerType(db),
+    listExhaustedContainersWithRemainingQuantity(db),
+    listSpecimensWithPlaceholderCollectionDate(db),
+    listSpecimensWithFutureCollectionDate(db),
   ])
   return {
     emptyCollections,
@@ -659,5 +910,12 @@ export async function getIntegrityReport(db: Database): Promise<IntegrityReport>
     containersWithNoGridPosition,
     specimensWithNonIsoCollectionDate,
     containersWithInvalidGridPosition,
+    duplicateSpecimenIdentities,
+    caseVariantSubjectNames,
+    caseVariantCollectionNames,
+    containersInDisallowedContainerType,
+    exhaustedContainersWithRemainingQuantity,
+    specimensWithPlaceholderCollectionDate,
+    specimensWithFutureCollectionDate,
   }
 }

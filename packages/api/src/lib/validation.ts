@@ -50,12 +50,14 @@ export function subjectNameTakenMessage(name: string, existingName: string): str
     : `Subject name '${name}' differs only by case from Subject '${existingName}' in this study. Subject names in a study ignore case.`
 }
 
-/**
- * The key under which two Subject names in one study count as the same name. Folds ASCII letters
- * only, as SQLite's NOCASE collation does.
- */
+/** `name` trimmed and with ASCII letters lower-cased, as SQLite's NOCASE collation compares. */
+export function foldNameCase(name: string): string {
+  return name.trim().replace(/[A-Z]/g, (letter) => letter.toLowerCase())
+}
+
+/** The key under which two Subject names in one study count as the same name. */
 export function subjectNameKey(studyId: number, name: string): string {
-  return `${studyId}:${name.trim().replace(/[A-Z]/g, (letter) => letter.toLowerCase())}`
+  return `${studyId}:${foldNameCase(name)}`
 }
 
 function isoDate(year: number, month: number, day: number): string | null {
@@ -65,7 +67,7 @@ function isoDate(year: number, month: number, day: number): string | null {
 }
 
 /** Today's calendar date on the server, as YYYY-MM-DD. */
-function localToday(): string {
+export function localToday(): string {
   const now = new Date()
   return isoDate(now.getFullYear(), now.getMonth() + 1, now.getDate())!
 }
