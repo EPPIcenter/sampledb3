@@ -125,6 +125,38 @@ describe('Export API', () => {
       expect(rowsAfter.length).toBe(rowsBefore.length)
     })
 
+    it.each(['not json', '{"a":1}', '"barcode"'])('returns 400 for columns=%s', async (columns) => {
+      await seedTypedContainers('GCOL', { cryovial: false })
+
+      const res = await ctx.request(`/api/export/containers?study=GCOL&format=csv&columns=${encodeURIComponent(columns)}`)
+
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain('Invalid columns')
+    })
+
+    it('exports the columns a JSON array names', async () => {
+      await seedTypedContainers('GCOK', { cryovial: false })
+
+      const res = await ctx.request(
+        `/api/export/containers?study=GCOK&format=csv&csv_bom=false&csv_line_ending=LF&columns=${encodeURIComponent('["barcode"]')}`,
+      )
+
+      expect(res.status).toBe(200)
+    })
+
+    it.each([
+      ['subject_ids', 'abc'],
+      ['specimen_type_ids', '1x'],
+      ['tag_ids', 'red'],
+    ])('returns 400 for a non-numeric %s=%s', async (param, value) => {
+      await seedTypedContainers('GIDS', { cryovial: false })
+
+      const res = await ctx.request(`/api/export/containers?study=GIDS&count_only=true&${param}=${value}`)
+
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain(param)
+    })
+
     it.each([
       ['date_from', 'garbage'],
       ['date_to', '5/7/2024'],

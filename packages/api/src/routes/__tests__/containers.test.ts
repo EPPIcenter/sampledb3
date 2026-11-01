@@ -149,6 +149,67 @@ describe('Containers API', () => {
     })
   })
 
+  describe('GET /api/containers bad input (#120)', () => {
+    it.each([
+      ['page', '99999999999999999999'],
+      ['specimen_id', 'abc'],
+      ['location_id', 'abc'],
+      ['tag_ids', '1x'],
+    ])('returns 400 for %s=%s', async (param, value) => {
+      const res = await ctx.request(`/api/containers?${param}=${value}`)
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain(param)
+    })
+
+    it('returns 400 when one of several tag_ids is not a number', async () => {
+      const tagId = (await createTestTag(ctx.db, { name: 'red' })).id
+      const res = await ctx.request(`/api/containers?tag_ids=${tagId}&tag_ids=red`)
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain('tag_ids')
+    })
+  })
+
+  describe('GET /api/containers location_id filter', () => {
+    it('lists only Containers stored at the Location or a Location under it', async () => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer', description: 'Test' })
+      const freezer = await createTestLocation(ctx.db, {
+        name: 'Freezer A',
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+      const shelf = await createTestLocation(ctx.db, { name: 'Shelf 1', parentId: freezer.id, canContainCollections: true })
+      const elsewhere = await createTestLocation(ctx.db, {
+        name: 'Freezer B',
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+      const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'Blood' })
+      const specimenId = (await createTestSpecimen(ctx.db, specimenType.id)).id
+      const tubeIn = async (locationId: number, name: string) => {
+        const cryoBox = await createTestCryovialBox(ctx.db, { name, locationId })
+        const container = await createTestStorageContainer(ctx.db, { specimenId, unitId: unit.id })
+        await createTestCryovialTube(ctx.db, { containerId: container.id, collectionId: cryoBox.id, barcode: `CV-${name}`, position: 'A1' })
+        return container.id
+      }
+      const inFreezer = await tubeIn(freezer.id, 'F')
+      const onShelf = await tubeIn(shelf.id, 'S')
+      await tubeIn(elsewhere.id, 'E')
+      await createTestStorageContainer(ctx.db, { specimenId, unitId: unit.id })
+
+      const res = await ctx.request(`/api/containers?location_id=${freezer.id}&limit=50`)
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { containers: Array<{ id: number }>; pagination: { total: number } }
+      expect(data.containers.map((c) => c.id).sort((a, b) => a - b)).toEqual([inFreezer, onShelf])
+      expect(data.pagination.total).toBe(2)
+
+      const shelfOnly = (await (await ctx.request(`/api/containers?location_id=${shelf.id}`)).json()) as {
+        containers: Array<{ id: number }>
+      }
+      expect(shelfOnly.containers.map((c) => c.id)).toEqual([onShelf])
+    })
+  })
+
   describe('GET /api/containers/:id', () => {
     it('returns 404 for non-existent ID', async () => {
       const res = await ctx.request('/api/containers/99999')
@@ -494,6 +555,18 @@ describe('Containers API', () => {
       expect(await tagIdsOf(id)).toEqual([otherTagId])
       const body = (await res.json()) as { container: { tags?: Array<{ id: number }> } }
       expect(body.container.tags?.map((t) => t.id)).toEqual([otherTagId])
+    })
+
+    it('returns 400 for an unknown unit on a Container whose type is unknown and leaves it unchanged', async () => {
+      const id = await seedContainer()
+
+      const res = await ctx.request(`/api/containers/${id}`, { method: 'PATCH', json: { unitId: 999999, comment: 'changed' } })
+
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toBe('Unknown unit id: 999999')
+      await expectUnchanged(id)
+      const row = await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, id)).get()
+      expect(row?.unitId).toBe(unitId)
     })
 
     it('returns 400 for an unknown Tag and leaves the Container unchanged', async () => {

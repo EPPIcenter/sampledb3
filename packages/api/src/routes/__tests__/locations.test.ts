@@ -52,6 +52,30 @@ describe('Locations API', () => {
     })
   })
 
+  describe('GET /api/locations oversized page (#120)', () => {
+    it('returns 400 for an oversized page on the list', async () => {
+      const res = await ctx.request('/api/locations?page=99999999999999999999')
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain('page')
+    })
+
+    it.each(['plates_page', 'cryovial_boxes_page', 'boxes_page', 'bags_page'])(
+      'returns 400 for an oversized %s on a Location',
+      async (param) => {
+        const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+        const loc = await createTestLocation(ctx.db, {
+          name: 'Root',
+          storageTypeId: String(storageType.id),
+          canContainCollections: true,
+          path: 'Root',
+        })
+        const res = await ctx.request(`/api/locations/${loc.id}?${param}=99999999999999999999`)
+        expect(res.status).toBe(400)
+        expect(((await res.json()) as { error: string }).error).toContain(param)
+      },
+    )
+  })
+
   describe('GET /api/locations/:id', () => {
     it('returns 200 and location when found', async () => {
       const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })

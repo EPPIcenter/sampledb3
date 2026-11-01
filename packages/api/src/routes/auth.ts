@@ -8,7 +8,7 @@ import type { Database } from '../db/client'
 import { getPasswordRequirements, getSessionSettings } from '../lib/settings'
 import { createAuthMiddleware, createAdminMiddleware } from '../middleware/auth'
 import { rateLimit } from '../middleware/rate-limit'
-import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
+import { ConflictError, handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import {
   toPublicUser,
   verifyLoginCredentials,
@@ -17,6 +17,7 @@ import {
   deleteSessionByToken,
   deleteUserSessions,
   registerApprovedUser,
+  assertUserIdentityFree,
   BCRYPT_COST,
 } from '../lib/auth/auth-service'
 
@@ -24,7 +25,10 @@ function publicUserResponse(user: ReturnType<typeof toPublicUser>) {
   return { user: { ...user, username: user.username || undefined } }
 }
 import { utcNow } from '../lib/datetime'
-import { requireParam } from '../lib/common-validators'
+import { requireParam, setsNoField } from '../lib/common-validators'
+
+/** 400 for a PATCH or PUT whose body sets no field. */
+const NOTHING_TO_UPDATE = 'Nothing to update: send at least one field to change.'
 
 export function createAuthRoutes(database: Database, settingsDb?: Database) {
   const auth = new Hono()
@@ -135,27 +139,7 @@ auth.post('/self-register', rateLimit(5, 60 * 1000), async (c) => {
     const schema = await createSelfRegisterSchema()
     const data = schema.parse(body)
 
-    const existingEmail = await database
-      .select()
-      .from(users)
-      .where(and(eq(users.email, data.email), isNull(users.deletedAt)))
-      .get()
-
-    if (existingEmail) {
-      return c.json({ error: 'Email already in use' }, 400)
-    }
-
-    if (data.username) {
-      const existingUsername = await database
-        .select()
-        .from(users)
-        .where(and(eq(users.username, data.username), isNull(users.deletedAt)))
-        .get()
-
-      if (existingUsername) {
-        return c.json({ error: 'Username already in use' }, 400)
-      }
-    }
+    await assertUserIdentityFree(database, { email: data.email, username: data.username })
 
     const passwordHash = await bcrypt.hash(data.password, BCRYPT_COST)
     const createdAt = utcNow()
@@ -271,42 +255,11 @@ auth.patch('/me', authMiddleware, async (c) => {
       return c.json({ error: 'User not found' }, 404)
     }
 
-    // If email is being updated, check for duplicates (excluding current user)
-    if (data.email && data.email !== existing.email) {
-      const duplicate = await database
-        .select()
-        .from(users)
-        .where(and(
-          eq(users.email, data.email),
-          isNull(users.deletedAt),
-          ne(users.id, currentUser.id)
-        ))
-        .get()
-
-      if (duplicate) {
-        return c.json({ error: 'Email already in use' }, 400)
-      }
+    if (setsNoField(data)) {
+      throw new ValidationError(NOTHING_TO_UPDATE)
     }
 
-    // If username is being updated, check for duplicates (excluding current user)
-    if (data.username !== undefined) {
-      // Allow setting username to null (clearing it)
-      if (data.username !== null && data.username !== existing.username) {
-        const duplicate = await database
-          .select()
-          .from(users)
-          .where(and(
-            eq(users.username, data.username),
-            isNull(users.deletedAt),
-            ne(users.id, currentUser.id)
-          ))
-          .get()
-
-        if (duplicate) {
-          return c.json({ error: 'Username already in use' }, 400)
-        }
-      }
-    }
+    await assertUserIdentityFree(database, { email: data.email, username: data.username }, currentUser.id)
 
     const [updated] = await database
       .update(users)
@@ -331,7 +284,7 @@ auth.patch('/me', authMiddleware, async (c) => {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -536,42 +489,11 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
       return c.json({ error: 'User not found' }, 404)
     }
 
-    // If email is being updated, check for duplicates (excluding soft-deleted users)
-    if (data.email && data.email !== existing.email) {
-      const duplicate = await database
-        .select()
-        .from(users)
-        .where(and(
-          eq(users.email, data.email),
-          isNull(users.deletedAt),
-          ne(users.id, id)
-        ))
-        .get()
-
-      if (duplicate) {
-        return c.json({ error: 'Email already in use' }, 400)
-      }
+    if (setsNoField(data)) {
+      throw new ValidationError(NOTHING_TO_UPDATE)
     }
 
-    // If username is being updated, check for duplicates (excluding soft-deleted users)
-    if (data.username !== undefined) {
-      // Allow setting username to null (clearing it)
-      if (data.username !== null && data.username !== existing.username) {
-        const duplicate = await database
-          .select()
-          .from(users)
-          .where(and(
-            eq(users.username, data.username),
-            isNull(users.deletedAt),
-            ne(users.id, id)
-          ))
-          .get()
-
-        if (duplicate) {
-          return c.json({ error: 'Username already in use' }, 400)
-        }
-      }
-    }
+    await assertUserIdentityFree(database, { email: data.email, username: data.username }, id)
 
     // Prevent removing the last admin
     if (data.role && data.role !== 'admin' && existing.role === 'admin') {
@@ -615,7 +537,7 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -799,21 +721,20 @@ auth.post('/users/:id/restore', adminMiddleware, async (c) => {
       return c.json({ error: 'User is not deleted' }, 400)
     }
 
-    // Check if email is still available (not taken by another active user)
-    const emailConflict = await database
-      .select()
-      .from(users)
-      .where(and(
-        eq(users.email, existing.email),
-        isNull(users.deletedAt),
-        ne(users.id, id)
-      ))
-      .get()
-
-    if (emailConflict) {
-      return c.json({ 
-        error: 'Cannot restore user: email is already in use by another user' 
-      }, 400)
+    // Emails and usernames are unique across all users; check both before restoring.
+    for (const [label, column, value] of [
+      ['email', users.email, existing.email],
+      ['username', users.username, existing.username],
+    ] as const) {
+      if (!value) continue
+      const holder = await database
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(column, value), ne(users.id, id)))
+        .get()
+      if (holder) {
+        throw new ConflictError(`Cannot restore user: ${label} is already in use by another user`)
+      }
     }
 
     // Restore: clear deletedAt
@@ -841,7 +762,7 @@ auth.post('/users/:id/restore', adminMiddleware, async (c) => {
       },
     })
   } catch (error) {
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 

@@ -45,6 +45,16 @@ describe('Error Logs API', () => {
     ctx.cleanup()
   })
 
+  describe('GET /api/error-logs oversized page (#120)', () => {
+    it('returns 400 naming page for a page above the highest page', async () => {
+      const res = await ctx.request('/api/error-logs?page=1000001&limit=10')
+      expect(res.status).toBe(400)
+      const data = (await res.json()) as { errorCode: string; details: Array<{ path: string[]; message: string }> }
+      expect(data.errorCode).toBe('VALIDATION_ERROR')
+      expect(data.details).toContainEqual(expect.objectContaining({ path: ['page'], message: 'The highest page is 1000000.' }))
+    })
+  })
+
   describe('GET /api/error-logs', () => {
     it('returns 200 with admin', async () => {
       const res = await ctx.request('/api/error-logs')

@@ -12,6 +12,7 @@ import { rateLimit } from '../middleware/rate-limit'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { likeContains } from '../lib/sql-like'
+import { MAX_PAGE } from '../lib/query-params'
 
 /** Header values copied into an error log row are cut to these lengths. */
 const MAX_LOGGED_URL_LENGTH = 2_000
@@ -38,7 +39,7 @@ const errorLogQuerySchema = z.object({
       return isNaN(num) ? undefined : num
     }
     return val
-  }, z.number().int().positive().optional()),
+  }, z.number().int().positive().max(MAX_PAGE, `The highest page is ${MAX_PAGE}.`).optional()),
   limit: z.preprocess((val) => {
     if (val === undefined || val === null || val === '') return undefined
     if (typeof val === 'string') {

@@ -95,6 +95,40 @@ describe('Specimens API', () => {
     })
   })
 
+  describe('GET /api/specimens oversized page (#120)', () => {
+    it.each([
+      ['/api/specimens?page=99999999999999999999&limit=10', 'page'],
+    ])('returns 400 for %s', async (url, param) => {
+      const res = await ctx.request(url)
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain(param)
+    })
+  })
+
+  describe('GET /api/specimens non-numeric id filters (#120)', () => {
+    it.each([
+      ['subject_id', 'abc'],
+      ['control_batch_id', '1.5'],
+      ['specimen_type_id', 'x1'],
+    ])('returns 400 for %s=%s', async (param, value) => {
+      const res = await ctx.request(`/api/specimens?${param}=${value}`)
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain(param)
+    })
+
+    it('filters by a numeric subject_id', async () => {
+      const study = await createTestStudy(ctx.db, { title: 'S', shortCode: 'S1' })
+      const subject = await createTestStudySubject(ctx.db, { studyId: study.id, name: 'Subj' })
+      const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })
+      const mine = await createTestSpecimen(ctx.db, type.id, { studySubjectId: subject.id })
+      await createTestSpecimen(ctx.db, type.id)
+      const res = await ctx.request(`/api/specimens?subject_id=${subject.id}`)
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { specimens: Array<{ id: number }> }
+      expect(data.specimens.map((s) => s.id)).toEqual([mine.id])
+    })
+  })
+
   describe('POST /api/specimens/bulk', () => {
     let testStudy: Awaited<ReturnType<typeof createTestStudy>>
     let testSubject: Awaited<ReturnType<typeof createTestStudySubject>>

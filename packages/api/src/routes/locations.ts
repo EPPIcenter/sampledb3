@@ -159,19 +159,19 @@ locations.get('/:id', authMiddleware, async (c) => {
   const defaultLimit = 25
   
   // Pagination parameters for each collection type
-  const platesPage = validatePage(c.req.query('plates_page') || '1')
+  const platesPage = validatePage(c.req.query('plates_page'), 'plates_page')
   const platesLimit = await validateLimit(database, c.req.query('plates_limit') || String(defaultLimit))
   const platesOffset = (platesPage - 1) * platesLimit
 
-  const cryovialBoxesPage = validatePage(c.req.query('cryovial_boxes_page') || '1')
+  const cryovialBoxesPage = validatePage(c.req.query('cryovial_boxes_page'), 'cryovial_boxes_page')
   const cryovialBoxesLimit = await validateLimit(database, c.req.query('cryovial_boxes_limit') || String(defaultLimit))
   const cryovialBoxesOffset = (cryovialBoxesPage - 1) * cryovialBoxesLimit
 
-  const boxesPage = validatePage(c.req.query('boxes_page') || '1')
+  const boxesPage = validatePage(c.req.query('boxes_page'), 'boxes_page')
   const boxesLimit = await validateLimit(database, c.req.query('boxes_limit') || String(defaultLimit))
   const boxesOffset = (boxesPage - 1) * boxesLimit
 
-  const bagsPage = validatePage(c.req.query('bags_page') || '1')
+  const bagsPage = validatePage(c.req.query('bags_page'), 'bags_page')
   const bagsLimit = await validateLimit(database, c.req.query('bags_limit') || String(defaultLimit))
   const bagsOffset = (bagsPage - 1) * bagsLimit
 

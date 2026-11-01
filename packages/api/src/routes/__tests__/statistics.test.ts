@@ -48,7 +48,7 @@ describe('Statistics API', () => {
       expect(data).toBeDefined()
     })
 
-    it('filters by a numeric specimen_type_id and ignores a non-numeric one or location_id', async () => {
+    it('filters by a numeric specimen_type_id', async () => {
       await createTestStorageContainer(ctx.db)
       const otherType = await createTestSpecimenType(ctx.db, { name: 'Other type' })
       const total = async (query: string) => {
@@ -59,7 +59,16 @@ describe('Statistics API', () => {
 
       expect(await total('')).toBe(1)
       expect(await total(`?specimen_type_id=${otherType.id}`)).toBe(0)
-      expect(await total('?specimen_type_id=abc&location_id=abc')).toBe(1)
+    })
+
+    it.each([
+      ['specimen_type_id', 'abc'],
+      ['location_id', 'abc'],
+      ['tag_ids', '1x'],
+    ])('returns 400 for a non-numeric %s=%s', async (param, value) => {
+      const res = await ctx.request(`/api/statistics?${param}=${value}`, { method: 'GET' })
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain(param)
     })
 
     it.each([
