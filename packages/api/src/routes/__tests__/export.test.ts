@@ -6,7 +6,7 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createExportRoutes } from '../export'
-import { errorLogs, specimen as specimenTable, study as studyTable, unit as unitTable } from '../../db/schema'
+import { errorLogs, micronixPlate as micronixPlateTable, specimen as specimenTable, study as studyTable, unit as unitTable } from '../../db/schema'
 import { SQL_IN_CHUNK_SIZE } from '../../lib/sql-helpers'
 import * as specimensCsv from '../../lib/export/specimens-csv'
 import {
@@ -606,6 +606,84 @@ describe('Export API', () => {
       expect(data.filename).toMatch(/barcode_export.*\.json$/)
       expect(Array.isArray(data.data)).toBe(true)
       expect(data.summary?.barcodes_not_found).toContain('UNKNOWN-BARCODE')
+    })
+  })
+
+  describe('JSON export keeps every column', () => {
+    /** One Subject with a placed micronix tube and an unplaced Container, which has no position. */
+    async function seedPlacedAndUnplaced(shortCode: string) {
+      const { micronixId } = await seedTypedContainers(shortCode, { cryovial: false })
+      const [spec] = await ctx.db.select().from(specimenTable).limit(1)
+      const [unit] = await ctx.db.select().from(unitTable).limit(1)
+      const unplaced = await createTestStorageContainer(ctx.db, { specimenId: spec.id, unitId: unit.id })
+      return { micronixId, unplacedId: unplaced.id }
+    }
+
+    /** Every row has the same keys, including columns that are empty on some or all rows. */
+    function expectSameKeys(rows: Array<Record<string, unknown>>) {
+      expect(rows.length).toBe(2)
+      const keys = Object.keys(rows[0]).sort()
+      expect(keys).toEqual(expect.arrayContaining(['position', 'comment', 'sheet_name']))
+      for (const row of rows) expect(Object.keys(row).sort()).toEqual(keys)
+    }
+
+    it('gives every row of a GET JSON export the same keys, with null for an empty value', async () => {
+      const { unplacedId } = await seedPlacedAndUnplaced('JKEYS')
+
+      const res = await ctx.request('/api/export/containers?study=JKEYS&format=json')
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { containers: Array<Record<string, unknown>> }
+
+      expectSameKeys(body.containers)
+      const unplaced = body.containers.find((row) => row.container_id === unplacedId)
+      expect(unplaced?.position).toBeNull()
+    })
+
+    it('gives every row of a POST JSON export the same keys', async () => {
+      await seedPlacedAndUnplaced('PKEYS')
+
+      const res = await ctx.request('/api/export/containers', {
+        method: 'POST',
+        json: { study: 'PKEYS', subject_names: ['Subj1'], format: 'json' },
+      })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { data: Array<Record<string, unknown>> }
+
+      expectSameKeys(body.data)
+    })
+
+    it('gives every row of a multi-study JSON export the same keys', async () => {
+      await seedPlacedAndUnplaced('MKEYS')
+
+      const res = await ctx.request('/api/export/containers/multi-study', {
+        method: 'POST',
+        json: { entries: [{ study_short_code: 'MKEYS', subject_name: 'Subj1' }], format: 'json' },
+      })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { data: Array<Record<string, unknown>> }
+
+      expectSameKeys(body.data)
+    })
+
+    it('gives every row of a barcode JSON export the same keys', async () => {
+      await seedPlacedAndUnplaced('BKEYS')
+      const otherStudy = await createTestStudy(ctx.db, { title: 'Other', shortCode: 'BKEYS2' })
+      const subject = await createTestStudySubject(ctx.db, { studyId: otherStudy.id, name: 'Subj2' })
+      const [firstSpecimen] = await ctx.db.select().from(specimenTable).limit(1)
+      const spec = await createTestSpecimen(ctx.db, firstSpecimen.specimenTypeId, { studySubjectId: subject.id })
+      const [unit] = await ctx.db.select().from(unitTable).limit(1)
+      const container = await createTestStorageContainer(ctx.db, { specimenId: spec.id, unitId: unit.id })
+      const [plate] = await ctx.db.select().from(micronixPlateTable).limit(1)
+      await createTestMicronixTube(ctx.db, { containerId: container.id, collectionId: plate.id, barcode: 'BKEYS-B' })
+
+      const res = await ctx.request('/api/export/containers/by-barcodes', {
+        method: 'POST',
+        json: { barcodes: ['BKEYS-MX', 'BKEYS-B'], format: 'json' },
+      })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { data: Array<Record<string, unknown>> }
+
+      expectSameKeys(body.data)
     })
   })
 
