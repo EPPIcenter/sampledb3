@@ -189,14 +189,22 @@ export function useStudy(id: number) {
   })
 }
 
-export function useStudySubjects(studyId: number, params?: { page?: number; limit?: number }) {
+/**
+ * One page of a study's subjects. `search` matches a name containing the text or the exact
+ * subject ID, on the server.
+ */
+export function useStudySubjects(
+  studyId: number,
+  params?: { page?: number; limit?: number; search?: string },
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: [...studyKeys.detail(studyId), 'subjects', params],
     queryFn: async () => {
       const res = await studiesApi.getSubjects(studyId, params)
       return res
     },
-    enabled: !!studyId,
+    enabled: !!studyId && (options?.enabled ?? true),
   })
 }
 

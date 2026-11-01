@@ -442,7 +442,7 @@ export function specimenFormMock(): MockApiOverrides {
     cellLinesApi: { list: vi.fn().mockResolvedValue({ cellLines: [] }) },
     plasmidsApi: { list: vi.fn().mockResolvedValue({ plasmids: [] }) },
     standardsApi: { list: vi.fn().mockResolvedValue({ standards: [] }) },
-    subjectsApi: { create: vi.fn().mockResolvedValue({ subject: { id: 1 } }) },
+    subjectsApi: { create: vi.fn().mockResolvedValue({ subject: { id: 1 } }), createWithSpecimens: vi.fn() },
     settingsApi: {
       getContainerTypeUnits: vi.fn().mockResolvedValue({ units: [] }),
       get: vi.fn().mockResolvedValue({ key: 'container_defaults', value: null }),

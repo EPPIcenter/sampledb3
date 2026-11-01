@@ -103,11 +103,7 @@ export const subjectsApi = {
     api.post<{
       subject: StudySubject
       subjectCreated: boolean
-      specimens: Array<{
-        specimen: Specimen
-        containerCreated: boolean
-        containerId?: number
-      }>
+      specimens: Array<Specimen & { containerCreated: boolean; containerId?: number }>
       summary: {
         subjectsCreated: number
         subjectsUpdated: number
