@@ -1,4 +1,4 @@
-import { QueryClient } from '@tanstack/react-query'
+import { QueryClient, partialMatchKey, type QueryKey } from '@tanstack/react-query'
 
 /**
  * Default query client configuration
@@ -25,7 +25,20 @@ export const queryClient = new QueryClient({
  * Mark every cached query stale after a write that touches many kinds of records
  * (bulk import, move, cascade delete). Queries on screen refetch now; the rest
  * refetch when next used, so no page shows pre-write data for the 5-minute staleTime.
+ *
+ * `deleted` lists the keys of records the write removed (for example a deleted
+ * Collection's detail key). Their queries are marked stale without refetching, so
+ * the page still showing them can navigate away instead of refetching into a 404.
  */
-export function invalidateAfterBulkWrite(client: QueryClient): Promise<void> {
-  return client.invalidateQueries()
+export async function invalidateAfterBulkWrite(
+  client: QueryClient,
+  options: { deleted?: readonly QueryKey[] } = {}
+): Promise<void> {
+  const deleted = options.deleted ?? []
+  if (deleted.length === 0) return client.invalidateQueries()
+  const isDeleted = (key: QueryKey) => deleted.some((d) => partialMatchKey(key, d))
+  await Promise.all([
+    client.invalidateQueries({ predicate: (query) => !isDeleted(query.queryKey) }),
+    client.invalidateQueries({ predicate: (query) => isDeleted(query.queryKey), refetchType: 'none' }),
+  ])
 }
