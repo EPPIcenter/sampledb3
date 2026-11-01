@@ -29,6 +29,7 @@ The **Integrity report** sub-page lists rows that failed one or more checks. Eac
 - **Storage container tag orphans.** Tag links that reference a deleted container or tag.
 - **Duplicate barcodes (micronix).** Micronix tubes that share the same barcode (schema expects unique barcodes). Duplicate barcodes on cryovial tubes are **not** treated as a data integrity issue.
 - **Location path inconsistencies.** Locations whose stored `path` does not match the path computed from the parent chain.
+- **Containers with an invalid Grid position.** Tubes or wells whose stored position is not a well or slot of their plate (A01–H12) or box (A01–J10), or is not stored as a row letter plus a two-digit column (`A1` instead of `A01`). Such a tube shows as unplaced, and another tube can be put in its cell. These count toward the overview issue total. Move each one to its real position, or clear the position. An upgrade to schema version 10 repairs the legacy cases automatically: it strips leading dashes (`--A01` becomes `A01`) and clears positions that are the tube's own barcode or `NA`.
 - **Containers with no grid position.** Tubes or wells in a collection with no well or slot. Legacy rows are allowed and do **not** count toward the overview issue total. Assign a position via edit or scan move when the well is known.
 
 ## Empty collections

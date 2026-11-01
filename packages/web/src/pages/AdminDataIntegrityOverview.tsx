@@ -39,7 +39,8 @@ export default function AdminDataIntegrityOverview() {
     report.derivationBrokenRefs.length +
     report.storageContainerTagOrphans.length +
     report.duplicateBarcodes.length +
-    report.locationPathInconsistencies.length
+    report.locationPathInconsistencies.length +
+    report.containersWithInvalidGridPosition.length
     // containersWithNoGridPosition is informational and is not an integrity issue count
 
   return (
@@ -71,7 +72,7 @@ export default function AdminDataIntegrityOverview() {
           </h2>
           <p className="text-2xl font-bold text-[rgb(var(--app-accent))] mb-2">{integrityIssueCount}</p>
           <p className="text-sm text-[rgb(var(--app-text-muted))]">
-            Orphans, broken references, duplicate micronix barcodes, path inconsistencies.
+            Orphans, broken references, duplicate micronix barcodes, path inconsistencies, invalid Grid positions.
           </p>
         </Link>
       </div>

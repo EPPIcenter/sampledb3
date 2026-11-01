@@ -311,6 +311,7 @@ describe('schema evolution', () => {
     const migrated = new Database(testDbPath)
     migrated.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
     migrated.exec('INSERT INTO schema_version (version) VALUES (6)')
+    createTablesForLaterMigrations(migrated)
     evolveOperationalSchema(migrated)
     expect(getRecordedSchemaVersion(migrated)).toBe(CURRENT_SCHEMA_VERSION)
     expect(qpcrWellResultDdl(migrated)).toContain('CONSTRAINT qpcr_well_result_run_well_target_unique UNIQUE')
@@ -329,6 +330,7 @@ describe('schema evolution', () => {
       UNIQUE (qpcr_run_id, well_position, target_name)
     )`
     sqlite.exec(existing)
+    createTablesForLaterMigrations(sqlite)
 
     evolveOperationalSchema(sqlite)
 
@@ -339,6 +341,90 @@ describe('schema evolution', () => {
     ).toThrow(/UNIQUE/)
     sqlite.close()
   })
+
+  /** A database at version 9 with grid tables, ready for migration 010. */
+  function databaseBeforeMigration010(): Database {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (9)')
+    createTablesForLaterMigrations(sqlite)
+    return sqlite
+  }
+
+  function positions(sqlite: Database, table: string): Array<[number, string | null]> {
+    const rows = sqlite.prepare(`SELECT id, position FROM ${table} ORDER BY id`).all() as Array<{ id: number; position: string | null }>
+    return rows.map((r) => [r.id, r.position])
+  }
+
+  it('migration 010 strips dashes, clears barcode-shaped and NA positions, and leaves valid ones', () => {
+    const sqlite = databaseBeforeMigration010()
+    sqlite.exec(`INSERT INTO cryovial_tube (id, collection_id, barcode, position) VALUES
+      (1, 790, 'C1', '--A01'), (2, 790, 'C2', '-F02'), (3, 790, 'C3', 'G01'), (4, 84, 'C4', 'NA01'),
+      (5, 84, 'C5', 'na05'), (6, 84, NULL, NULL), (7, 84, 'C7', 'b3'), (8, 84, 'C8', ' J10 ')`)
+    sqlite.exec(`INSERT INTO micronix_tube (id, collection_id, barcode, position) VALUES
+      (11, 254, '1145854300', 'A1145854300'), (12, 254, '1106665111', 'A1106665111'), (13, 254, 'MX3', NULL), (14, 1, 'MX4', 'H12')`)
+    sqlite.exec(`INSERT INTO static_well (id, collection_id, position) VALUES (21, 1, '-a1')`)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(positions(sqlite, 'cryovial_tube')).toEqual([
+      [1, 'A01'], [2, 'F02'], [3, 'G01'], [4, null], [5, null], [6, null], [7, 'B03'], [8, 'J10'],
+    ])
+    expect(positions(sqlite, 'micronix_tube')).toEqual([[11, null], [12, null], [13, null], [14, 'H12']])
+    expect(positions(sqlite, 'static_well')).toEqual([[21, 'A01']])
+    const temp = sqlite.prepare(`SELECT name FROM sqlite_temp_master WHERE name LIKE '__migration_010%'`).all()
+    expect(temp).toEqual([])
+    sqlite.close()
+  })
+
+  it('migration 010 aborts, changing nothing, when a stripped position collides with a stored one', () => {
+    const sqlite = databaseBeforeMigration010()
+    sqlite.exec(`INSERT INTO cryovial_tube (id, collection_id, barcode, position) VALUES (1, 790, 'C1', '--A01'), (2, 790, 'C2', 'A01'), (3, 790, 'C3', '-B01')`)
+
+    expect(() => evolveOperationalSchema(sqlite)).toThrow(/would put two Containers in one position of the same Collection/)
+    expect(getRecordedSchemaVersion(sqlite)).toBe(9)
+    expect(positions(sqlite, 'cryovial_tube')).toEqual([[1, '--A01'], [2, 'A01'], [3, '-B01']])
+    sqlite.close()
+  })
+
+  it('migration 010 aborts when two repairs land in one position', () => {
+    const sqlite = databaseBeforeMigration010()
+    sqlite.exec(`INSERT INTO micronix_tube (id, collection_id, barcode, position) VALUES (1, 5, 'M1', '--C04')`)
+    sqlite.exec(`INSERT INTO static_well (id, collection_id, position) VALUES (2, 5, 'c4')`)
+
+    expect(() => evolveOperationalSchema(sqlite)).toThrow(/would put two Containers in one position/)
+    expect(getRecordedSchemaVersion(sqlite)).toBe(9)
+    sqlite.close()
+  })
+
+  it('migration 010 allows a collision of the same position in different Collections', () => {
+    const sqlite = databaseBeforeMigration010()
+    sqlite.exec(`INSERT INTO cryovial_tube (id, collection_id, barcode, position) VALUES (1, 790, 'C1', '--A01'), (2, 794, 'C2', 'A01')`)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(positions(sqlite, 'cryovial_tube')).toEqual([[1, 'A01'], [2, 'A01']])
+    sqlite.close()
+  })
+
+  for (const [table, position] of [
+    ['cryovial_tube', 'K01'],
+    ['cryovial_tube', '--A11'],
+    ['micronix_tube', 'I01'],
+    ['micronix_tube', 'A001'],
+    ['micronix_tube', 'hello'],
+  ] as const) {
+    it(`migration 010 aborts on a position it cannot repair: ${table} "${position}"`, () => {
+      const sqlite = databaseBeforeMigration010()
+      sqlite.exec(`INSERT INTO ${table} (id, collection_id, barcode, position) VALUES (1, 1, 'X1', '--A02'), (2, 1, 'X2', '${position}')`)
+
+      expect(() => evolveOperationalSchema(sqlite)).toThrow(/cannot be repaired automatically/)
+      expect(getRecordedSchemaVersion(sqlite)).toBe(9)
+      expect(positions(sqlite, table)).toEqual([[1, '--A02'], [2, position]])
+      sqlite.close()
+    })
+  }
 
   it('fail-hard: invalid migration leaves schema_version unchanged', () => {
     const sqlite = new Database(testDbPath)

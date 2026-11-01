@@ -17,6 +17,7 @@ function emptyIntegrityReport() {
     duplicateBarcodes: [],
     locationPathInconsistencies: [],
     containersWithNoGridPosition: [],
+    containersWithInvalidGridPosition: [],
   }
 }
 
@@ -54,6 +55,20 @@ describe('AdminDataIntegrityOverview', () => {
     await render(<AdminDataIntegrityOverview />)
     await waitFor(() => {
       expect(screen.getByRole('link', { name: /integrity report/i })).toHaveTextContent('1')
+    })
+  })
+
+  it('counts Containers with an invalid Grid position as integrity issues', async () => {
+    vi.mocked(adminApi.getIntegrityReport).mockResolvedValue({
+      ...emptyIntegrityReport(),
+      containersWithInvalidGridPosition: [
+        { id: 1, containerType: 'cryovial_tube', collectionId: 790, position: '--A01' },
+        { id: 2, containerType: 'micronix_tube', collectionId: 254, position: 'A1145854300' },
+      ],
+    })
+    await render(<AdminDataIntegrityOverview />)
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /integrity report/i })).toHaveTextContent('2')
     })
   })
 
