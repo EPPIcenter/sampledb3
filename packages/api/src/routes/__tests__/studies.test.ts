@@ -74,6 +74,16 @@ describe('Studies API (list, get, create, update)', () => {
     })
   })
 
+  describe('GET /api/studies oversized page (#120)', () => {
+    it.each([
+      ['/api/studies?page=99999999999999999999', 'page'],
+    ])('returns 400 for %s', async (url, param) => {
+      const res = await ctx.request(url)
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain(param)
+    })
+  })
+
   describe('GET /api/studies/:id', () => {
     it('returns 200 and study when found', async () => {
       const studyRecord = await createTestStudy(ctx.db, {

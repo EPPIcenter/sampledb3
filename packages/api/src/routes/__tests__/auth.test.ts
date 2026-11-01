@@ -903,6 +903,124 @@ describe('Auth API', () => {
       expect(data.user.role).toBe('member')
     })
   })
+  describe('bad input returns 4xx (#120)', () => {
+    let deletedUser: typeof users.$inferSelect
+    let member: typeof users.$inferSelect
+    let memberCookie: string
+
+    beforeEach(async () => {
+      deletedUser = await createTestUser(testDb, {
+        email: 'gone@example.com',
+        name: 'Gone User',
+        username: 'goneuser',
+        password: 'password123',
+      })
+      await testDb.update(users).set({ deletedAt: utcNow() }).where(eq(users.id, deletedUser.id))
+      member = await createTestUser(testDb, {
+        email: 'member@example.com',
+        name: 'Member',
+        username: 'memberuser',
+        password: 'password123',
+      })
+      memberCookie = await loginAndGetCookie(app, 'member@example.com', 'password123')
+    })
+
+    async function expectDeletedHolderConflict(res: Response, field: 'Email' | 'Username') {
+      expect(res.status).toBe(409)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toBe(
+        `${field} already in use by a deleted user. Restore that user, or choose another ${field.toLowerCase()}.`
+      )
+    }
+
+    it('returns 400 for an empty PATCH /me body and leaves the user unchanged', async () => {
+      const res = await authenticatedRequest(app, '/api/auth/me', { method: 'PATCH', cookie: memberCookie, json: {} })
+      expect(res.status).toBe(400)
+      expect((await res.json() as ErrorResponse).error).toBe('Nothing to update: send at least one field to change.')
+      const row = await testDb.select().from(users).where(eq(users.id, member.id)).get()
+      expect(row?.name).toBe('Member')
+    })
+
+    it('returns 400 for an empty PUT /users/:id body', async () => {
+      const res = await authenticatedRequest(app, `/api/auth/users/${member.id}`, {
+        method: 'PUT',
+        cookie: adminCookieHeader,
+        json: {},
+      })
+      expect(res.status).toBe(400)
+      expect((await res.json() as ErrorResponse).error).toBe('Nothing to update: send at least one field to change.')
+    })
+
+    it.each([
+      ['Email', { email: 'gone@example.com' }],
+      ['Username', { username: 'goneuser' }],
+    ] as const)('returns 409 when PATCH /me takes the %s of a deleted user', async (field, json) => {
+      const res = await authenticatedRequest(app, '/api/auth/me', { method: 'PATCH', cookie: memberCookie, json })
+      await expectDeletedHolderConflict(res, field)
+    })
+
+    it.each([
+      ['Email', { email: 'gone@example.com' }],
+      ['Username', { username: 'goneuser' }],
+    ] as const)('returns 409 when an admin gives a user the %s of a deleted user', async (field, json) => {
+      const res = await authenticatedRequest(app, `/api/auth/users/${member.id}`, {
+        method: 'PUT',
+        cookie: adminCookieHeader,
+        json,
+      })
+      await expectDeletedHolderConflict(res, field)
+    })
+
+    it.each([
+      ['Email', { email: 'gone@example.com', username: 'fresh' }],
+      ['Username', { email: 'fresh@example.com', username: 'goneuser' }],
+    ] as const)('returns 409 when self-registering with the %s of a deleted user', async (field, identity) => {
+      const res = await app.request('/api/auth/self-register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...identity, name: 'New', password: 'password123' }),
+      })
+      await expectDeletedHolderConflict(res, field)
+    })
+
+    it('returns 409 when an admin registers a user with the email of a deleted user', async () => {
+      const res = await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
+        json: { email: 'gone@example.com', name: 'New', password: 'password123', role: 'member' },
+      })
+      await expectDeletedHolderConflict(res, 'Email')
+    })
+
+    it('still returns 400 when an active user holds the email', async () => {
+      const res = await authenticatedRequest(app, '/api/auth/me', {
+        method: 'PATCH',
+        cookie: memberCookie,
+        json: { email: 'admin@test.com' },
+      })
+      expect(res.status).toBe(400)
+      expect((await res.json() as ErrorResponse).error).toBe('Email already in use')
+    })
+
+    it('lets a user keep their own email and username', async () => {
+      const res = await authenticatedRequest(app, '/api/auth/me', {
+        method: 'PATCH',
+        cookie: memberCookie,
+        json: { email: 'member@example.com', username: 'memberuser', name: 'Renamed' },
+      })
+      expect(res.status).toBe(200)
+    })
+
+    it('restores a deleted user whose email and username are free', async () => {
+      const res = await authenticatedRequest(app, `/api/auth/users/${deletedUser.id}/restore`, {
+        method: 'POST',
+        cookie: adminCookieHeader,
+      })
+      expect(res.status).toBe(200)
+      const row = await testDb.select().from(users).where(eq(users.id, deletedUser.id)).get()
+      expect(row?.deletedAt).toBeNull()
+    })
+  })
 })
 
 

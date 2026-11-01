@@ -26,7 +26,7 @@ import type {
 } from './types'
 
 export * from './types'
-export { containerHasAllTags } from './conditions'
+export { containerAtLocation, containerHasAllTags } from './conditions'
 export { containerTypesFilter, specimenSourceType } from './filters'
 
 /** Select the Containers and Specimens a selection matches, with each Container's type. */

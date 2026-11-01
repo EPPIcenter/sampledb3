@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { Database } from '../db/client'
-import { storageContainer, micronixTube, cryovialTube, paper, staticWell, tag, storageContainerTag } from '../db/schema'
+import { storageContainer, micronixTube, cryovialTube, paper, staticWell, tag, storageContainerTag, unit } from '../db/schema'
 import { eq, and, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { containerQuantityBoundsError } from '@sampledb/contract'
@@ -21,7 +21,8 @@ import {
 } from '../lib/error-handler'
 import { withWriteTransaction } from '../db/write-transaction'
 import { validateUnitForContainerType } from '../lib/validation'
-import { containerHasAllTags } from '../lib/container-selection'
+import { containerAtLocation, containerHasAllTags } from '../lib/container-selection'
+import { idListQueryParam, idQueryParam } from '../lib/query-params'
 
 /**
  * Create containers routes with database injection
@@ -35,9 +36,9 @@ export function createContainersRoutes(database: Database): Hono {
 // List containers with filters
 containers.get('/', authMiddleware, async (c) => {
   try {
-    const specimenId = c.req.query('specimen_id')
-    const locationId = c.req.query('location_id')
-    const tagIds = c.req.queries('tag_ids')?.map(id => parseInt(id)).filter(id => !isNaN(id))
+    const specimenId = idQueryParam('specimen_id', c.req.query('specimen_id'))
+    const locationId = idQueryParam('location_id', c.req.query('location_id'))
+    const tagIds = idListQueryParam('tag_ids', c.req.queries('tag_ids'))
     const page = validatePage(c.req.query('page'))
     const limit = await validateLimit(database, c.req.query('limit'))
     const offset = (page - 1) * limit
@@ -47,15 +48,16 @@ containers.get('/', authMiddleware, async (c) => {
     
     const conditions = []
     
-    if (specimenId) {
-      const id = parseInt(specimenId)
-      if (!isNaN(id)) {
-        conditions.push(eq(storageContainer.specimenId, id))
-      }
+    if (specimenId !== undefined) {
+      conditions.push(eq(storageContainer.specimenId, specimenId))
     }
     
     const tags = containerHasAllTags(tagIds ?? [])
     if (tags) conditions.push(tags)
+
+    if (locationId !== undefined) {
+      conditions.push(containerAtLocation(locationId))
+    }
 
     if (conditions.length > 0) {
       const whereClause = and(...conditions) as any
@@ -83,6 +85,7 @@ containers.get('/', authMiddleware, async (c) => {
       },
     })
   } catch (error: unknown) {
+    if (error instanceof ValidationError) return handleRouteError(error, c)
     return handleRouteError(
       new RouteError(500, containersFetchFailedBody('Failed to fetch containers', error)),
       c,
@@ -259,6 +262,10 @@ containers.patch('/:id', memberMiddleware, async (c) => {
       if (remainingQuantity !== undefined) {
         const quantityError = containerQuantityBoundsError({ totalQuantity: container.totalQuantity, remainingQuantity })
         if (quantityError) throw new ValidationError(quantityError)
+      }
+      if (unitId !== undefined) {
+        const known = await tx.select({ id: unit.id }).from(unit).where(eq(unit.id, unitId)).get()
+        if (!known) throw new ValidationError(`Unknown unit id: ${unitId}`)
       }
       if (unitId !== undefined && containerType) {
         const validation = await validateUnitForContainerType(tx, containerType, unitId)

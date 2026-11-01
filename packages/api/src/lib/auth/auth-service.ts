@@ -5,7 +5,7 @@ import { nanoid } from 'nanoid'
 import type { Database } from '../../db/client'
 import { users, sessions, type users as usersTable } from '../../db/schema'
 import { getSessionSettings } from '../settings'
-import { UnauthorizedError, ValidationError } from '../error-handler'
+import { ConflictError, UnauthorizedError, ValidationError } from '../error-handler'
 import { utcNow } from '../datetime'
 
 export type PublicUser = {
@@ -151,6 +151,36 @@ export async function deleteUserSessions(
       : eq(sessions.userId, userId))
 }
 
+/**
+ * Check that an email and a username can be given to a user: `userId`, or a new user when
+ * omitted. Emails and usernames are unique across every user, soft-deleted ones included, so
+ * a deleted user still holds theirs. An active holder throws a `ValidationError` (400, as
+ * before); a soft-deleted holder throws a `ConflictError` (409) that says to restore that user.
+ */
+export async function assertUserIdentityFree(
+  database: Database,
+  identity: { email?: string | null; username?: string | null },
+  userId?: number
+): Promise<void> {
+  const fields = [
+    { label: 'Email', column: users.email, value: identity.email },
+    { label: 'Username', column: users.username, value: identity.username },
+  ]
+  for (const { label, column, value } of fields) {
+    if (!value) continue
+    const holder = await database
+      .select({ id: users.id, deletedAt: users.deletedAt })
+      .from(users)
+      .where(userId === undefined ? eq(column, value) : and(eq(column, value), ne(users.id, userId)))
+      .get()
+    if (!holder) continue
+    if (holder.deletedAt === null) throw new ValidationError(`${label} already in use`)
+    throw new ConflictError(
+      `${label} already in use by a deleted user. Restore that user, or choose another ${label.toLowerCase()}.`
+    )
+  }
+}
+
 export async function registerApprovedUser(
   database: Database,
   data: {
@@ -161,20 +191,7 @@ export async function registerApprovedUser(
     role: string
   }
 ): Promise<typeof usersTable.$inferSelect> {
-  const existingEmail = await database.select().from(users).where(eq(users.email, data.email)).get()
-  if (existingEmail) {
-    throw new ValidationError('Email already in use')
-  }
-  if (data.username) {
-    const existingUsername = await database
-      .select()
-      .from(users)
-      .where(eq(users.username, data.username))
-      .get()
-    if (existingUsername) {
-      throw new ValidationError('Username already in use')
-    }
-  }
+  await assertUserIdentityFree(database, { email: data.email, username: data.username })
   const passwordHash = await bcrypt.hash(data.password, BCRYPT_COST)
   const createdAt = utcNow()
   const [user] = await database

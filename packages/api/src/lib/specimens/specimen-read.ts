@@ -2,6 +2,7 @@ import type { Database } from '../../db/client'
 import { specimen, storageContainer, studySubject, study, specimenType, controlBatch } from '../../db/schema'
 import { eq, and, or, sql, inArray } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../constants'
+import { idQueryParam } from '../query-params'
 import { findContainersByBarcode } from '../identifier-resolution'
 import { collectionDateFilter, timestampFilter } from '../date-filters'
 import { dateRangeConditions } from '../sql-helpers'
@@ -122,25 +123,19 @@ export async function listSpecimens(database: Database, query: ListSpecimensQuer
     conditions.push(eq(study.shortCode, studyCode))
   }
 
-  if (subjectId) {
-    const id = parseInt(subjectId)
-    if (!isNaN(id)) {
-      conditions.push(eq(specimen.studySubjectId, id))
-    }
+  const subjectIdFilter = idQueryParam('subject_id', subjectId)
+  if (subjectIdFilter !== undefined) {
+    conditions.push(eq(specimen.studySubjectId, subjectIdFilter))
   }
 
-  if (controlBatchId) {
-    const id = parseInt(controlBatchId)
-    if (!isNaN(id)) {
-      conditions.push(eq(specimen.controlBatchId, id))
-    }
+  const controlBatchIdFilter = idQueryParam('control_batch_id', controlBatchId)
+  if (controlBatchIdFilter !== undefined) {
+    conditions.push(eq(specimen.controlBatchId, controlBatchIdFilter))
   }
 
-  if (specimenTypeId) {
-    const id = parseInt(specimenTypeId)
-    if (!isNaN(id)) {
-      conditions.push(eq(specimen.specimenTypeId, id))
-    }
+  const specimenTypeIdFilter = idQueryParam('specimen_type_id', specimenTypeId)
+  if (specimenTypeIdFilter !== undefined) {
+    conditions.push(eq(specimen.specimenTypeId, specimenTypeIdFilter))
   }
 
   const collectionFrom = collectionDateFilter('collection_date_from', collectionDateFrom)

@@ -264,6 +264,16 @@ describe('Derivations API', () => {
       expect((await loadDerivation(d.id))?.protocol).toBe('P2')
     })
 
+    it('returns 400 for an empty PATCH body and leaves the Derivation unchanged (#120)', async () => {
+      const d = await createDerivationRow()
+      const res = await ctx.request(`${BASE}/derivations/${d.id}`, { method: 'PATCH', json: {} })
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toBe(
+        'Nothing to update: send derivationDate, protocol, notes or properties.',
+      )
+      expect((await loadDerivation(d.id))?.protocol).toBe('P1')
+    })
+
     it('returns 403 to a member deleting a Derivation and keeps it', async () => {
       const d = await createDerivationRow()
       const res = await ctx.request(`${BASE}/derivations/${d.id}`, { method: 'DELETE', cookie: ctx.cookies.member })

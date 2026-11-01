@@ -81,9 +81,10 @@ export function containerFilterConditions(filters: ContainerSelectionFilters): S
 
 /**
  * Containers stored in a Location or any Location under it: tubes and static wells on
- * micronix plates, tubes in cryovial boxes, and papers on sheets in boxes or bags there.
+ * micronix plates, tubes in cryovial boxes, and papers on sheets in boxes or bags there. A
+ * condition on `storage_container`, so a caller can page and count in SQL.
  */
-function containerAtLocation(locationId: number): SQL {
+export function containerAtLocation(locationId: number): SQL {
   const here = sql`SELECT id FROM selected_location`
   return sql`${storageContainer.id} IN (
     WITH RECURSIVE selected_location(id) AS (

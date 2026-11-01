@@ -73,6 +73,16 @@ describe('Subjects API', () => {
     })
   })
 
+  describe('GET /api/subjects oversized page (#120)', () => {
+    it.each([
+      ['/api/subjects?page=99999999999999999999', 'page'],
+    ])('returns 400 for %s', async (url, param) => {
+      const res = await ctx.request(url)
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain(param)
+    })
+  })
+
   describe('POST /api/subjects', () => {
     it('returns 201 and created subject when study exists', async () => {
       const studyRecord = await createTestStudy(ctx.db, {

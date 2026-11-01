@@ -1,4 +1,5 @@
 import type { Database } from '../db/client'
+import { pageQueryParam } from './query-params'
 
 // Cache for pagination settings
 let paginationCache: { defaultPageSize: number; maxPageSize: number } | null = null
@@ -43,16 +44,9 @@ export async function validateLimit(db: Database, limit: string | number | undef
 }
 
 /**
- * Validates and normalizes a page number
- * @param page - The page number to validate (can be string or number)
- * @returns A valid page number (minimum 1)
+ * Validates and normalizes a page number: page 1 when omitted or not a number, at least 1, and
+ * a `ValidationError` (400) above `MAX_PAGE`. `name` is the query parameter, for the message.
  */
-export function validatePage(page: string | number | undefined): number {
-  const parsed = typeof page === 'string' ? parseInt(page, 10) : page
-  if (isNaN(parsed as number) || parsed === undefined) {
-    return 1
-  }
-  const num = Number(parsed)
-  return Math.max(1, num)
+export function validatePage(page: string | number | undefined, name = 'page'): number {
+  return pageQueryParam(page, name)
 }
-
