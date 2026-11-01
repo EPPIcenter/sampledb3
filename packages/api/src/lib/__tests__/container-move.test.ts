@@ -26,6 +26,8 @@ import { storageContainer } from '../../db/schema'
 import { micronixTube, cryovialTube, staticWell, paper } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { utcNow } from '../datetime'
+import { createTestUser } from '../../__tests__/helpers/auth-helpers'
+import { eq } from 'drizzle-orm'
 
 describe('container-move', () => {
   let testDb: Database
@@ -749,6 +751,44 @@ describe('container-move', () => {
       expect(result.success).toBe(true)
       const [moved] = await testDb.select().from(paper).all()
       expect(moved.sheetId).toBe(dest.id)
+    })
+  })
+
+  describe('audit fields', () => {
+    it('sets last_updated and updated_by on each moved Container and leaves skipped ones alone', async () => {
+      const user = await createTestUser(testDb, { email: 'mover@test.com', name: 'Mover', password: 'password123' })
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(testDb, { name: 'AuditPlate', locationId: location.id })
+      const moved = await createTestStorageContainer(testDb)
+      const blocked = await createTestStorageContainer(testDb, { specimenId: moved.specimenId, unitId: moved.unitId })
+      await testDb.insert(micronixTube).values([
+        { id: moved.id, collectionId: plate.id, barcode: 'MT-AUDIT-1', position: 'A01' },
+        { id: blocked.id, collectionId: plate.id, barcode: 'MT-AUDIT-2', position: 'B01' },
+      ])
+      const old = '2020-01-01T00:00:00.000Z'
+      await testDb.update(storageContainer).set({ lastUpdated: old })
+
+      const result = await executeMoves(
+        testDb,
+        {
+          atomicMode: 'best_effort',
+          mappings: [{ fromCollectionName: 'AuditPlate', toCollectionName: 'AuditPlate' }],
+          moves: [
+            { identifier: { type: 'barcode', barcode: 'MT-AUDIT-1' }, targetPosition: 'C01' },
+            { identifier: { type: 'barcode', barcode: 'MT-AUDIT-2' }, targetPosition: 'Z99' },
+          ],
+        },
+        { userId: user.id },
+      )
+
+      expect(result.moved).toBe(1)
+      const afterMoved = testDb.select().from(storageContainer).where(eq(storageContainer.id, moved.id)).get()
+      const afterBlocked = testDb.select().from(storageContainer).where(eq(storageContainer.id, blocked.id)).get()
+      expect(afterMoved?.updatedBy).toBe(user.id)
+      expect(afterMoved?.lastUpdated).not.toBe(old)
+      expect(afterBlocked?.updatedBy).toBeNull()
+      expect(afterBlocked?.lastUpdated).toBe(old)
     })
   })
 })

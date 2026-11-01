@@ -9,8 +9,10 @@ import {
   box,
   bag,
   sheet,
+  storageContainer,
 } from '../db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
+import { utcNow } from './datetime'
 import { resolveCollection, resolveSheetsByName, type CollectionType } from './collections/collection-resolve'
 import { checkGridPositionOccupancy } from './container-occupancy'
 import { normalizePosition } from './normalize-position'
@@ -62,10 +64,20 @@ export interface ValidationError {
   error: string
 }
 
+/**
+ * Outcome of a move. `success` is true only when every row moved. A best-effort move can
+ * move some rows (`moved > 0`) and still report `errors` for the rest; those moves are
+ * committed.
+ */
 export interface MoveResult {
   success: boolean
   moved: number
   errors?: ValidationError[]
+}
+
+/** Who is moving: recorded as each moved Container's `updated_by`. */
+export interface MoveActor {
+  userId: number | null
 }
 
 /** Collections whose containers sit at grid positions. */
@@ -327,7 +339,11 @@ export function inferCollectionTypeFromContainers(containers: ContainerInfo[]): 
   return { valid: true, collectionType: Array.from(collectionTypes)[0] }
 }
 
-export async function executeMoves(database: Database, request: BatchMoveRequest): Promise<MoveResult> {
+export async function executeMoves(
+  database: Database,
+  request: BatchMoveRequest,
+  actor: MoveActor = { userId: null },
+): Promise<MoveResult> {
   try {
     const { mappings, moves, atomicMode = 'all_or_nothing' } = request
     const errors: ValidationError[] = []
@@ -552,6 +568,15 @@ export async function executeMoves(database: Database, request: BatchMoveRequest
             tx.update(staticWell).set({ collectionId: targetCollectionId, position: move.targetPosition }).where(eq(staticWell.id, info.containerId)).run()
             break
         }
+      }
+
+      // A move changes the Container's placement, so record when and by whom.
+      const now = utcNow()
+      for (const { info } of finalMoves) {
+        tx.update(storageContainer)
+          .set({ lastUpdated: now, updatedBy: actor.userId })
+          .where(eq(storageContainer.id, info.containerId))
+          .run()
       }
     })
 
