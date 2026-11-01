@@ -416,6 +416,46 @@ export default function AdminDataIntegrityReport() {
       </IntegritySection>
 
       <IntegritySection
+        title="Containers with an invalid Grid position"
+        count={report.containersWithInvalidGridPosition.length}
+        description="Tubes or wells whose stored position is not a well or slot of their plate (A01–H12) or box (A01–J10), or is not in stored form (A1 instead of A01). They appear as unplaced, and their cell can be filled by another Container. Move each one to its real position, or clear the position."
+      >
+        <div className="overflow-x-auto">
+          <table className="admin-table min-w-full">
+            <thead>
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Container ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Collection ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Stored position</th>
+              </tr>
+            </thead>
+            <tbody className="bg-app-card divide-y divide-app-border">
+              {report.containersWithInvalidGridPosition.map((row) => (
+                <tr key={`${row.containerType}-${row.id}`} className="hover:bg-app-surface">
+                  <td className="px-4 py-3 text-sm">
+                    <Link to={`/containers/${row.id}`} className="text-[rgb(var(--app-accent))] hover:underline">
+                      {row.id}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm">{row.containerType}</td>
+                  <td className="px-4 py-3 text-sm">
+                    <Link
+                      to={getCollectionDetailUrl(row.containerType === 'cryovial_tube' ? 'cryovial_box' : 'micronix_plate', row.collectionId)}
+                      className="text-[rgb(var(--app-accent))] hover:underline"
+                    >
+                      {row.collectionId}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm font-mono">{row.position}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </IntegritySection>
+
+      <IntegritySection
         title="Containers with no grid position"
         count={report.containersWithNoGridPosition.length}
         description="Tubes or wells in a collection with no well or slot assigned. Legacy rows are allowed; they do not occupy a grid position. Assign a position via edit or scan move when you know the well."

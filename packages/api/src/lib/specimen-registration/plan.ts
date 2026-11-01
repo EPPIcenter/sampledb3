@@ -13,7 +13,7 @@ import {
   type Specimen,
 } from '../../db/schema'
 import { getDefaultRemainingQuantity, getDefaultTotalQuantity, getDefaultUnit } from '../defaults'
-import { normalizePosition } from '../normalize-position'
+import { parseGridPosition } from '@sampledb/contract'
 import { checkGridPositionOccupancy, occupiedGridPositionMessage } from '../container-occupancy'
 import {
   validateCollectionDate,
@@ -284,7 +284,10 @@ async function planContainer(
       problems.push({ field: 'collection', message: resolved.error })
     } else {
       collection = resolved.target
-      position = normalizePosition(input.collection?.position)
+      const rawPosition = input.collection?.position?.trim()
+      const parsed = rawPosition ? parseGridPosition(rawPosition, gridType) : null
+      if (parsed && !parsed.ok) problems.push({ field: 'position', message: parsed.error })
+      position = parsed?.ok ? parsed.position : null
       if (position) {
         if ('existingId' in collection) {
           const occupancy = await checkGridPositionOccupancy(database, {

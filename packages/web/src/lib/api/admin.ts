@@ -93,6 +93,14 @@ export interface SpecimenWithNonIsoCollectionDateItem {
   collectionDate: string
 }
 
+export interface ContainerWithInvalidGridPositionItem {
+  id: number
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'static_well'
+  collectionId: number
+  /** The stored position, as stored. */
+  position: string
+}
+
 export interface IntegrityReport {
   emptyCollections: EmptyCollectionItem[]
   collectionsWithMissingLocation: CollectionWithMissingLocationItem[]
@@ -107,6 +115,7 @@ export interface IntegrityReport {
   locationPathInconsistencies: LocationPathInconsistencyItem[]
   containersWithNoGridPosition: ContainerWithNoGridPositionItem[]
   specimensWithNonIsoCollectionDate: SpecimenWithNonIsoCollectionDateItem[]
+  containersWithInvalidGridPosition: ContainerWithInvalidGridPositionItem[]
 }
 
 export interface CollectionWithMissingLocationItem {

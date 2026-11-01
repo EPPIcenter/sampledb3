@@ -19,8 +19,9 @@ import {
   paper,
   tag,
 } from '../db/schema'
-import { eq, inArray, sql } from 'drizzle-orm'
+import { eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { isIsoCalendarDate } from './date-filters'
+import { isStoredGridPosition, type GridCollectionType } from '@sampledb/contract'
 
 export type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
 
@@ -347,6 +348,14 @@ export interface SpecimenWithNonIsoCollectionDateItem {
   collectionDate: string
 }
 
+export interface ContainerWithInvalidGridPositionItem {
+  id: number
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'static_well'
+  collectionId: number
+  /** The stored position, as stored. */
+  position: string
+}
+
 export interface IntegrityReport {
   emptyCollections: EmptyCollectionItem[]
   collectionsWithMissingLocation: CollectionWithMissingLocationItem[]
@@ -361,6 +370,7 @@ export interface IntegrityReport {
   locationPathInconsistencies: LocationPathInconsistencyItem[]
   containersWithNoGridPosition: ContainerWithNoGridPositionItem[]
   specimensWithNonIsoCollectionDate: SpecimenWithNonIsoCollectionDateItem[]
+  containersWithInvalidGridPosition: ContainerWithInvalidGridPositionItem[]
 }
 
 /** Collections (plates, boxes, bags) whose locationId does not exist in location. */
@@ -542,6 +552,33 @@ export async function listSpecimensWithNonIsoCollectionDate(db: Database): Promi
     .filter((row) => !isIsoCalendarDate(row.collectionDate))
 }
 
+/**
+ * Tube or well Containers whose stored position fails the Grid position rule for their
+ * Collection, or is not in the stored form the rule produces (`A1` instead of `A01`).
+ * Occupancy compares stored strings, so such a Container is unplaced and its cell can be
+ * double-booked.
+ */
+export async function listContainersWithInvalidGridPosition(db: Database): Promise<ContainerWithInvalidGridPositionItem[]> {
+  const sources = [
+    { containerType: 'micronix_tube', gridType: 'micronix_plate', table: micronixTube },
+    { containerType: 'cryovial_tube', gridType: 'cryovial_box', table: cryovialTube },
+    { containerType: 'static_well', gridType: 'micronix_plate', table: staticWell },
+  ] as const satisfies ReadonlyArray<{ containerType: ContainerWithInvalidGridPositionItem['containerType']; gridType: GridCollectionType; table: unknown }>
+  const results: ContainerWithInvalidGridPositionItem[] = []
+  for (const { containerType, gridType, table } of sources) {
+    const rows = await db
+      .select({ id: table.id, collectionId: table.collectionId, position: table.position })
+      .from(table)
+      .where(isNotNull(table.position))
+    for (const row of rows) {
+      if (row.position != null && !isStoredGridPosition(row.position, gridType)) {
+        results.push({ id: row.id, containerType, collectionId: row.collectionId, position: row.position })
+      }
+    }
+  }
+  return results
+}
+
 /** Build full integrity report (all checks). */
 export async function getIntegrityReport(db: Database): Promise<IntegrityReport> {
   const [
@@ -558,6 +595,7 @@ export async function getIntegrityReport(db: Database): Promise<IntegrityReport>
     locationPathInconsistencies,
     containersWithNoGridPosition,
     specimensWithNonIsoCollectionDate,
+    containersWithInvalidGridPosition,
   ] = await Promise.all([
     listEmptyCollections(db),
     listCollectionsWithMissingLocation(db),
@@ -572,6 +610,7 @@ export async function getIntegrityReport(db: Database): Promise<IntegrityReport>
     listLocationPathInconsistencies(db),
     listContainersWithNoGridPosition(db),
     listSpecimensWithNonIsoCollectionDate(db),
+    listContainersWithInvalidGridPosition(db),
   ])
   return {
     emptyCollections,
@@ -587,5 +626,6 @@ export async function getIntegrityReport(db: Database): Promise<IntegrityReport>
     locationPathInconsistencies,
     containersWithNoGridPosition,
     specimensWithNonIsoCollectionDate,
+    containersWithInvalidGridPosition,
   }
 }

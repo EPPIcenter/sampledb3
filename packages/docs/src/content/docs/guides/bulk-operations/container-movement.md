@@ -72,7 +72,7 @@ Each source plate can map to only one destination across all files.
 
 Open **Operations → Move Containers → Move Cryovial Tubes**. Command palette: **Move Cryovial Containers**.
 
-CSV columns: `source_collection_name`, `source_position`, `target_position`. There is no destination box column. Destination comes from the file name or the **Destination Box** picker. Click **Download Template** for headers. Position format must match the box layout, for example `A5` or `25`, and stay consistent within a box.
+CSV columns: `source_collection_name`, `source_position`, `target_position`. There is no destination box column. Destination comes from the file name or the **Destination Box** picker. Click **Download Template** for headers. `target_position` is a row letter A-J plus a column 1-10, for example `A5` (stored as `A05`). Upload flags any other target position by row. `source_position` is matched as stored, so a tube with an older, malformed position can still be moved to a valid one.
 
 A move to an occupied target fails unless the occupying tube is also moved in the same batch. There is no overwrite option.
 
@@ -102,6 +102,7 @@ After execution, micronix and cryovial results are per file. Paper shows sheet c
 - Unresolved micronix barcodes: they are listed on Resolve. Click **Back**, fix the CSV, then **Next: Resolve Containers**. You do not need to recreate destination plates that already exist.
 - Relocation error on Upload (tube at an empty well not relocated): every tube currently on the destination plate must stay in place (barcode in that well) or appear at another well in the same batch.
 - Occupied destination at execute: adjust positions or use a different atomicity mode.
+- Invalid target position at execute: the move is refused with the row and the value, for example `Position "Z99" is outside a micronix plate (A01–H12)`. Under all-or-nothing nothing moves.
 - Source collection conflict: the same source collection appears in multiple files with different destinations. Split the operation or consolidate files that share a destination.
 
 To move whole plates or boxes to a new freezer, see [Move collections](/docs/guides/features/collection-move/).

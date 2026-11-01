@@ -18,6 +18,9 @@ import {
   createTestControlDefinition,
   createTestUnit,
   createTestTag,
+  createTestCryovialBox,
+  createTestCryovialTube,
+  createTestMicronixTube,
 } from '../../__tests__/helpers/factories'
 import {
   micronixTube,
@@ -246,6 +249,7 @@ describe('Data audit API', () => {
         locationPathInconsistencies: unknown[]
         containersWithNoGridPosition: unknown[]
         specimensWithNonIsoCollectionDate: unknown[]
+        containersWithInvalidGridPosition: unknown[]
       }
       expect(Array.isArray(data.emptyCollections)).toBe(true)
       expect(Array.isArray(data.collectionsWithMissingLocation)).toBe(true)
@@ -260,6 +264,7 @@ describe('Data audit API', () => {
       expect(Array.isArray(data.locationPathInconsistencies)).toBe(true)
       expect(Array.isArray(data.containersWithNoGridPosition)).toBe(true)
       expect(Array.isArray(data.specimensWithNonIsoCollectionDate)).toBe(true)
+      expect(data.containersWithInvalidGridPosition).toEqual([])
     })
 
     it('flags specimens whose collection date is not YYYY-MM-DD', async () => {
@@ -510,6 +515,54 @@ describe('Data audit API', () => {
       expect(match).toBeDefined()
       expect(match!.containerType).toBe('micronix_tube')
       expect(match!.collectionId).toBe(plate.id)
+    })
+
+    it('lists Containers whose stored position fails the Grid position rule, and no valid or missing ones', async () => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'ShelfBadPos', description: '' })
+      const loc = await createTestLocation(ctx.db, { name: 'LocBadPos', storageTypeId: String(storageType.id), canContainCollections: true })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'PlateBadPos', locationId: loc.id })
+      const cvBox = await createTestCryovialBox(ctx.db, { name: 'BoxBadPos', locationId: loc.id })
+      const specType = await createTestSpecimenType(ctx.db, { name: 'STBadPos' })
+      const spec = await createTestSpecimen(ctx.db, specType.id)
+      const unit = await createTestUnit(ctx.db, { symbol: 'uL-badpos', name: 'microliter', category: 'volume' })
+      const newContainer = async () => (await createTestStorageContainer(ctx.db, { specimenId: spec.id, unitId: unit.id })).id
+
+      const ids: Record<string, number> = {}
+      for (const [barcode, position] of [
+        ['MX-OK', 'H12'],
+        ['MX-NULL', null],
+        ['MX-BARCODE', 'A1145854300'],
+        ['MX-UNPADDED', 'A1'],
+        ['MX-OUTSIDE', 'J10'],
+      ] as const) {
+        ids[barcode] = await newContainer()
+        await createTestMicronixTube(ctx.db, { containerId: ids[barcode]!, collectionId: plate.id, barcode, position })
+      }
+      for (const [barcode, position] of [
+        ['CV-OK', 'J10'],
+        ['CV-DASH', '--A01'],
+        ['CV-NA', 'NA01'],
+      ] as const) {
+        ids[barcode] = await newContainer()
+        await createTestCryovialTube(ctx.db, { containerId: ids[barcode]!, collectionId: cvBox.id, barcode, position })
+      }
+
+      const res = await ctx.request('/api/admin/data-audit/integrity-report', { method: 'GET' })
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        containersWithInvalidGridPosition: Array<{ id: number; containerType: string; collectionId: number; position: string }>
+      }
+      const byId = (a: { id: number }, b: { id: number }) => a.id - b.id
+      expect([...data.containersWithInvalidGridPosition].sort(byId)).toEqual(
+        [
+          { id: ids['MX-BARCODE']!, containerType: 'micronix_tube', collectionId: plate.id, position: 'A1145854300' },
+          { id: ids['MX-UNPADDED']!, containerType: 'micronix_tube', collectionId: plate.id, position: 'A1' },
+          { id: ids['MX-OUTSIDE']!, containerType: 'micronix_tube', collectionId: plate.id, position: 'J10' },
+          { id: ids['CV-DASH']!, containerType: 'cryovial_tube', collectionId: cvBox.id, position: '--A01' },
+          { id: ids['CV-NA']!, containerType: 'cryovial_tube', collectionId: cvBox.id, position: 'NA01' },
+        ].sort(byId),
+      )
     })
   })
 })

@@ -18,6 +18,7 @@ function emptyIntegrityReport() {
     locationPathInconsistencies: [],
     containersWithNoGridPosition: [],
     specimensWithNonIsoCollectionDate: [],
+    containersWithInvalidGridPosition: [],
   }
 }
 
@@ -66,6 +67,20 @@ describe('AdminDataIntegrityReport', () => {
     expect(await screen.findByText('Collection date not ISO')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '143200' })).toHaveAttribute('href', '/specimens/143200')
     expect(screen.getByText('9/14/20')).toBeInTheDocument()
+  })
+
+  it('shows Containers with an invalid Grid position, with the stored position and a Collection link', async () => {
+    vi.mocked(adminApi.getIntegrityReport).mockResolvedValue({
+      ...emptyIntegrityReport(),
+      containersWithInvalidGridPosition: [
+        { id: 51, containerType: 'cryovial_tube', collectionId: 790, position: '--A01' },
+      ],
+    })
+    await render(<AdminDataIntegrityReport />)
+    expect(await screen.findByText('Containers with an invalid Grid position')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '51' })).toHaveAttribute('href', '/containers/51')
+    expect(screen.getByRole('link', { name: '790' })).toHaveAttribute('href', '/collections/cryovial-boxes/790')
+    expect(screen.getByText('--A01')).toBeInTheDocument()
   })
 
   it('shows retry when report load fails', async () => {

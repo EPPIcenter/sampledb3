@@ -17,6 +17,10 @@ import {
   createTestStudySubject,
   createTestBox,
   createTestSheet,
+  createTestStorageContainer,
+  createTestMicronixTube,
+  createTestCryovialBox,
+  createTestCryovialTube,
 } from '../../__tests__/helpers/factories'
 import { setScannerConfigurations } from '../../lib/settings'
 import { eq } from 'drizzle-orm'
@@ -110,6 +114,87 @@ describe('Collections API', () => {
     })
   })
 
+  describe('GET collection detail with unplaced Containers', () => {
+    async function setupCollectionFixtures() {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Unplaced freezer' })
+      const loc = await createTestLocation(ctx.db, {
+        name: 'Unplaced freezer',
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+      const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'Blood' })
+      const testSpecimen = await createTestSpecimen(ctx.db, specimenType.id)
+      const newContainer = () =>
+        createTestStorageContainer(ctx.db, { specimenId: testSpecimen.id, unitId: unit.id })
+      return { locationId: loc.id, newContainer }
+    }
+
+    it('returns every plate tube, listing those without a grid cell under unplaced', async () => {
+      const { locationId, newContainer } = await setupCollectionFixtures()
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'Plate-unplaced', locationId })
+      const tubes: Array<[string, string | null]> = [
+        ['MX-A01', 'A01'],
+        ['MX-NULL-1', null],
+        ['MX-NULL-2', null],
+        ['MX-BAD', 'A1145868849'],
+      ]
+      for (const [barcode, position] of tubes) {
+        const c = await newContainer()
+        await createTestMicronixTube(ctx.db, { containerId: c.id, collectionId: plate.id, barcode, position })
+      }
+
+      const res = await ctx.request(`/api/collections/plates/micronix/${plate.id}`, { method: 'GET' })
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        wells: Record<string, { barcode: string }>
+        unplaced: Array<{ barcode: string; position?: string; container?: unknown }>
+      }
+      expect(Object.keys(data.wells)).toEqual(['A01'])
+      expect(data.unplaced.map((e) => [e.barcode, e.position ?? null])).toEqual([
+        ['MX-BAD', 'A1145868849'],
+        ['MX-NULL-1', null],
+        ['MX-NULL-2', null],
+      ])
+      expect(data.unplaced.every((e) => e.container != null)).toBe(true)
+    })
+
+    it('returns every cryovial tube, listing those without a grid cell under unplaced', async () => {
+      const { locationId, newContainer } = await setupCollectionFixtures()
+      const boxRecord = await createTestCryovialBox(ctx.db, { name: 'Box-unplaced', locationId })
+      const tubes: Array<[string, string | null]> = [
+        ['CV-J10', 'J10'],
+        ['CV-NULL', null],
+        ['CV-DASH', '--A01'],
+        ['CV-NA', 'NA01'],
+      ]
+      for (const [barcode, position] of tubes) {
+        const c = await newContainer()
+        await createTestCryovialTube(ctx.db, { containerId: c.id, collectionId: boxRecord.id, barcode, position })
+      }
+
+      const res = await ctx.request(`/api/collections/boxes/cryovial/${boxRecord.id}`, { method: 'GET' })
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        positions: Record<string, Array<{ barcode: string }>>
+        unplaced: Array<{ barcode: string; position?: string }>
+      }
+      expect(Object.keys(data.positions)).toEqual(['J10'])
+      expect(data.unplaced.map((e) => [e.barcode, e.position ?? null])).toEqual([
+        ['CV-DASH', '--A01'],
+        ['CV-NA', 'NA01'],
+        ['CV-NULL', null],
+      ])
+    })
+
+    it('returns 404 for a missing cryovial box', async () => {
+      const res = await ctx.request('/api/collections/boxes/cryovial/99999', { method: 'GET' })
+      expect(res.status).toBe(404)
+    })
+  })
+
   describe('POST /api/collections/check', () => {
     it('returns 200 and results for check request', async () => {
       const res = await ctx.request('/api/collections/check', {
@@ -159,6 +244,48 @@ describe('Collections API', () => {
         json: { moves: 'not-an-array' },
       })
       expect(res.status).toBe(400)
+    })
+
+    it.each(['Z99', 'hello world'])('returns 400 naming the row for a move to %s and writes nothing', async (target) => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const loc = await createTestLocation(ctx.db, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'P96', locationId: loc.id })
+      const container = await createTestStorageContainer(ctx.db)
+      await createTestMicronixTube(ctx.db, { containerId: container.id, collectionId: plate.id, barcode: 'MT-1', position: 'A01' })
+
+      const res = await ctx.request('/api/collections/containers/move', {
+        method: 'POST',
+        json: {
+          mappings: [{ fromCollectionName: 'P96', toCollectionName: 'P96' }],
+          moves: [{ identifier: { type: 'barcode', barcode: 'MT-1' }, targetPosition: target }],
+        },
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.errors).toEqual([{ row: 1, error: expect.stringContaining(`Position "${target}"`) }])
+      const tube = ctx.db.select().from(micronixTube).where(eq(micronixTube.id, container.id)).get()
+      expect(tube?.position).toBe('A01')
+    })
+
+    it('stores a1 as A01', async () => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const loc = await createTestLocation(ctx.db, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'P96', locationId: loc.id })
+      const container = await createTestStorageContainer(ctx.db)
+      await createTestMicronixTube(ctx.db, { containerId: container.id, collectionId: plate.id, barcode: 'MT-1', position: 'B05' })
+
+      const res = await ctx.request('/api/collections/containers/move', {
+        method: 'POST',
+        json: {
+          mappings: [{ fromCollectionName: 'P96', toCollectionName: 'P96' }],
+          moves: [{ identifier: { type: 'barcode', barcode: 'MT-1' }, targetPosition: 'a1' }],
+        },
+      })
+
+      expect(res.status).toBe(200)
+      const tube = ctx.db.select().from(micronixTube).where(eq(micronixTube.id, container.id)).get()
+      expect(tube?.position).toBe('A01')
     })
 
     it('returns 401 when not authenticated', async () => {

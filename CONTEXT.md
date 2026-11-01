@@ -132,8 +132,12 @@ Where a **Container** sits in the physical storage hierarchy — its **grid posi
 _Avoid_: Enrichment (implementation term); conflating placement with specimen or source lookups; placing paper directly on a box or bag without a sheet
 
 **Grid position**:
-The well or slot of a tube or well **Container** in its plate or box (e.g. A01). Optional: a tube or well may belong to a **Collection** with no grid position (legacy rows). At most one Container occupies a given grid position in a Collection; a missing position occupies no cell. Not applicable to **Paper**.
+The well or slot of a tube or well **Container** in its plate or box, stored as a row letter plus a two-digit column (A01). One rule, the Grid position rule, says which positions a **Collection** has (micronix plate A01–H12, cryovial box A01–J10) and how a typed position maps onto one: `a1`, `A1` and `a01` all mean A01, and anything else, including a cell outside the plate or box, is not a Grid position. Every write that sets a position applies the rule and rejects a position it does not accept; every read that lays Containers out on the grid applies the same rule, so a position a write would reject places no Container (see **Unplaced container**). Legacy malformed positions were repaired by migration 010, and the integrity report flags any stored position that fails the rule. Optional: a tube or well may belong to a **Collection** with no grid position (legacy rows). At most one Container occupies a given grid position in a Collection; a missing position occupies no cell. Not applicable to **Paper**.
 _Avoid_: Well (as the domain term); treating a missing position as occupying a slot; requiring every tube to have a position before it can exist in a Collection
+
+**Unplaced container**:
+A tube or well **Container** that belongs to a plate or box but occupies no cell: it has no **Grid position**, or its stored position fails the Grid position rule for that Collection. It still counts as part of the Collection. Plate and box pages list unplaced Containers in their own section, labelled with the stored value, and plate scan validation expects them rather than treating them as extras.
+_Avoid_: Empty (an empty cell holds no Container); treating an unplaced Container as missing from its Collection
 
 ### Export
 

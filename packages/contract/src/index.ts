@@ -87,3 +87,16 @@ export {
   fitErrorReportToLimits,
   type ErrorReport,
 } from './error-report'
+export {
+  GRID_GEOMETRY,
+  gridAxes,
+  gridCellKey,
+  gridCellKeys,
+  gridPositionKey,
+  gridPositionRange,
+  isStoredGridPosition,
+  parseGridPosition,
+  type GridCollectionType,
+  type GridGeometry,
+  type GridPositionResult,
+} from './grid-position'

@@ -18,6 +18,7 @@ function emptyIntegrityReport() {
     locationPathInconsistencies: [],
     containersWithNoGridPosition: [],
     specimensWithNonIsoCollectionDate: [],
+    containersWithInvalidGridPosition: [],
   }
 }
 

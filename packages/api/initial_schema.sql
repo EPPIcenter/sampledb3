@@ -287,7 +287,7 @@ CREATE TABLE IF NOT EXISTS storage_type (
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER NOT NULL
 );--> statement-breakpoint
-INSERT INTO schema_version (version) VALUES (9);--> statement-breakpoint
+INSERT INTO schema_version (version) VALUES (10);--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT NOT NULL,
   user_id INTEGER REFERENCES users(id),

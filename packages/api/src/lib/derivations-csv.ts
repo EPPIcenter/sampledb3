@@ -16,6 +16,7 @@ import { and, eq, sql } from 'drizzle-orm'
 import {
   csvRowToContainerWriteInput,
   parseCsv as parseCsvCells,
+  parseGridPosition,
   PAPER_DERIVATION_USE_SUBLABEL_NOT_CONTAINER_BARCODE,
   PAPER_DERIVATION_USE_SUBLABEL_NOT_POSITION,
   type ContainerCsvRow,
@@ -23,7 +24,6 @@ import {
 import { createDerivation, type CreateDerivationInput } from './derivations'
 import { withWriteTransaction } from '../db/write-transaction'
 import { resolveParentContainerId } from './derivations/parent-container-resolver'
-import { normalizePosition } from './normalize-position'
 import { checkGridPositionOccupancy } from './container-occupancy'
 import { CollectionPlanner } from './specimen-registration/collections'
 
@@ -528,14 +528,21 @@ export async function validateDerivationsCsv(
 
       // For tube types, validate position and check for duplicate (existing collection or within CSV)
       if (containerType === 'micronix_tube' || containerType === 'cryovial_tube') {
-        // Normalize ("A2" -> "A02") so checks match what the import stores.
-        const position = normalizePosition(row.position) ?? ''
-        if (!position) {
+        if (!row.position?.trim()) {
           validationRow.error = 'position is required for each row when deriving to a plate or box'
           validationRows.push(validationRow)
           invalidCount++
           continue
         }
+        // Grid position rule: normalize ("A2" -> "A02") so checks match what the import stores.
+        const parsedPosition = parseGridPosition(row.position, containerType === 'micronix_tube' ? 'micronix_plate' : 'cryovial_box')
+        if (!parsedPosition.ok) {
+          validationRow.error = parsedPosition.error
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+        const position = parsedPosition.position
         const collectionKey = `${collectionName || ''}_${row.collection_barcode || ''}_${containerType}`
         const positionKey = `${collectionKey}\t${position}`
 
