@@ -385,6 +385,8 @@ export async function createTestStudySubject(
   return result
 }
 
+let defaultSpecimenStudyCount = 0
+
 /**
  * Create a test specimen (for testing specimen type "in use")
  */
@@ -398,9 +400,12 @@ export async function createTestSpecimen(
 
   // Default to study subject if neither provided
   if (!studySubjectId && !controlBatchId) {
+    // A counter, not Date.now() plus a random number: tests create dozens of these within one
+    // millisecond, and random suffixes then collide on study's unique title and short_code.
+    defaultSpecimenStudyCount += 1
     const testStudy = await createTestStudy(db, {
-      title: `Study ${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      shortCode: `ST${Date.now()}-${Math.floor(Math.random() * 1000)}`
+      title: `Study ${Date.now()}-${defaultSpecimenStudyCount}`,
+      shortCode: `ST${Date.now()}-${defaultSpecimenStudyCount}`
     });
     const testSubject = await createTestStudySubject(db, {
       studyId: testStudy.id,
