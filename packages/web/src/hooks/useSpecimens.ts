@@ -97,6 +97,56 @@ export function invalidateSpecimenQueries(
   }
 }
 
+export type CreateSpecimenWithNewSubjectInput = {
+  studyShortCode: string
+  subjectName: string
+  specimenTypeName: string
+  collectionDate?: string
+  /** Flat form state; mapped to write shape before API call. */
+  container?: ContainerData | SpecimenContainerWriteInput
+}
+
+/**
+ * Create a subject and its first specimen in one request (`POST /subjects/with-specimens`).
+ * The API writes both in one transaction, so a specimen that fails leaves no subject behind.
+ * A subject already named so in the study is reused.
+ */
+export function useCreateSpecimenWithNewSubject(options?: { silent?: boolean }) {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  return useMutation({
+    mutationFn: async ({ studyShortCode, subjectName, container, ...specimen }: CreateSpecimenWithNewSubjectInput) => {
+      const res = await subjectsApi.createWithSpecimens({
+        studyShortCode,
+        subjectName,
+        specimens: [
+          {
+            ...specimen,
+            ...(container
+              ? {
+                  container: isFlatContainerRegistration(container)
+                    ? flatContainerRegistrationToWriteInput(container)
+                    : container,
+                }
+              : {}),
+          },
+        ],
+      })
+      if (res.specimens.length === 0) throw new Error('The API created no specimen')
+      return { ...res.specimens[0], studyId: res.subject.studyId }
+    },
+    onError: (err: unknown) => {
+      if (options?.silent) return
+      showError(getMutationErrorMessage(err, 'Failed to create specimen'))
+    },
+    onSuccess: (specimen) => {
+      invalidateSpecimenQueries(queryClient, { specimen })
+      success('Specimen created successfully')
+    },
+  })
+}
+
 /**
  * One page of specimens and the pagination totals. The previous page stays on screen while
  * the next page, sort, or filter loads.

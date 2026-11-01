@@ -26,6 +26,7 @@ import { withWriteTransaction } from '../db/write-transaction'
 import { assertNotUsedInQpcr } from '../lib/qpcr-usage'
 import { insertedRow } from '../lib/inserted-row'
 import { timestampFilter } from '../lib/date-filters'
+import { likeContains } from '../lib/sql-like'
 
 /** Short code prefix for tutorial namespace. Any study whose short code starts with this (case-insensitive) may be deleted by any member. Only admins may rename a study into or out of this namespace. */
 const TUTORIAL_SHORT_CODE_PREFIX = 'TUT'
@@ -146,8 +147,16 @@ studies.get('/:id/subjects', authMiddleware, async (c) => {
     }
     const offset = returnAll ? undefined : (page - 1) * limit!
 
-    const whereClause = eq(studySubject.studyId, id)
-    
+    // search matches a subject name containing the text, or the exact subject ID.
+    const search = c.req.query('search')?.trim()
+    const searchId = search && /^\d+$/.test(search) ? Number(search) : undefined
+    const whereClause = and(
+      eq(studySubject.studyId, id),
+      search
+        ? or(likeContains(studySubject.name, search), searchId !== undefined ? eq(studySubject.id, searchId) : undefined)
+        : undefined,
+    )
+
     // Get all subjects or paginated subset
     let query = database
       .select({

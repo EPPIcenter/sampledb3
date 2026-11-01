@@ -7,17 +7,27 @@ import {
   useSpecimens,
   useSpecimen,
   useCreateSpecimen,
+  useCreateSpecimenWithNewSubject,
   specimenKeys,
 } from '../useSpecimens'
 import { dashboardKeys } from '../useDashboard'
 import { studyKeys } from '../useStudies'
 import { specimensApi } from '../../lib/api/specimens'
+import { subjectsApi } from '../../lib/api/subjects'
+import { subjectKeys } from '../useSubjects'
 
 // Mock the API module
 vi.mock('../../lib/api/specimens', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { specimensHooksMock } = await import('../../__tests__/helpers/mock-api-templates')
   return createMockedDomainModule('specimens', specimensHooksMock())
+})
+
+vi.mock('../../lib/api/subjects', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('subjects', {
+    subjectsApi: { createWithSpecimens: vi.fn() },
+  })
 })
 
 function createWrapper() {
@@ -194,7 +204,55 @@ describe('useSpecimens Hooks', () => {
       })
     })
   })
+
+  describe('useCreateSpecimenWithNewSubject', () => {
+    it('creates the subject and specimen in one request and invalidates their queries', async () => {
+      vi.mocked(subjectsApi.createWithSpecimens).mockResolvedValue({
+        subject: { id: 10, studyId: 5, name: 'NEW-1', created: '2024-01-01', lastUpdated: '2024-01-01' },
+        subjectCreated: true,
+        specimens: [
+          {
+            id: 3,
+            studySubjectId: 10,
+            specimenTypeId: 1,
+            created: '2024-01-01',
+            lastUpdated: '2024-01-01',
+            containerCreated: false,
+          },
+        ],
+        summary: { subjectsCreated: 1, subjectsUpdated: 0, specimensCreated: 1, containersCreated: 0 },
+      })
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+      })
+      const wrapper = ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={queryClient}>
+          <ToastProvider>{children}</ToastProvider>
+        </QueryClientProvider>
+      )
+      const { result } = renderHook(() => useCreateSpecimenWithNewSubject(), { wrapper })
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+      result.current.mutate({
+        studyShortCode: 'ST5',
+        subjectName: 'NEW-1',
+        specimenTypeName: 'Blood',
+        collectionDate: '2024-02-03',
+      })
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true))
+      expect(subjectsApi.createWithSpecimens).toHaveBeenCalledWith({
+        studyShortCode: 'ST5',
+        subjectName: 'NEW-1',
+        specimens: [{ specimenTypeName: 'Blood', collectionDate: '2024-02-03' }],
+      })
+      expect(result.current.data).toMatchObject({ id: 3, studySubjectId: 10 })
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: specimenKeys.lists() })
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: dashboardKeys.all })
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: subjectKeys.detail(10) })
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: subjectKeys.summary(10) })
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: [...studyKeys.detail(5), 'subjects'] })
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: [...studyKeys.detail(5), 'summary'] })
+    })
+  })
 })
-
-
-
