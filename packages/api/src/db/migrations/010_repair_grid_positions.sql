@@ -1,4 +1,4 @@
--- Migration 010: every stored Grid position passes the Grid position rule (issue #125).
+-- Migration 010: repair stored Grid positions to pass the Grid position rule (issue #125).
 -- The rule is `parseGridPosition` in packages/contract/src/grid-position.ts: a row letter and
 -- a one- or two-digit column inside the Collection's geometry (micronix plate A01–H12, cryovial
 -- box A01–J10), stored as an upper-case letter and a two-digit column. For each position not
@@ -42,34 +42,27 @@ SELECT tbl, id, position AS old_position, grid AS new_position,
   END AS repair
 FROM parsed
 WHERE grid IS NULL OR grid <> position;--> statement-breakpoint
+DELETE FROM __migration_010_repair WHERE repair = 'unexpected';--> statement-breakpoint
 CREATE TEMP TABLE __migration_010_final AS
-SELECT t.grid_type, t.collection_id,
-  CASE WHEN r.id IS NULL THEN t.position ELSE r.new_position END AS position,
-  r.id IS NOT NULL AS repaired
+SELECT t.tbl, t.id, t.grid_type, t.collection_id,
+  CASE WHEN r.id IS NULL THEN t.position ELSE r.new_position END AS position
 FROM (
   SELECT 'micronix_tube' AS tbl, 'micronix_plate' AS grid_type, id, collection_id, position FROM micronix_tube
   UNION ALL SELECT 'cryovial_tube', 'cryovial_box', id, collection_id, position FROM cryovial_tube
   UNION ALL SELECT 'static_well', 'micronix_plate', id, collection_id, position FROM static_well
 ) t
 LEFT JOIN __migration_010_repair r ON r.tbl = t.tbl AND r.id = t.id;--> statement-breakpoint
-CREATE TEMP TABLE IF NOT EXISTS __migration_010_guard (id INTEGER PRIMARY KEY);--> statement-breakpoint
-CREATE TRIGGER __migration_010_unexpected_tr BEFORE INSERT ON __migration_010_guard
-BEGIN
-  SELECT RAISE(ABORT, 'Cannot repair Grid positions: a stored position is not dash-prefixed, the tube''s barcode or NA, so it cannot be repaired automatically. Correct or clear it by hand first.')
-  WHERE EXISTS (SELECT 1 FROM __migration_010_repair WHERE repair = 'unexpected');
-END;--> statement-breakpoint
-CREATE TRIGGER __migration_010_collision_tr BEFORE INSERT ON __migration_010_guard
-BEGIN
-  SELECT RAISE(ABORT, 'Cannot repair Grid positions: a repaired position would put two Containers in one position of the same Collection. Move or clear one of them first.')
-  WHERE EXISTS (
-    SELECT 1 FROM __migration_010_final WHERE position IS NOT NULL
-    GROUP BY grid_type, collection_id, position HAVING COUNT(*) > 1 AND MAX(repaired) = 1
-  );
-END;--> statement-breakpoint
-INSERT INTO __migration_010_guard DEFAULT VALUES;--> statement-breakpoint
-DROP TRIGGER __migration_010_unexpected_tr;--> statement-breakpoint
-DROP TRIGGER __migration_010_collision_tr;--> statement-breakpoint
-DROP TABLE __migration_010_guard;--> statement-breakpoint
+DELETE FROM __migration_010_repair
+WHERE new_position IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM __migration_010_final self
+    JOIN __migration_010_final other
+      ON other.grid_type = self.grid_type
+      AND other.collection_id = self.collection_id
+      AND other.position = self.position
+      AND NOT (other.tbl = self.tbl AND other.id = self.id)
+    WHERE self.tbl = __migration_010_repair.tbl AND self.id = __migration_010_repair.id
+  );--> statement-breakpoint
 UPDATE micronix_tube
 SET position = (SELECT r.new_position FROM __migration_010_repair r WHERE r.tbl = 'micronix_tube' AND r.id = micronix_tube.id)
 WHERE id IN (SELECT id FROM __migration_010_repair WHERE tbl = 'micronix_tube');--> statement-breakpoint

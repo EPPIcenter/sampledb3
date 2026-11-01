@@ -27,6 +27,7 @@ function buildMonthlyTimeline(
   const monthMap = new Map<string, number>()
 
   specimens
+    // A collection date that isn't a date (one migration 008 left as it was) has no month and is skipped below.
     .filter((s) => (dateField === 'collectionDate' ? s.collectionDate : true))
     .forEach((s) => {
       // A collection date has no time of day, so its month is its own (`5/1/2024` is May in every

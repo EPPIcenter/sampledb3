@@ -12,6 +12,9 @@ import {
 } from '../schema-evolution'
 import { openOperationalDatabase } from '../open'
 import { SchemaMigrationError, listNumberedMigrations, runSqlMigration, runSqlMigrationStatements } from '../migration-runner'
+import { drizzle } from 'drizzle-orm/bun-sqlite'
+import * as schema from '../schema'
+import { listContainersWithInvalidGridPosition, listSpecimensWithNonIsoCollectionDate } from '../../lib/data-audit'
 
 /** Tables that migrations 004+ alter, so older-version fixtures can migrate to current. */
 function createTablesForLaterMigrations(sqlite: Database): void {
@@ -371,23 +374,28 @@ describe('schema evolution', () => {
     sqlite.close()
   })
 
-  it.each(['13/2/2024', '2/30/2024', '2024-02-30', '5/7', '7 Apr 2024', '2024/05/07', '5/7/124'])(
-    'migration 008 aborts on a collection date it cannot read (%s) and changes nothing',
-    (bad) => {
-      const sqlite = new Database(testDbPath)
-      sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
-      sqlite.exec('INSERT INTO schema_version (version) VALUES (7)')
-      createTablesForLaterMigrations(sqlite)
-      sqlite.exec(`INSERT INTO specimen (id, specimen_type_id, collection_date) VALUES (1, 1, '5/7/26')`)
-      sqlite.prepare('INSERT INTO specimen (id, specimen_type_id, collection_date) VALUES (2, 1, ?)').run(bad)
+  it('migration 008 leaves a collection date it cannot read as it is, converts the rest, and the integrity report lists it', async () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (7)')
+    createTablesForLaterMigrations(sqlite)
+    const unreadable = ['13/2/2024', '2/30/2024', '2024-02-30', '5/7', '7 Apr 2024', '2024/05/07', '5/7/124', ' 2/30/24 ']
+    const insert = sqlite.prepare('INSERT INTO specimen (id, specimen_type_id, collection_date) VALUES (?, 1, ?)')
+    insert.run(1, '5/7/26')
+    unreadable.forEach((value, i) => insert.run(i + 2, value))
+    insert.run(100, ' 12/24/2024 ')
 
-      expect(() => evolveOperationalSchema(sqlite)).toThrow(/Cannot convert collection dates to YYYY-MM-DD/)
-      expect(getRecordedSchemaVersion(sqlite)).toBe(7)
-      const rows = sqlite.prepare('SELECT collection_date AS date FROM specimen ORDER BY id').all() as Array<{ date: string }>
-      expect(rows.map((r) => r.date)).toEqual(['5/7/26', bad])
-      sqlite.close()
-    },
-  )
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    const rows = sqlite.prepare('SELECT collection_date AS date FROM specimen ORDER BY id').all() as Array<{ date: string }>
+    expect(rows.map((r) => r.date)).toEqual(['2026-05-07', ...unreadable, '2024-12-24'])
+    const temp = sqlite.prepare(`SELECT name FROM sqlite_temp_master WHERE name LIKE '__migration_008%'`).all()
+    expect(temp).toEqual([])
+    const leftovers = await listSpecimensWithNonIsoCollectionDate(drizzle(sqlite, { schema }))
+    expect(leftovers).toEqual(unreadable.map((collectionDate, i) => ({ id: i + 2, collectionDate })))
+    sqlite.close()
+  })
 
   /** The CREATE TABLE text SQLite stored for qpcr_well_result. */
   function qpcrWellResultDdl(sqlite: Database): string {
@@ -500,23 +508,27 @@ describe('schema evolution', () => {
     sqlite.close()
   })
 
-  it('migration 010 aborts, changing nothing, when a stripped position collides with a stored one', () => {
+  it('migration 010 leaves a repair that would collide with a stored position as it is, and repairs the rest', () => {
     const sqlite = databaseBeforeMigration010()
     sqlite.exec(`INSERT INTO cryovial_tube (id, collection_id, barcode, position) VALUES (1, 790, 'C1', '--A01'), (2, 790, 'C2', 'A01'), (3, 790, 'C3', '-B01')`)
 
-    expect(() => evolveOperationalSchema(sqlite)).toThrow(/would put two Containers in one position of the same Collection/)
-    expect(getRecordedSchemaVersion(sqlite)).toBe(9)
-    expect(positions(sqlite, 'cryovial_tube')).toEqual([[1, '--A01'], [2, 'A01'], [3, '-B01']])
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(positions(sqlite, 'cryovial_tube')).toEqual([[1, '--A01'], [2, 'A01'], [3, 'B01']])
     sqlite.close()
   })
 
-  it('migration 010 aborts when two repairs land in one position', () => {
+  it('migration 010 leaves every repair that lands in one position as it is, and repairs the rest', () => {
     const sqlite = databaseBeforeMigration010()
-    sqlite.exec(`INSERT INTO micronix_tube (id, collection_id, barcode, position) VALUES (1, 5, 'M1', '--C04')`)
+    sqlite.exec(`INSERT INTO micronix_tube (id, collection_id, barcode, position) VALUES (1, 5, 'M1', '--C04'), (3, 5, 'M3', '-d5')`)
     sqlite.exec(`INSERT INTO static_well (id, collection_id, position) VALUES (2, 5, 'c4')`)
 
-    expect(() => evolveOperationalSchema(sqlite)).toThrow(/would put two Containers in one position/)
-    expect(getRecordedSchemaVersion(sqlite)).toBe(9)
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(positions(sqlite, 'micronix_tube')).toEqual([[1, '--C04'], [3, 'D05']])
+    expect(positions(sqlite, 'static_well')).toEqual([[2, 'c4']])
     sqlite.close()
   })
 
@@ -530,23 +542,31 @@ describe('schema evolution', () => {
     sqlite.close()
   })
 
-  for (const [table, position] of [
-    ['cryovial_tube', 'K01'],
-    ['cryovial_tube', '--A11'],
-    ['micronix_tube', 'I01'],
-    ['micronix_tube', 'A001'],
-    ['micronix_tube', 'hello'],
-  ] as const) {
-    it(`migration 010 aborts on a position it cannot repair: ${table} "${position}"`, () => {
-      const sqlite = databaseBeforeMigration010()
-      sqlite.exec(`INSERT INTO ${table} (id, collection_id, barcode, position) VALUES (1, 1, 'X1', '--A02'), (2, 1, 'X2', '${position}')`)
+  it('migration 010 leaves a position it cannot repair as it is, repairs the rest, and the integrity report lists what is left', async () => {
+    const sqlite = databaseBeforeMigration010()
+    sqlite.exec(`INSERT INTO cryovial_tube (id, collection_id, barcode, position) VALUES
+      (1, 1, 'X1', '--A02'), (2, 1, 'X2', 'K01'), (3, 1, 'X3', '--A11'), (4, 1, 'X4', ' NA01 '), (5, 1, 'X5', '--A03'), (6, 1, 'X6', 'A03')`)
+    sqlite.exec(`INSERT INTO micronix_tube (id, collection_id, barcode, position) VALUES
+      (11, 2, 'M1', 'I01'), (12, 2, 'M2', 'A001'), (13, 2, 'M3', 'hello'), (14, 2, 'M4', 'b7')`)
 
-      expect(() => evolveOperationalSchema(sqlite)).toThrow(/cannot be repaired automatically/)
-      expect(getRecordedSchemaVersion(sqlite)).toBe(9)
-      expect(positions(sqlite, table)).toEqual([[1, '--A02'], [2, position]])
-      sqlite.close()
-    })
-  }
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(positions(sqlite, 'cryovial_tube')).toEqual([[1, 'A02'], [2, 'K01'], [3, '--A11'], [4, null], [5, '--A03'], [6, 'A03']])
+    expect(positions(sqlite, 'micronix_tube')).toEqual([[11, 'I01'], [12, 'A001'], [13, 'hello'], [14, 'B07']])
+    const temp = sqlite.prepare(`SELECT name FROM sqlite_temp_master WHERE name LIKE '__migration_010%'`).all()
+    expect(temp).toEqual([])
+    const leftovers = await listContainersWithInvalidGridPosition(drizzle(sqlite, { schema }))
+    expect(leftovers).toEqual([
+      { id: 11, containerType: 'micronix_tube', collectionId: 2, position: 'I01' },
+      { id: 12, containerType: 'micronix_tube', collectionId: 2, position: 'A001' },
+      { id: 13, containerType: 'micronix_tube', collectionId: 2, position: 'hello' },
+      { id: 2, containerType: 'cryovial_tube', collectionId: 1, position: 'K01' },
+      { id: 3, containerType: 'cryovial_tube', collectionId: 1, position: '--A11' },
+      { id: 5, containerType: 'cryovial_tube', collectionId: 1, position: '--A03' },
+    ])
+    sqlite.close()
+  })
 
   /** A database at version 11 with control batches, ready for migration 012. */
   function databaseBeforeMigration012(): Database {

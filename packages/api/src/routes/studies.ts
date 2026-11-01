@@ -459,7 +459,7 @@ studies.get('/:id/timeline', authMiddleware, async (c) => {
       id: number
       studySubjectId: number
       specimenTypeId: number
-      collectionDate: string
+      collectionDate: string | null
     }>
 
     if (specimens.length === 0) {
@@ -483,7 +483,7 @@ studies.get('/:id/timeline', authMiddleware, async (c) => {
     // Group specimens by subject
     const specimensBySubject = new Map<number, Array<{
       id: number
-      collectionDate: string
+      collectionDate: string | null
       specimenTypeId: number
       specimenTypeName: string
     }>>()
