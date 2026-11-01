@@ -75,7 +75,9 @@ On a plate, cryovial box, box, or bag (not the sheet-only page), **Delete collec
 - Specimen records that would have no storage left (a specimen with another container elsewhere is kept)
 - Optional: with **Also remove study participants (subjects) that have no specimens left**, subjects who would have no specimens. Control batches are never removed this way.
 
-Type the exact collection name to confirm. The operation is all or nothing.
+Before you confirm, the dialog counts the containers, specimens, and subjects the delete removes. Subjects count only when the option to remove them is on; otherwise the dialog shows how many would be left with no specimens. Containers that belong to the collection but have no grid position are counted and removed too.
+
+Type the exact collection name to confirm. The operation is all or nothing. Afterwards the Collections list, dashboard, study and subject pages, and location contents show the result.
 
 ### When deletion is blocked
 
@@ -85,6 +87,6 @@ Type the exact collection name to confirm. The operation is all or nothing.
 | `qpcr_wells_link_specimens` | A specimen you would remove is still on a qPCR well. | Clear the well, then try again. |
 | `container_derivation_spans_outside_collection` | A derivation parent is in this collection and the child is in another. | Move or remove the child, or reassign the derivation. Deleting a collection that only holds child containers is allowed. |
 
-Nothing is partially deleted. Fix the listed codes and submit again.
+The dialog lists blockers before you confirm, and keeps **Delete collection** disabled until they are fixed. Nothing is partially deleted. Fix the listed codes and open the dialog again.
 
 To move tubes between plates, see [Container movement](/docs/guides/bulk-operations/container-movement/). To move a whole plate or box to a new freezer, see [Move collections](/docs/guides/features/collection-move/).

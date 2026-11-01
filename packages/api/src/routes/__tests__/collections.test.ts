@@ -352,11 +352,65 @@ describe('Collections API', () => {
       const data = (await res.json()) as {
         canDelete: boolean
         blockers: Array<{ code: string; message: string }>
-        summary: { containerCount: number; specimenCount: number }
+        summary: { containerCount: number; specimenCount: number; emptySubjectCount: number }
       }
       expect(data.canDelete).toBe(true)
       expect(data.blockers).toEqual([])
-      expect(data.summary).toEqual({ containerCount: 0, specimenCount: 0 })
+      expect(data.summary).toEqual({ containerCount: 0, specimenCount: 0, emptySubjectCount: 0 })
+    })
+
+    it('counts the Containers, Specimens and Subjects the delete would remove', async () => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'StPreCount' })
+      const loc = await createTestLocation(ctx.db, {
+        name: 'LocPreCount',
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'PlatePreCount', locationId: loc.id })
+      const otherPlate = await createTestMicronixPlate(ctx.db, { name: 'PlatePreOther', locationId: loc.id })
+      const st = await createTestSpecimenType(ctx.db, { name: 'STPreCount' })
+      const study = await createTestStudy(ctx.db, { title: 'Pre', shortCode: `PRE${Date.now()}` })
+      const emptied = await createTestStudySubject(ctx.db, { studyId: study.id, name: 'Emptied' })
+      const kept = await createTestStudySubject(ctx.db, { studyId: study.id, name: 'Kept' })
+      const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'm', category: 'volume' })
+      const t = utcNow()
+      const addTube = async (specimenId: number, collectionId: number, position: string) => {
+        const [c] = await ctx.db
+          .insert(storageContainer)
+          .values({ specimenId, unitId: unit.id, totalQuantity: 1, remainingQuantity: 1, created: t, lastUpdated: t })
+          .returning()
+        await ctx.db
+          .insert(micronixTube)
+          .values({ id: c!.id, collectionId, barcode: `BPRE${c!.id}`, position })
+      }
+      // Emptied: two Specimens, both only on this plate.
+      const e1 = await createTestSpecimen(ctx.db, st.id, { studySubjectId: emptied.id })
+      const e2 = await createTestSpecimen(ctx.db, st.id, { studySubjectId: emptied.id })
+      await addTube(e1.id, plate.id, 'A01')
+      await addTube(e1.id, plate.id, 'A02')
+      await addTube(e2.id, plate.id, 'A03')
+      // Kept: one Specimen removed with the plate, one with an aliquot on another plate.
+      const k1 = await createTestSpecimen(ctx.db, st.id, { studySubjectId: kept.id })
+      const k2 = await createTestSpecimen(ctx.db, st.id, { studySubjectId: kept.id })
+      await addTube(k1.id, plate.id, 'A04')
+      await addTube(k2.id, plate.id, 'A05')
+      await addTube(k2.id, otherPlate.id, 'A01')
+
+      const res = await ctx.request('/api/collections/delete-with-contents/preflight', {
+        method: 'POST',
+        json: { collectionType: 'micronix_plate', id: plate.id },
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { summary: unknown }
+      expect(data.summary).toEqual({ containerCount: 5, specimenCount: 3, emptySubjectCount: 1 })
+    })
+
+    it('returns 404 when the collection does not exist', async () => {
+      const res = await ctx.request('/api/collections/delete-with-contents/preflight', {
+        method: 'POST',
+        json: { collectionType: 'micronix_plate', id: 999_999 },
+      })
+      expect(res.status).toBe(404)
     })
   })
 
