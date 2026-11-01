@@ -52,7 +52,7 @@ Use the same short code in CSV files that you use in the UI. Avoid special chara
 
 ## Find studies
 
-On the Studies page, search matches titles, short codes, and lead person names. You can filter by type and lead, and sort the whole list by last updated date, title, lead, or subject, specimen, and container counts. Text sorts read numbers in order, so `2` comes before `10`.
+On the Studies page, search matches titles, short codes, lead person names, and descriptions, ignoring letter case. You can filter by type and lead, and sort the whole list by last updated date, title, lead, or subject, specimen, and container counts. Text sorts read numbers in order, so `2` comes before `10`.
 
 ## Add subjects
 

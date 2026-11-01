@@ -356,7 +356,7 @@ export async function createTestControlDefinition(db: Database, data?: {
  */
 export async function createTestStudy(
   db: Database,
-  data: { title: string, shortCode: string, leadPerson?: string, created?: string },
+  data: { title: string, shortCode: string, leadPerson?: string, description?: string, created?: string },
 ) {
   const now = utcNow()
   const [result] = await db.insert(study).values({

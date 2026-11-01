@@ -109,7 +109,8 @@ export default function Studies() {
   )
 
   // Load every study rather than pages of 50, so sorting and filtering cover the whole
-  // list. The search query narrows by title and short code on the server.
+  // list. Search runs on the server, which matches title, short code, lead person, and
+  // description; the page shows what it returns and does not filter the text again.
   const allStudiesQuery = useAllStudies('')
   const searchQuery = useAllStudies(debouncedSearch, { enabled: debouncedSearch !== '' })
   const leadPersonsQuery = useStudyLeadPersons()
@@ -183,17 +184,6 @@ export default function Studies() {
   const filteredAndSortedStudies = useMemo(() => {
     let filtered = [...studies]
 
-    if (debouncedSearch) {
-      const searchLower = debouncedSearch.toLowerCase()
-      filtered = filtered.filter(
-        (study) =>
-          study.title.toLowerCase().includes(searchLower) ||
-          study.shortCode.toLowerCase().includes(searchLower) ||
-          study.leadPerson.toLowerCase().includes(searchLower) ||
-          study.description?.toLowerCase().includes(searchLower)
-      )
-    }
-
     if (filterType !== 'all') {
       filtered = filtered.filter((study) =>
         filterType === 'longitudinal' ? study.isLongitudinal : !study.isLongitudinal
@@ -210,7 +200,7 @@ export default function Studies() {
     })
 
     return filtered
-  }, [studies, debouncedSearch, filterType, filterLead, sortBy, sortDirection])
+  }, [studies, filterType, filterLead, sortBy, sortDirection])
 
   const displayStudies = filteredAndSortedStudies
   const filteredTotal = filteredAndSortedStudies.length

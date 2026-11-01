@@ -42,6 +42,25 @@ describe('Studies API (list, get, create, update)', () => {
       expect(data.pagination).toHaveProperty('totalPages')
     })
 
+    it.each([
+      ['lead person', 'Greenhouse'],
+      ['description', 'mosquito'],
+    ])('returns the study whose %s matches search', async (_field, search) => {
+      await createTestStudy(ctx.db, {
+        title: 'Vector survey',
+        shortCode: 'VEC02',
+        leadPerson: 'Greenhouse lab',
+        description: 'Household mosquito collections',
+      })
+      await createTestStudy(ctx.db, { title: 'Serology', shortCode: 'SER03', leadPerson: 'Ada Lovelace' })
+
+      const res = await ctx.request(`/api/studies?search=${encodeURIComponent(search)}`)
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { studies: { shortCode: string }[]; pagination: { total: number } }
+      expect(data.studies.map((s) => s.shortCode)).toEqual(['VEC02'])
+      expect(data.pagination.total).toBe(1)
+    })
+
     it('counts only studies created inside created_from and created_to', async () => {
       await createTestStudy(ctx.db, { title: 'Before', shortCode: 'B1', created: '2026-08-31 23:59:59' })
       await createTestStudy(ctx.db, { title: 'First day', shortCode: 'F1', created: '2026-09-01 00:00:00' })
