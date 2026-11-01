@@ -18,6 +18,17 @@ export function dateToUpperBound(column: SQLiteColumn, dateTo: string) {
  */
 export const SQL_IN_CHUNK_SIZE = 500
 
+/**
+ * Bound parameters one multi-row INSERT may use. bun:sqlite rejects a statement with more
+ * than 65,535; 8,000 stays well under that and under SQLite's own 32,766 default.
+ */
+const INSERT_PARAMETER_BUDGET = 8000
+
+/** Rows per multi-row INSERT for a table that binds `parametersPerRow` values per row. */
+export function rowsPerInsert(parametersPerRow: number): number {
+  return Math.max(1, Math.floor(INSERT_PARAMETER_BUDGET / parametersPerRow))
+}
+
 /** Batch an array into chunks for SQLite variable limits. */
 export function chunkArray<T>(array: T[], chunkSize: number): T[][] {
   const chunks: T[][] = []

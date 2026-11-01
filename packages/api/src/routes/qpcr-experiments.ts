@@ -28,6 +28,8 @@ import { normalizeWellPosition, parsePlateCSV, validateWellPosition } from '../l
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { withWriteTransaction } from '../db/write-transaction'
+import { recordQpcrResults } from '../lib/qpcr-results-write'
+import { serializeCsv, type CsvCellValue, type CSVExportOptions } from '@sampledb/contract'
 
 /**
  * Attach the Source (subject vs control provenance) to each well, resolving
@@ -46,6 +48,12 @@ async function attachWellSources<W extends { specimenId: number | null }>(
 }
 
 const ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+
+/**
+ * Instrument software imports the template, so it keeps its plain LF layout with no BOM and no
+ * formula neutralizing; fields are still quoted, and a missing value is written empty.
+ */
+const TEMPLATE_CSV_OPTIONS: CSVExportOptions = { bom: false, lineEnding: 'lf' }
 const COLS = 12
 
 export function createQpcrExperimentsRoutes(database: Database): Hono {
@@ -233,30 +241,24 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       const exp = await database.select().from(qpcrExperiment).where(eq(qpcrExperiment.id, id)).get()
       if (!exp) return c.json({ error: 'Not found' }, 404)
 
-      const runs = await database
-        .select({ id: qpcrRun.id })
-        .from(qpcrRun)
-        .where(eq(qpcrRun.qpcrExperimentId, id))
-      const runIds = runs.map((r) => r.id)
-      if (runIds.length > 0) {
-        const wellResults = await database
+      // Subqueries rather than id lists, so an experiment with many runs stays under the parameter limit.
+      const deleted = await withWriteTransaction(database, async (tx) => {
+        const runIds = tx
+          .select({ id: qpcrRun.id })
+          .from(qpcrRun)
+          .where(eq(qpcrRun.qpcrExperimentId, id))
+        const wellResultIds = tx
           .select({ id: qpcrWellResult.id })
           .from(qpcrWellResult)
           .where(inArray(qpcrWellResult.qpcrRunId, runIds))
-        const wellResultIds = wellResults.map((w) => w.id)
-        if (wellResultIds.length > 0) {
-          await database
-            .delete(qpcrAmplificationData)
-            .where(inArray(qpcrAmplificationData.qpcrWellResultId, wellResultIds))
-        }
-        await database.delete(qpcrWellResult).where(inArray(qpcrWellResult.qpcrRunId, runIds))
-      }
-      await database.delete(qpcrRun).where(eq(qpcrRun.qpcrExperimentId, id))
-      await database.delete(qpcrExperimentWell).where(eq(qpcrExperimentWell.qpcrExperimentId, id))
-      const deleted = await database
-        .delete(qpcrExperiment)
-        .where(eq(qpcrExperiment.id, id))
-        .returning()
+        await tx
+          .delete(qpcrAmplificationData)
+          .where(inArray(qpcrAmplificationData.qpcrWellResultId, wellResultIds))
+        await tx.delete(qpcrWellResult).where(inArray(qpcrWellResult.qpcrRunId, runIds))
+        await tx.delete(qpcrRun).where(eq(qpcrRun.qpcrExperimentId, id))
+        await tx.delete(qpcrExperimentWell).where(eq(qpcrExperimentWell.qpcrExperimentId, id))
+        return tx.delete(qpcrExperiment).where(eq(qpcrExperiment.id, id)).returning()
+      })
       if (deleted.length === 0) {
         return c.json({ error: 'Not found' }, 404)
       }
@@ -477,20 +479,6 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
 
       const now = utcNow()
       const userId = (c.get('user') as { id: number } | undefined)?.id ?? null
-      await database.delete(qpcrExperimentWell).where(eq(qpcrExperimentWell.qpcrExperimentId, id))
-      if (wellsToInsert.length > 0) {
-        await database.insert(qpcrExperimentWell).values(
-          wellsToInsert.map((w) => ({
-            qpcrExperimentId: w.qpcrExperimentId,
-            wellPosition: w.wellPosition,
-            barcode: w.barcode,
-            storageContainerId: w.storageContainerId,
-            specimenId: w.specimenId,
-            contentType: w.contentType,
-            standardDensity: w.standardDensity,
-          }))
-        )
-      }
       // After plate upload, set status to in_progress and optionally update plate barcode
       const experimentUpdates: { status: string; plateBarcode?: string; lastUpdated: string; updatedBy: number | null } = {
         status: 'in_progress',
@@ -500,7 +488,14 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       if (data.plateBarcode !== undefined && data.plateBarcode !== null) {
         experimentUpdates.plateBarcode = data.plateBarcode
       }
-      await database.update(qpcrExperiment).set(experimentUpdates).where(eq(qpcrExperiment.id, id))
+      // Replace the wells and advance the status together, so a failure keeps the previous layout.
+      await withWriteTransaction(database, async (tx) => {
+        await tx.delete(qpcrExperimentWell).where(eq(qpcrExperimentWell.qpcrExperimentId, id))
+        if (wellsToInsert.length > 0) {
+          await tx.insert(qpcrExperimentWell).values(wellsToInsert)
+        }
+        await tx.update(qpcrExperiment).set(experimentUpdates).where(eq(qpcrExperiment.id, id))
+      })
 
       const inserted = await database
         .select()
@@ -648,74 +643,12 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         parseResult = await parseQuantStudioXls(buffer, data.fileName)
       }
 
-      const now = utcNow()
-      const [runRow] = await database
-        .insert(qpcrRun)
-        .values({
-          qpcrExperimentId: id,
-          instrumentType: data.instrumentType,
-          runStartedAt: parseResult.runMetadata.runStartedAt,
-          runEndedAt: parseResult.runMetadata.runEndedAt,
-          experimentName: parseResult.runMetadata.experimentName,
-          fileName: parseResult.runMetadata.fileName,
-          created: now,
-          slope: parseResult.runMetadata.slope ?? null,
-          yIntercept: parseResult.runMetadata.yIntercept ?? null,
-          rSquared: parseResult.runMetadata.rSquared ?? null,
-          efficiency: parseResult.runMetadata.efficiency ?? null,
-        })
-        .returning()
-      const runId = runRow.id
-
-      const wellResultKeys = new Map<string, number>()
-      const deduped = new Map<string, (typeof parseResult.wellResults)[0]>()
-      for (const row of parseResult.wellResults) {
-        const key = `${row.wellPosition}\t${row.targetName ?? ''}`
-        deduped.set(key, row)
-      }
-      for (const row of deduped.values()) {
-        // Must match the amplification lookup below, which uses '' for a missing target.
-        const targetKey = row.targetName ?? ''
-        const [inserted] = await database
-          .insert(qpcrWellResult)
-          .values({
-            qpcrRunId: runId,
-            wellPosition: row.wellPosition,
-            targetName: row.targetName,
-            sampleBarcode: row.sampleBarcode,
-            task: row.task,
-            cq: row.cq,
-            quantity: row.quantity,
-            standardQuantity: row.standardQuantity,
-            ampStatus: row.ampStatus,
-          })
-          .returning()
-        wellResultKeys.set(`${row.wellPosition}\t${targetKey}`, inserted.id)
-      }
-
-      if (parseResult.amplificationData.length > 0) {
-        const ampRows: Array<{ qpcrWellResultId: number; cycle: number; rn: number | null; deltaRn: number | null }> = []
-        for (const row of parseResult.amplificationData) {
-          const key = `${row.wellPosition}\t${row.targetName ?? ''}`
-          const wellResultId = wellResultKeys.get(key)
-          if (wellResultId != null) {
-            ampRows.push({
-              qpcrWellResultId: wellResultId,
-              cycle: row.cycle,
-              rn: row.rn ?? null,
-              deltaRn: row.deltaRn ?? null,
-            })
-          }
-        }
-        if (ampRows.length > 0) {
-          await database.insert(qpcrAmplificationData).values(ampRows)
-        }
-      }
-
-      await database
-        .update(qpcrExperiment)
-        .set({ status: 'results_uploaded', lastUpdated: now, updatedBy: (c.get('user') as { id: number } | undefined)?.id ?? null })
-        .where(eq(qpcrExperiment.id, id))
+      const runRow = await recordQpcrResults(database, {
+        experimentId: id,
+        instrumentType: data.instrumentType,
+        parseResult,
+        userId: (c.get('user') as { id: number } | undefined)?.id ?? null,
+      })
 
       return c.json({ run: runRow, wellResultCount: parseResult.wellResults.length, amplificationCount: parseResult.amplificationData.length }, 201)
     } catch (error) {
@@ -840,8 +773,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       const instrumentType = exp.instrumentType
 
       if (format === 'biorad') {
-        const header = 'Well,Fluorophore,Target Name,Content,Sample Name,Quantity'
-        const lines: string[] = [header]
+        const rows: CsvCellValue[][] = []
         for (const row of ROWS) {
           for (let col = 1; col <= COLS; col++) {
             const pos = `${row}${col.toString().padStart(2, '0')}`
@@ -854,12 +786,15 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
             const quantity = well.contentType === 'standard' && well.standardDensity != null ? String(well.standardDensity) : ''
             const wellA1 = wellPositionToA1(pos)
             for (const t of targets) {
-              const fluorophore = t.fluorophore
-              lines.push(`${wellA1},${fluorophore},${t.targetName},${content},${sampleName},${quantity}`)
+              rows.push([wellA1, t.fluorophore, t.targetName, content, sampleName, quantity])
             }
           }
         }
-        const csv = lines.join('\n')
+        const csv = serializeCsv(
+          ['Well', 'Fluorophore', 'Target Name', 'Content', 'Sample Name', 'Quantity'],
+          rows,
+          TEMPLATE_CSV_OPTIONS,
+        )
         return new Response(csv, {
           status: 200,
           headers: {
@@ -872,12 +807,11 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       const meta = [
         '* Block Type = 96-Well',
         '* Experiment Type = Standard Curve',
-        `* Instrument Type = ${instrumentType}`,
+        `* Instrument Type = ${instrumentType ?? ''}`,
         '* No. Of Wells = 96',
         '* Set Up Well Section Info =',
       ]
-      const dataHeader = 'Well\tWell Position\tSample Name\tTarget Name\tTask\tReporter\tQuencher\tQuantity'
-      const dataLines: string[] = [dataHeader]
+      const dataRows: CsvCellValue[][] = []
       for (const row of ROWS) {
         for (let col = 1; col <= COLS; col++) {
           const pos = `${row}${col.toString().padStart(2, '0')}`
@@ -897,11 +831,16 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
               if (r.toLowerCase() === 'sybr') return 'None'
               return 'NFQ-MGB'
             })()
-            dataLines.push(`${wellIdx}\t${wellPos}\t${sampleName}\t${t.targetName}\t${task}\t${reporter}\t${quencher}\t${quantity}`)
+            dataRows.push([wellIdx, wellPos, sampleName, t.targetName, task, reporter, quencher, quantity])
           }
         }
       }
-      const tsv = [...meta, '', dataLines.join('\n')].join('\n')
+      const dataSection = serializeCsv(
+        ['Well', 'Well Position', 'Sample Name', 'Target Name', 'Task', 'Reporter', 'Quencher', 'Quantity'],
+        dataRows,
+        { ...TEMPLATE_CSV_OPTIONS, delimiter: '\t' },
+      )
+      const tsv = [...meta, '', dataSection].join('\n')
       return new Response(tsv, {
         status: 200,
         headers: {
