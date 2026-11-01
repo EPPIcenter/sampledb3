@@ -26,9 +26,9 @@ export async function validateDerivationsCsv(
   }
   try {
     const result = await gateway.validateCsv(csvContent, settings)
-    const { headers, rows } = parseFullCsv(csvContent)
+    const { headers, rows, fileRows } = parseFullCsv(csvContent)
     return [
-      { type: 'VALIDATED', result, headers, rows: rows.map((row) => ({ ...row })) },
+      { type: 'VALIDATED', result, headers, rows: rows.map((row) => ({ ...row })), fileRows },
       { type: 'STEP_SET', step: nextStepAfterValidate(result) },
     ]
   } catch (error: unknown) {

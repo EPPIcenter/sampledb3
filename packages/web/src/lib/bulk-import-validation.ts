@@ -5,15 +5,22 @@
 import type { ContainerType } from './container-types'
 import { getCollectionNameColumn } from './container-columns'
 import type { FlatBulkImportContainer } from './bulk-import-payload'
-import { parseCsv } from '@sampledb/contract'
+import { parseCsvFileRows } from './csv-file-rows'
 
 export interface CSVRow {
   [key: string]: string
 }
 
+/** An import error and the spreadsheet rows it concerns (header is row 1); none for a file-wide error. */
 export interface BulkImportValidationError {
-  row: number
+  fileRows: number[]
   error: string
+}
+
+/** "Row 3: …", "Rows 2, 5: …", or the bare message for a file-wide error. */
+export function formatBulkImportError({ fileRows, error }: BulkImportValidationError): string {
+  if (fileRows.length === 0) return error
+  return `${fileRows.length === 1 ? 'Row' : 'Rows'} ${fileRows.join(', ')}: ${error}`
 }
 
 export type ImportType = 'subjects' | 'specimens' | 'combined'
@@ -85,22 +92,27 @@ function normalizeHeader(header: string): string {
 }
 
 export function parseBulkImportCSV(text: string): CSVRow[] {
+  return parseBulkImportCsvFileRows(text).rows
+}
+
+/**
+ * Parse bulk import CSV into header-keyed rows, dropping rows whose cells are all blank.
+ * `fileRows[i]` is the spreadsheet row of `rows[i]`, counting the header as row 1.
+ */
+export function parseBulkImportCsvFileRows(text: string): { rows: CSVRow[]; fileRows: number[] } {
   // Shared RFC 4180 parser: quoted commas ("low vol, hemolyzed"), quotes, CRLF, and BOM.
-  const lines = parseCsv(text, { skipBlankRows: true })
-  if (lines.length < 2) return []
+  const parsed = parseCsvFileRows(text)
+  if (!parsed) return { rows: [], fileRows: [] }
 
-  const headers = lines[0].map((h) => normalizeHeader(h.trim()))
-  const rows: CSVRow[] = []
-
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i]
+  const headers = parsed.header.map((h) => normalizeHeader(h.trim()))
+  const rows = parsed.rows.map(({ cells }) => {
     const row: CSVRow = {}
     headers.forEach((header, j) => {
-      row[header] = values[j]?.trim() ?? ''
+      row[header] = cells[j]?.trim() ?? ''
     })
-    rows.push(row)
-  }
-  return rows
+    return row
+  })
+  return { rows, fileRows: parsed.rows.map((r) => r.fileRow) }
 }
 
 /** Resolve paper parent from bulk import CSV row (exactly one of box_name or bag_name). */

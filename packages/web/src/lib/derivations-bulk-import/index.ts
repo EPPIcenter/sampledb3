@@ -17,6 +17,7 @@ export {
   derivationsBulkReducer,
   selectMissingCollections,
   selectCsvForImport,
+  selectFileRow,
 } from './reducer'
 export {
   fileLoadedEvent,

@@ -35,7 +35,7 @@ On a study detail page, **Bulk import** already knows the study. For **Subjects 
 Validation has two stages:
 
 1. **Parsing and collection lookup.** The browser maps columns, then asks the server which collections in the file do not exist yet. Row-level rules are not decided in the browser.
-2. **Server validation.** Before any write, the server checks study and subject names, specimen types, collection dates, container types and units, that collections exist or have a location so they can be created, that locations can hold collections, and that barcodes and positions are unique in the database and in the file. You see every error at once, with row numbers where applicable. Fix the CSV or collections, then click **Validate & Continue** again.
+2. **Server validation.** Before any write, the server checks study and subject names, specimen types, collection dates, container types and units, that collections exist or have a location so they can be created, that locations can hold collections, and that barcodes and positions are unique in the database and in the file. You see every error at once, with the row it is on where applicable. Rows are numbered as a spreadsheet shows them, with the header as row 1, so blank rows count. An error on a subject whose rows are spread through the file names each of its rows. Fix the CSV or collections, then click **Validate & Continue** again.
 
 Common failures include missing columns, wrong date or position format, unknown study codes, duplicate barcodes or positions, and locations that cannot hold collections.
 
