@@ -39,6 +39,7 @@ import {
   qpcrExperimentWell,
   containerDerivation,
   studySubject,
+  users,
 } from '../../db/schema'
 
 describe('Collections API', () => {
@@ -288,12 +289,156 @@ describe('Collections API', () => {
       expect(tube?.position).toBe('A01')
     })
 
+    it('returns 200 with moved and errors when a best-effort move moves some Containers', async () => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const loc = await createTestLocation(ctx.db, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'P96', locationId: loc.id })
+      const container = await createTestStorageContainer(ctx.db)
+      await createTestMicronixTube(ctx.db, { containerId: container.id, collectionId: plate.id, barcode: 'MT-1', position: 'A01' })
+
+      const res = await ctx.request('/api/collections/containers/move', {
+        method: 'POST',
+        json: {
+          atomicMode: 'best_effort',
+          mappings: [{ fromCollectionName: 'P96', toCollectionName: 'P96' }],
+          moves: [
+            { identifier: { type: 'barcode', barcode: 'MT-1' }, targetPosition: 'C03' },
+            { identifier: { type: 'barcode', barcode: 'MISSING' }, targetPosition: 'D04' },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ success: false, moved: 1, errors: [{ row: 2, error: 'Container not found' }] })
+      const tube = ctx.db.select().from(micronixTube).where(eq(micronixTube.id, container.id)).get()
+      expect(tube?.position).toBe('C03')
+    })
+
+    it('records the logged-in user and time on a moved Container', async () => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const loc = await createTestLocation(ctx.db, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'P96', locationId: loc.id })
+      const container = await createTestStorageContainer(ctx.db)
+      await createTestMicronixTube(ctx.db, { containerId: container.id, collectionId: plate.id, barcode: 'MT-1', position: 'A01' })
+      const old = '2020-01-01T00:00:00.000Z'
+      await ctx.db.update(storageContainer).set({ lastUpdated: old }).where(eq(storageContainer.id, container.id))
+
+      const res = await ctx.request('/api/collections/containers/move', {
+        method: 'POST',
+        json: {
+          mappings: [{ fromCollectionName: 'P96', toCollectionName: 'P96' }],
+          moves: [{ identifier: { type: 'barcode', barcode: 'MT-1' }, targetPosition: 'B02' }],
+        },
+      })
+
+      expect(res.status).toBe(200)
+      const admin = ctx.db.select().from(users).where(eq(users.email, 'admin@test.com')).get()
+      const after = ctx.db.select().from(storageContainer).where(eq(storageContainer.id, container.id)).get()
+      expect(after?.updatedBy).toBe(admin?.id)
+      expect(after?.lastUpdated).not.toBe(old)
+    })
+
     it('returns 401 when not authenticated', async () => {
       const res = await authenticatedRequest(ctx.createRequestApp(), '/api/collections/containers/move', {
         method: 'POST',
         json: { mappings: [], moves: [] },
       })
       expect(res.status).toBe(401)
+    })
+  })
+
+  describe('POST /api/collections/move', () => {
+    async function setupPlateAndBox() {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const src = await createTestLocation(ctx.db, { name: 'Src', storageTypeId: String(storageType.id), canContainCollections: true })
+      const dst = await createTestLocation(ctx.db, { name: 'Dst', storageTypeId: String(storageType.id), canContainCollections: true })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'Plate1', locationId: src.id })
+      const cryoBox = await createTestCryovialBox(ctx.db, { name: 'CryoBox1', locationId: src.id })
+      return { src, dst, plate, cryoBox }
+    }
+
+    it('commits nothing across plates and boxes when an all-or-nothing move has a failing box', async () => {
+      const { src, dst, plate } = await setupPlateAndBox()
+
+      const res = await ctx.request('/api/collections/move', {
+        method: 'POST',
+        json: {
+          atomicMode: 'all_or_nothing',
+          moves: [
+            { collectionType: 'micronix_plate', identifier: { type: 'id', id: plate.id }, targetLocationId: dst.id },
+            { collectionType: 'cryovial_box', identifier: { type: 'id', id: 999_999 }, targetLocationId: dst.id },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.moved).toBe(0)
+      expect(body.errors).toEqual([{ row: 2, error: expect.stringContaining('ID 999999') }])
+      const after = ctx.db.select().from(micronixPlate).where(eq(micronixPlate.id, plate.id)).get()
+      expect(after?.locationId).toBe(src.id)
+    })
+
+    it('returns 200 with moved and errors when a best-effort move moves some Collections', async () => {
+      const { src, dst, plate, cryoBox } = await setupPlateAndBox()
+
+      const res = await ctx.request('/api/collections/move', {
+        method: 'POST',
+        json: {
+          atomicMode: 'best_effort',
+          moves: [
+            { collectionType: 'micronix_plate', identifier: { type: 'id', id: plate.id }, targetLocationId: dst.id },
+            { collectionType: 'cryovial_box', identifier: { type: 'id', id: cryoBox.id }, targetLocationId: src.id },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({
+        success: false,
+        moved: 1,
+        errors: [{ row: 2, error: expect.stringContaining('already at location') }],
+      })
+      expect(ctx.db.select().from(micronixPlate).where(eq(micronixPlate.id, plate.id)).get()?.locationId).toBe(dst.id)
+    })
+
+    it('records the logged-in user and time on each moved Collection', async () => {
+      const { dst, plate, cryoBox } = await setupPlateAndBox()
+      const old = '2020-01-01T00:00:00.000Z'
+      await ctx.db.update(micronixPlate).set({ lastUpdated: old }).where(eq(micronixPlate.id, plate.id))
+      await ctx.db.update(cryovialBox).set({ lastUpdated: old }).where(eq(cryovialBox.id, cryoBox.id))
+
+      const res = await ctx.request('/api/collections/move', {
+        method: 'POST',
+        json: {
+          moves: [
+            { collectionType: 'micronix_plate', identifier: { type: 'id', id: plate.id }, targetLocationId: dst.id },
+            { collectionType: 'cryovial_box', identifier: { type: 'id', id: cryoBox.id }, targetLocationId: dst.id },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ success: true, moved: 2 })
+      const admin = ctx.db.select().from(users).where(eq(users.email, 'admin@test.com')).get()
+      const afterPlate = ctx.db.select().from(micronixPlate).where(eq(micronixPlate.id, plate.id)).get()
+      const afterBox = ctx.db.select().from(cryovialBox).where(eq(cryovialBox.id, cryoBox.id)).get()
+      expect(afterPlate?.updatedBy).toBe(admin?.id)
+      expect(afterPlate?.lastUpdated).not.toBe(old)
+      expect(afterBox?.updatedBy).toBe(admin?.id)
+      expect(afterBox?.lastUpdated).not.toBe(old)
+    })
+
+    it('returns 400 for a move with no Collection type', async () => {
+      const { dst, plate } = await setupPlateAndBox()
+
+      const res = await ctx.request('/api/collections/move', {
+        method: 'POST',
+        json: { moves: [{ identifier: { type: 'id', id: plate.id }, targetLocationId: dst.id }] },
+      })
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).errors).toEqual([{ row: 1, error: 'collectionType is required' }])
     })
   })
 

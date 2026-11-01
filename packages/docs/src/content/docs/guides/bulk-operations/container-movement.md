@@ -56,9 +56,9 @@ On **Create Plates**, pick a **location** for each new plate and optionally a **
 On **Resolve**, review source plates and unresolved barcodes. Fix the CSV on Upload if needed. Choose **atomicity mode**:
 
 - **All-or-nothing (default):** any invalid row blocks all moves.
-- **Best effort:** valid rows move; invalid rows are returned as errors.
+- **Best effort:** valid rows move; invalid rows are returned as errors. The rows that moved stay moved, so fix and resubmit only the listed rows.
 
-Click **Execute Moves**. Use **Back** to return to Upload, or to Create Plates if destinations still need creating.
+Click **Execute Moves**. Each moved container records the move as its last update, with your user as the updater. Use **Back** to return to Upload, or to Create Plates if destinations still need creating.
 
 ### Multiple files
 

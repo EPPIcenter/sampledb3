@@ -271,11 +271,18 @@ export const moveSheetsBodySchema = z.object({
   targetCollectionType: z.enum(['box', 'bag']),
 })
 
+const moveableCollectionTypeSchema = z.enum(['micronix_plate', 'cryovial_box', 'box', 'bag'])
+
+/**
+ * One request moves Collections of any type in one transaction: each move names its type,
+ * or inherits the top-level `collectionType`.
+ */
 export const moveCollectionsBodySchema = z.object({
-  collectionType: z.enum(['micronix_plate', 'cryovial_box', 'box', 'bag']),
+  collectionType: moveableCollectionTypeSchema.optional(),
   atomicMode: z.enum(['all_or_nothing', 'best_effort']).default('all_or_nothing'),
   moves: z.array(
     z.object({
+      collectionType: moveableCollectionTypeSchema.optional(),
       identifier: z.union([
         z.object({ type: z.literal('id'), id: z.number().int().positive() }),
         z.object({

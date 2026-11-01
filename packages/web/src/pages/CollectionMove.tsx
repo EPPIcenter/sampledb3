@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { invalidateAfterBulkWrite } from '../lib/query-client'
 import { collectionsApi } from '../lib/api/collections'
+import { moveResultFromRejection, type MoveResult } from '../lib/move-result'
 import CollectionMoveTreePicker, { type Collection } from '../components/CollectionMoveTreePicker'
 import LocationTreePicker, { type LocationSelection } from '../components/LocationTreePicker'
 import WriteGuard from '../components/WriteGuard'
@@ -60,11 +61,9 @@ function CollectionMoveContent() {
   const [targetLocationId, setTargetLocationId] = useState<number | null>(null)
   const [targetLocationPath, setTargetLocationPath] = useState<string>('')
   const [atomicMode, setAtomicMode] = useState<CollectionMoveAtomicMode>('all_or_nothing')
-  const [moveResult, setMoveResult] = useState<{
-    success: boolean
-    moved: number
-    errors?: Array<{ row: number; error: string }>
-  } | null>(null)
+  const [moveResult, setMoveResult] = useState<MoveResult | null>(null)
+  /** The Collections in the order they were sent; an error's `row` N is `movedCollections[N - 1]`. */
+  const [movedCollections, setMovedCollections] = useState<Collection[]>([])
 
   const handleCollectionToggle = (id: number, type: CollectionType) => {
     const key = toKey({ type, id })
@@ -126,104 +125,41 @@ function CollectionMoveContent() {
     setMutating(true)
     setMoveResult(null)
 
-    try {
-      // Group selected collections by type (each key is "type:id")
-      const collectionsByType = new Map<CollectionType, Array<{ id: number; collection: Collection }>>()
-      
-      Array.from(selectedCollectionIds).forEach((key) => {
+    // One request moves every selected Collection, whatever its type, in one transaction,
+    // so all-or-nothing holds across plates, boxes and bags.
+    const toMove = Array.from(selectedCollectionIds)
+      .map((key) => {
         const { type, id } = fromKey(key)
-        const collection = collections.find((c) => c.type === type && c.id === id)
-        if (collection) {
-          if (!collectionsByType.has(type)) {
-            collectionsByType.set(type, [])
-          }
-          collectionsByType.get(type)!.push({ id, collection })
-        }
+        return collections.find((c) => c.type === type && c.id === id)
       })
+      .filter((c): c is Collection => c !== undefined)
+    setMovedCollections(toMove)
 
-      // Execute moves for each type
-      const allErrors: Array<{ row: number; error: string }> = []
-      let totalMoved = 0
-      let allSuccess = true
-
-      for (const [collectionType, typeCollections] of collectionsByType.entries()) {
-        const moves = typeCollections.map(({ id }) => ({
-          identifier: {
-            type: 'id' as const,
-            id,
-          },
+    let result: MoveResult
+    try {
+      result = await collectionsApi.moveCollections({
+        atomicMode,
+        moves: toMove.map((c) => ({
+          collectionType: c.type,
+          identifier: { type: 'id' as const, id: c.id },
           targetLocationId,
-        }))
-
-        try {
-          const response = await collectionsApi.moveCollections({
-            collectionType,
-            atomicMode,
-            moves,
-          })
-
-          if (response.success) {
-            totalMoved += response.moved
-          } else {
-            allSuccess = false
-            totalMoved += response.moved || 0
-            if (response.errors) {
-              // Adjust row numbers to account for previous moves
-              const baseRow = allErrors.length
-              allErrors.push(
-                ...response.errors.map((err) => ({
-                  row: err.row + baseRow,
-                  error: err.error,
-                }))
-              )
-            }
-          }
-        } catch (error: any) {
-          allSuccess = false
-          const apiErrors = error.response?.data?.errors
-          if (Array.isArray(apiErrors) && apiErrors.length > 0) {
-            const baseRow = allErrors.length
-            apiErrors.forEach((e: { row: number; error: string }) => {
-              allErrors.push({ row: baseRow + e.row, error: e.error })
-            })
-          } else {
-            allErrors.push({
-              row: allErrors.length,
-              error: error.response?.data?.error || error.message || `Failed to move ${collectionType} collections`,
-            })
-          }
-          // In strict mode, stop after the first failing type-group
-          if (atomicMode === 'all_or_nothing') {
-            break
-          }
-        }
-      }
-
-      if (totalMoved > 0) void invalidateAfterBulkWrite(queryClient)
-      setMoveResult({
-        success: allSuccess,
-        moved: totalMoved,
-        errors: allErrors.length > 0 ? allErrors : undefined,
+        })),
       })
-      setCurrentStep('execute')
-    } catch (error: any) {
-      const apiErrors = error.response?.data?.errors
-      setMoveResult({
-        success: false,
-        moved: 0,
-        errors:
-          Array.isArray(apiErrors) && apiErrors.length > 0
-            ? apiErrors.map((e: { row: number; error: string }) => ({ row: e.row, error: e.error }))
-            : [
-                {
-                  row: 0,
-                  error: error.response?.data?.error || error.message || 'Failed to move collections',
-                },
-              ],
-      })
-    } finally {
-      setMutating(false)
+    } catch (error: unknown) {
+      result = moveResultFromRejection(error, 'Failed to move collections')
     }
+
+    // A move that moved anything changed Location and Collection pages, even if some rows failed.
+    if (result.moved > 0) void invalidateAfterBulkWrite(queryClient)
+    setMoveResult(result)
+    setCurrentStep('execute')
+    setMutating(false)
+  }
+
+  const describeErrorRow = (row: number): string => {
+    const collection = row > 0 ? movedCollections[row - 1] : undefined
+    if (!collection) return 'Request'
+    return `Row ${row} (${collection.name}, ${getCollectionTypeLabel(collection.type)})`
   }
 
   const handleStartOver = () => {
@@ -232,6 +168,7 @@ function CollectionMoveContent() {
     setTargetLocationId(null)
     setTargetLocationPath('')
     setMoveResult(null)
+    setMovedCollections([])
     void collectionsQuery.refetch()
   }
 
@@ -391,7 +328,7 @@ function CollectionMoveContent() {
                 </div>
                 <p className="text-xs text-app-text-muted mt-2">
                   {atomicMode === 'all_or_nothing'
-                    ? 'For each collection type request, any validation error blocks moves for that type.'
+                    ? 'Any validation error blocks every move, across all collection types.'
                     : 'Valid moves are applied and invalid rows are returned as errors.'}
                 </p>
               </div>
@@ -508,12 +445,14 @@ function CollectionMoveContent() {
                         d="M6 18L18 6M6 6l12 12"
                       />
                     </svg>
-                    <h2 className="text-xl font-semibold">Move Failed</h2>
+                    <h2 className="text-xl font-semibold">
+                      {moveResult.moved > 0 ? 'Move Partly Completed' : 'Move Failed'}
+                    </h2>
                   </div>
                   <p className="text-app-text mb-4">
                     {moveResult.moved > 0
-                      ? `Moved ${moveResult.moved} collection${moveResult.moved !== 1 ? 's' : ''}, but some errors occurred.`
-                      : 'Failed to move collections.'}
+                      ? `Moved ${moveResult.moved} collection${moveResult.moved !== 1 ? 's' : ''} to ${targetLocationPath || `location ${targetLocationId}`}. The rows below did not move.`
+                      : 'No collections were moved.'}
                   </p>
                   {moveResult.errors && moveResult.errors.length > 0 && (
                     <div className="bg-app-trend-down/10 border border-app-trend-down rounded p-4">
@@ -521,7 +460,7 @@ function CollectionMoveContent() {
                       <ul className="list-disc list-inside text-sm text-app-trend-down space-y-1">
                         {moveResult.errors.map((error, idx) => (
                           <li key={idx}>
-                            Row {error.row + 1}: {error.error}
+                            {describeErrorRow(error.row)}: {error.error}
                           </li>
                         ))}
                       </ul>

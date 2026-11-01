@@ -217,10 +217,16 @@ export const collectionsApi = {
     targetCollectionId: number
     targetCollectionType: 'box' | 'bag'
   }) => api.post<{ success: boolean; moved: number }>('/collections/sheets/move', data),
+  /**
+   * Move Collections of any type in one transaction. Each move names its type, or inherits
+   * `collectionType`. Resolves to 200 bodies, including a best-effort move that moved some
+   * Collections (`success: false`, `moved > 0`, `errors`); a move that moved nothing rejects with 400.
+   */
   moveCollections: (data: {
-    collectionType: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+    collectionType?: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
     atomicMode?: 'all_or_nothing' | 'best_effort'
     moves: Array<{
+      collectionType?: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
       identifier:
         | { type: 'id'; id: number }
         | { type: 'name'; name: string; locationId?: number; locationPath?: string }

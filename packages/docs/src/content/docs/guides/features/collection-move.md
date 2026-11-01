@@ -25,13 +25,15 @@ The destination must exist and must be allowed to hold collections. Intermediate
 
 **Review & Confirm** lists the collections (type and current location) and the destination (storage type and optional description). Choose atomicity:
 
-- **All-or-nothing (default):** for each collection type in the request, any validation error blocks moves for that type.
+- **All-or-nothing (default):** any validation error blocks every move, across all collection types. Plates, boxes, and bags move together in one transaction.
 - **Best effort:** valid moves are applied; invalid rows are returned as errors.
 
 Click **Confirm & Move**.
 
 ## Complete
 
-The last step shows how many collections moved and any errors. Click **Move More Collections** to start over.
+The last step shows how many collections moved and any errors. Each error names the collection that did not move. If a best-effort move moved some collections, the heading reads **Move Partly Completed**: the listed collections stayed where they were, and the rest moved. Don't repeat the whole move; move only the listed collections again.
+
+Each moved collection records the move as its last update, with your user as the updater. Click **Move More Collections** to start over.
 
 If a destination is rejected, confirm the location exists and that it can contain collections. Create it on **Locations** first if needed.
