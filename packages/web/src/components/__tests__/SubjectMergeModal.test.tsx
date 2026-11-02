@@ -85,6 +85,27 @@ describe('SubjectMergeModal', () => {
     expect(studiesApi.getSubjects).toHaveBeenCalledWith(STUDY_ID, expect.objectContaining({ search: 'P01050' }))
   })
 
+  it('keeps the listed subjects clickable while a newer search runs', async () => {
+    serveSubjects()
+    const serve = vi.mocked(studiesApi.getSubjects).getMockImplementation()!
+    // The search for the full text never answers, so the list must stay on the previous results.
+    vi.mocked(studiesApi.getSubjects).mockImplementation((id, params) =>
+      params?.search === 'P00002' ? new Promise(() => {}) : serve(id, params),
+    )
+    const user = userEvent.setup()
+    await renderModal()
+
+    await user.type(screen.getByLabelText(/merge into/i), 'P00002')
+    await waitFor(() =>
+      expect(studiesApi.getSubjects).toHaveBeenCalledWith(STUDY_ID, expect.objectContaining({ search: 'P00002' })),
+    )
+
+    expect(screen.queryByText(/searching subjects/i)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /P00002/ }))
+    expect(screen.getByLabelText(/merge into/i)).toHaveValue('P00002')
+    expect(screen.queryByRole('button', { name: /P00002/ })).not.toBeInTheDocument()
+  })
+
   it('shows the specimen count the search returns', async () => {
     serveSubjects()
     const user = userEvent.setup()

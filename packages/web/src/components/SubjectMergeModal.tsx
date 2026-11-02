@@ -55,7 +55,9 @@ function SubjectPicker({
   const subjectsQuery = useStudySubjects(
     studyId,
     { page: 1, limit: SUBJECT_SEARCH_LIMIT, ...(debouncedSearch ? { search: debouncedSearch } : {}) },
-    { enabled: open },
+    // Keep the last results while a newer search loads, so an option isn't pulled out from
+    // under the pointer mid-click.
+    { enabled: open, keepPreviousResults: true },
   )
   const results = (subjectsQuery.data?.subjects ?? []).filter((s) => s.id !== excludeId)
   const total = subjectsQuery.data?.pagination?.total ?? results.length

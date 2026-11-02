@@ -4,6 +4,7 @@ import {
   useMutation,
   useQueryClient,
   type QueryClient,
+  keepPreviousData,
 } from '@tanstack/react-query'
 import { studiesApi, type Study, type StudySummaryBasic } from '../lib/api/studies'
 import { api } from '../lib/api/client'
@@ -196,7 +197,8 @@ export function useStudy(id: number) {
 export function useStudySubjects(
   studyId: number,
   params?: { page?: number; limit?: number; search?: string },
-  options?: { enabled?: boolean },
+  /** `keepPreviousResults`: while new params load, keep showing the last results (a search box). */
+  options?: { enabled?: boolean; keepPreviousResults?: boolean },
 ) {
   return useQuery({
     queryKey: [...studyKeys.detail(studyId), 'subjects', params],
@@ -205,6 +207,7 @@ export function useStudySubjects(
       return res
     },
     enabled: !!studyId && (options?.enabled ?? true),
+    ...(options?.keepPreviousResults ? { placeholderData: keepPreviousData } : {}),
   })
 }
 
