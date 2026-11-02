@@ -49,6 +49,18 @@ function serveSubjects() {
   })
 }
 
+/**
+ * The option for `name` once the debounced search for it has run. Typing waits 250 ms before
+ * searching, so on a loaded CI runner the result can take longer than findBy's default 1 s.
+ */
+async function findOption(name: string) {
+  await waitFor(
+    () => expect(studiesApi.getSubjects).toHaveBeenCalledWith(STUDY_ID, expect.objectContaining({ search: name })),
+    { timeout: 5000 },
+  )
+  return screen.findByRole('button', { name: new RegExp(name) }, { timeout: 5000 })
+}
+
 async function renderModal() {
   await render(<SubjectMergeModal isOpen onClose={vi.fn()} studyId={STUDY_ID} onSuccess={vi.fn()} />)
 }
@@ -74,10 +86,10 @@ describe('SubjectMergeModal', () => {
     await renderModal()
 
     await user.type(screen.getByLabelText(/merge from/i), 'P01050')
-    await user.click(await screen.findByRole('button', { name: /P01050/ }))
+    await user.click(await findOption('P01050'))
 
     await user.type(screen.getByLabelText(/merge into/i), 'P00002')
-    await user.click(await screen.findByRole('button', { name: /P00002/ }))
+    await user.click(await findOption('P00002'))
 
     await user.click(screen.getByRole('button', { name: 'Merge Subjects' }))
 
@@ -112,7 +124,7 @@ describe('SubjectMergeModal', () => {
     await renderModal()
 
     await user.type(screen.getByLabelText(/merge from/i), 'P01052')
-    const option = await screen.findByRole('button', { name: /P01052/ })
+    const option = await findOption('P01052')
 
     expect(option).toHaveTextContent('2 specimens')
   })
