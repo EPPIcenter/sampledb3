@@ -62,6 +62,9 @@ function addMicronixTube(sqlite: Database, id: number, plateId: number, barcode:
 
 /** Production's rows for every decision, plus neighbours each step must leave alone. */
 function seedProductionRows(sqlite: Database): void {
+  // Polyclonal Ab: no allowed Container types, though Specimen 141173's tubes are micronix.
+  sqlite.exec(`INSERT INTO specimen_type (id, name, created, last_updated) VALUES (47, 'Polyclonal Ab', '${NOW}', '${NOW}')`)
+  sqlite.exec(`INSERT INTO specimen_type_container_type (specimen_type_id, container_type) VALUES (2, 'paper')`)
   addSubject(sqlite, 31047, 3, '3d7_0.05')
   addSubject(sqlite, 66537, 3, '3D7_0.05')
   addSubject(sqlite, 31049, 3, '3d7_10k')
@@ -184,6 +187,11 @@ describe('data fix 2026-11-01-eppicenter-legacy-cleanup', () => {
     // Decision 8
     expect(column(sqlite, `SELECT id FROM micronix_plate WHERE trim(name) = 'EXVIVO-27'`)).toEqual([1761])
     expect(column(sqlite, 'SELECT COUNT(*) FROM micronix_tube WHERE collection_id = 1761')).toEqual([1])
+    // Polyclonal Ab allows micronix tubes; other types' allowed types are unchanged.
+    expect(rows(sqlite, 'SELECT specimen_type_id, container_type FROM specimen_type_container_type ORDER BY specimen_type_id')).toEqual([
+      { specimen_type_id: 2, container_type: 'paper' },
+      { specimen_type_id: 47, container_type: 'micronix_tube' },
+    ])
     // Decision 6: the app's Subject merge, run for both pairs.
     expect(rows(sqlite, 'SELECT id, name FROM study_subject WHERE study_id = 3 ORDER BY id')).toEqual([
       { id: 66537, name: '3D7_0.05' },
@@ -222,6 +230,7 @@ describe('data fix 2026-11-01-eppicenter-legacy-cleanup', () => {
     expect(rows(sqlite, 'SELECT id, remaining_quantity FROM storage_container')).toEqual([{ id: 1, remaining_quantity: 0 }])
     expect(rows(sqlite, 'SELECT id, barcode FROM cryovial_tube')).toEqual([{ id: 1, barcode: 'CV1' }])
     expect(column(sqlite, 'SELECT COUNT(*) FROM study_subject')).toEqual([1])
+    expect(column(sqlite, 'SELECT COUNT(*) FROM specimen_type_container_type')).toEqual([0])
   })
 
   const aborts: Array<[string, (sqlite: Database) => void, RegExp]> = [
@@ -280,6 +289,11 @@ describe('data fix 2026-11-01-eppicenter-legacy-cleanup', () => {
       'a Subject to merge has lost its target',
       (db) => db.exec(`UPDATE specimen SET study_subject_id = 31049 WHERE study_subject_id = 66543; DELETE FROM study_subject WHERE id = 66543`),
       /merge/,
+    ],
+    [
+      'specimen type 47 is no longer Polyclonal Ab',
+      (db) => db.exec(`UPDATE specimen_type SET name = 'Monoclonal Ab' WHERE id = 47`),
+      /Polyclonal Ab/,
     ],
     [
       'another Study has Subjects whose names differ only by case',

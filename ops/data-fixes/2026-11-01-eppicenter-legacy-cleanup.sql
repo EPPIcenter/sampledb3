@@ -18,6 +18,8 @@
 --      3D7_10K (66543) the way the app's Subject merge does it. The app refuses new case-variant
 --      Subject names; there is no database index for it.
 --   8. Empty plate 1760 `EXVIVO-27 ` (trailing space) is deleted; plate 1761 `EXVIVO-27` stays.
+--   9. Specimen type Polyclonal Ab (47) allows micronix tubes, so the 8 micronix tubes holding
+--      Specimen 141173 are in an allowed Container type (decided 2026-11-02, follow-up on #124).
 -- Decisions 2 (future dates) and 7 (duplicate Specimen identity) change no data; the integrity
 -- report lists them.
 
@@ -132,6 +134,12 @@ BEGIN
     GROUP BY study_id, name COLLATE NOCASE HAVING COUNT(*) > 1
   );
 END;--> statement-breakpoint
+-- Guard: specimen type 47 is Polyclonal Ab (decision 9)
+CREATE TRIGGER __fix_polyclonal_tr BEFORE INSERT ON __fix_guard
+BEGIN
+  SELECT RAISE(ABORT, 'Cannot allow micronix tubes for Polyclonal Ab: specimen type 47 is no longer named Polyclonal Ab. Review it first: SELECT id, name FROM specimen_type WHERE id = 47.')
+  WHERE EXISTS (SELECT 1 FROM specimen_type WHERE id = 47 AND name IS NOT 'Polyclonal Ab');
+END;--> statement-breakpoint
 -- Guard: run every check; aborts the fix on unreviewed rows
 INSERT INTO __fix_guard DEFAULT VALUES;--> statement-breakpoint
 DROP TRIGGER __fix_dates_tr;--> statement-breakpoint
@@ -141,6 +149,7 @@ DROP TRIGGER __fix_container_tr;--> statement-breakpoint
 DROP TRIGGER __fix_plate_tr;--> statement-breakpoint
 DROP TRIGGER __fix_merge_tr;--> statement-breakpoint
 DROP TRIGGER __fix_subject_case_tr;--> statement-breakpoint
+DROP TRIGGER __fix_polyclonal_tr;--> statement-breakpoint
 DROP TABLE __fix_guard;--> statement-breakpoint
 -- Decision 1: clear placeholder collection dates
 UPDATE specimen SET collection_date = NULL
@@ -155,6 +164,9 @@ WHERE upper(replace(replace(trim(barcode), '/', ''), '.', '')) = 'NA';--> statem
 DELETE FROM storage_container WHERE id = 34513;--> statement-breakpoint
 -- Decision 8: delete empty plate 1760
 DELETE FROM micronix_plate WHERE id = 1760;--> statement-breakpoint
+-- Decision 9: Polyclonal Ab allows micronix tubes
+INSERT OR IGNORE INTO specimen_type_container_type (specimen_type_id, container_type)
+SELECT id, 'micronix_tube' FROM specimen_type WHERE id = 47 AND name = 'Polyclonal Ab';--> statement-breakpoint
 -- Decision 6: pair each source Specimen with its match
 -- As mergeSubjects in src/lib/subjects/merge.ts does it, each source Specimen in turn
 -- (lowest id first) is merged into the first target Specimen with the same Specimen type and
