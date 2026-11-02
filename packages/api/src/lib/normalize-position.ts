@@ -1,4 +1,8 @@
-/** Normalize position string to match frontend format (e.g., "B1" -> "B01"). */
+/**
+ * Normalize a position for a lookup against stored rows ("B1" -> "B01"). Passes anything
+ * else through unchanged so a legacy position (e.g. "--A01") still finds its row. Not for
+ * writes: a write checks the position with `parseGridPosition` from `@sampledb/contract`.
+ */
 export function normalizePosition(position: string | null | undefined): string | null {
   if (!position || !position.trim()) return null
 

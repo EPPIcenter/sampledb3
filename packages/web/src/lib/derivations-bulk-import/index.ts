@@ -17,12 +17,12 @@ export {
   derivationsBulkReducer,
   selectMissingCollections,
   selectCsvForImport,
+  selectFileRow,
 } from './reducer'
 export {
   fileLoadedEvent,
   fileReadErrorEvent,
   validateDerivationsCsv,
-  collectionNameForCreate,
   createOneMissingCollection,
   createMissingCollections,
   importDerivationsCsv,

@@ -1,11 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { SkeletonTable } from '../ui'
 import Pagination from './Pagination'
+import { compareBySortType, type SortDirection, type SortType } from '../lib/sort-compare'
 
 export interface Column<T> {
   key: keyof T | string
   label: string
-  sortable?: boolean
+  /** How the column sorts: text (natural order), number, or date. Omit for a column that does not sort. */
+  sortType?: SortType
   render?: (value: any, row: T) => React.ReactNode
 }
 
@@ -23,6 +25,20 @@ interface DataTableProps<T> {
     pageSize: number
     onPageChange: (page: number) => void
     showPagination?: boolean
+    /**
+     * Rows across all pages when the server pages the list. With it, `data` is the current
+     * page as the server returned it, and the table does not slice it.
+     */
+    totalItems?: number
+  }
+  /**
+   * Controlled sort for a list the server sorts. With it, the table shows `sort` and reports
+   * header clicks to `onChange`, and leaves `data` in the order it was given.
+   */
+  sort?: {
+    column: string | null
+    direction: SortDirection
+    onChange: (column: string, direction: SortDirection) => void
   }
   /** Optional class for the root wrapper (e.g. dashboard-card for themed pages). */
   className?: string
@@ -38,65 +54,51 @@ export default function DataTable<T extends { id: number }>({
   initialSortDirection = 'asc',
   density = 'normal',
   pagination,
+  sort,
   className,
 }: DataTableProps<T>) {
-  const [sortColumn, setSortColumn] = useState<keyof T | string | null>(initialSortColumn)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(initialSortDirection)
+  const [localSortColumn, setSortColumn] = useState<keyof T | string | null>(initialSortColumn)
+  const [localSortDirection, setSortDirection] = useState<SortDirection>(initialSortDirection)
+  const sortColumn = sort ? sort.column : localSortColumn
+  const sortDirection = sort ? sort.direction : localSortDirection
+  const serverPaged = pagination?.totalItems !== undefined
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null)
   const tableRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map())
   const prevResetDepsRef = useRef([data.length, sortColumn, sortDirection, pagination?.page ?? 0])
 
   const handleSort = (column: Column<T>) => {
-    if (!column.sortable) return
-    
-    if (sortColumn === column.key) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortColumn(column.key)
-      setSortDirection('asc')
+    if (!column.sortType) return
+
+    const direction: SortDirection = sortColumn === column.key && sortDirection === 'asc' ? 'desc' : 'asc'
+    if (sort) {
+      sort.onChange(String(column.key), direction)
+      return
     }
+    setSortColumn(column.key)
+    setSortDirection(direction)
   }
 
-  const sortedData = [...data].sort((a, b) => {
-    if (!sortColumn) return 0
-    
-    const aValue = a[sortColumn as keyof T]
-    const bValue = b[sortColumn as keyof T]
-    
-    if (aValue === bValue) return 0
-    if (aValue === null || aValue === undefined) return 1
-    if (bValue === null || bValue === undefined) return -1
-    
-    // Handle numeric comparison for specimenCount and dates
-    if (typeof aValue === 'number' && typeof bValue === 'number') {
-      const comparison = aValue < bValue ? -1 : 1
-      return sortDirection === 'asc' ? comparison : -comparison
-    }
-    
-    // Handle date strings
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-      const aDate = new Date(aValue).getTime()
-      const bDate = new Date(bValue).getTime()
-      if (!isNaN(aDate) && !isNaN(bDate)) {
-        const comparison = aDate < bDate ? -1 : 1
-        return sortDirection === 'asc' ? comparison : -comparison
-      }
-    }
-    
-    // String comparison
-    const aStr = String(aValue).toLowerCase()
-    const bStr = String(bValue).toLowerCase()
-    const comparison = aStr < bStr ? -1 : 1
-    return sortDirection === 'asc' ? comparison : -comparison
-  })
+  const sortType = columns.find((column) => column.key === sortColumn)?.sortType
+  // A server-sorted list arrives in order; sort locally only when the table owns the sort.
+  const sortedData = useMemo(
+    () =>
+      !sort && sortColumn && sortType
+        ? [...data].sort((a, b) =>
+            compareBySortType(a[sortColumn as keyof T], b[sortColumn as keyof T], sortType, sortDirection)
+          )
+        : data,
+    [data, sort, sortColumn, sortType, sortDirection]
+  )
 
-  // Apply pagination if enabled
-  const paginatedData = pagination
-    ? sortedData.slice((pagination.page - 1) * pagination.pageSize, pagination.page * pagination.pageSize)
-    : sortedData
-  
-  const totalPages = pagination ? Math.ceil(sortedData.length / pagination.pageSize) : 1
+  // Apply pagination if enabled; a server-paged list is already one page.
+  const paginatedData =
+    pagination && !serverPaged
+      ? sortedData.slice((pagination.page - 1) * pagination.pageSize, pagination.page * pagination.pageSize)
+      : sortedData
+
+  const totalItems = pagination?.totalItems ?? sortedData.length
+  const totalPages = pagination ? Math.ceil(totalItems / pagination.pageSize) : 1
 
   // Reset selected row when data changes, sort changes, or page changes (during render to avoid extra pass)
   const resetDeps = [data.length, sortColumn, sortDirection, pagination?.page ?? 0]
@@ -203,12 +205,12 @@ export default function DataTable<T extends { id: number }>({
                   key={String(column.key)}
                   onClick={() => handleSort(column)}
                   className={`${density === 'compact' ? 'px-3 py-2' : 'px-6 py-3'} text-left text-xs font-medium text-app-text-muted uppercase ${
-                    column.sortable ? 'cursor-pointer hover:bg-app-border/50' : ''
+                    column.sortType ? 'cursor-pointer hover:bg-app-border/50' : ''
                   }`}
                 >
                   <div className="flex items-center space-x-1">
                     <span>{column.label}</span>
-                    {column.sortable && sortColumn === column.key && (
+                    {column.sortType && sortColumn === column.key && (
                       <svg
                         className={`h-4 w-4 ${sortDirection === 'asc' ? '' : 'transform rotate-180'}`}
                         fill="none"
@@ -263,7 +265,7 @@ export default function DataTable<T extends { id: number }>({
             currentPage={pagination.page}
             totalPages={totalPages}
             onPageChange={pagination.onPageChange}
-            totalItems={sortedData.length}
+            totalItems={totalItems}
             itemsPerPage={pagination.pageSize}
           />
         </div>

@@ -94,6 +94,11 @@ export interface CrudRouteConfig<
    * Optional: Custom validation before update
    */
   validateUpdate?: (id: number, data: TUpdate, database: Database) => Promise<string | null>
+
+  /**
+   * Optional: Run after a create, update or delete succeeds, such as to clear a cache of the table
+   */
+  afterWrite?: () => void
 }
 
 /**
@@ -125,6 +130,7 @@ export function createCrudRoutes<
     onUpdateDefaults,
     validateCreate,
     validateUpdate,
+    afterWrite,
   } = config
   
   const updateSchema = (providedUpdateSchema || createSchema) as z.ZodType<TUpdate>
@@ -232,6 +238,7 @@ export function createCrudRoutes<
         .returning()
 
       const row = insertedRow(result, entityName)
+      afterWrite?.()
       const transformed = transformDetail ? transformDetail(row as TSelect) : row
       return createdResponse(c, transformed)
     } catch (error) {
@@ -311,6 +318,7 @@ export function createCrudRoutes<
       if (!row) {
         throw new NotFoundError(entityName, id)
       }
+      afterWrite?.()
       const transformed = transformDetail ? transformDetail(row as TSelect) : row
       return successResponse(c, transformed)
     } catch (error) {
@@ -343,6 +351,7 @@ export function createCrudRoutes<
       if (result.length === 0) {
         throw new NotFoundError(entityName, id)
       }
+      afterWrite?.()
 
       return c.json({ message: `${entityName} deleted successfully` })
     } catch (error) {

@@ -91,3 +91,91 @@ describe('calendar dates in local time', () => {
     expect(toLocalDateString(new Date(2024, 0, 15, 23, 30))).toBe('2024-01-15')
   })
 })
+
+// vitest.config.ts runs the suite in America/Los_Angeles. On Oct 31, 2026 that is UTC-7 (PDT),
+// so a server timestamp just after midnight UTC is still the previous evening locally.
+describe('server timestamps (UTC with no zone marker)', () => {
+  // 6:20 PM PDT on Oct 31, 2026
+  const now = new Date('2026-11-01T01:20:02Z')
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('runs in a time zone west of UTC', () => {
+    expect(now.getTimezoneOffset()).toBe(420)
+  })
+
+  it('parseDisplayDate reads a SQLite timestamp as UTC', async () => {
+    const { parseDisplayDate } = await import('../date-utils')
+    const d = parseDisplayDate('2026-11-01 01:10:02')
+    expect(d.toISOString()).toBe('2026-11-01T01:10:02.000Z')
+    expect([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()]).toEqual([2026, 9, 31, 18])
+  })
+
+  it('parseDisplayDate gives the same instant for the T, Z and offset forms', async () => {
+    const { parseDisplayDate } = await import('../date-utils')
+    const expected = '2026-11-01T01:10:02.000Z'
+    expect(parseDisplayDate('2026-11-01T01:10:02').toISOString()).toBe(expected)
+    expect(parseDisplayDate('2026-11-01T01:10:02Z').toISOString()).toBe(expected)
+    expect(parseDisplayDate('2026-11-01T01:10:02.000Z').toISOString()).toBe(expected)
+    expect(parseDisplayDate('2026-10-31T18:10:02-07:00').toISOString()).toBe(expected)
+    expect(parseDisplayDate('2026-11-01 01:10').toISOString()).toBe('2026-11-01T01:10:00.000Z')
+  })
+
+  it('formatDate shows the local day for a timestamp just after midnight UTC', async () => {
+    const { formatDate } = await import('../date-utils')
+    expect(formatDate('2026-11-01 01:10:02')).toBe('Oct 31, 2026')
+    expect(formatDate('2026-11-01 00:00:00')).toBe('Oct 31, 2026')
+  })
+
+  it('formatDate shows the local day for a timestamp just before midnight UTC', async () => {
+    const { formatDate } = await import('../date-utils')
+    expect(formatDate('2026-10-31 23:59:59')).toBe('Oct 31, 2026')
+    // 7:30 AM UTC is still the previous local evening; 7:00 AM UTC is local midnight.
+    expect(formatDate('2026-10-31 06:59:59')).toBe('Oct 30, 2026')
+    expect(formatDate('2026-10-31 07:00:00')).toBe('Oct 31, 2026')
+  })
+
+  it('formatDateWithRelativeTime gives a past age for a timestamp just after midnight UTC', async () => {
+    const { formatDateWithRelativeTime } = await import('../date-utils')
+    expect(formatDateWithRelativeTime('2026-11-01 01:10:02')).toBe('10 minutes ago')
+    expect(formatDateWithRelativeTime('2026-10-31 23:20:02')).toBe('2 hours ago')
+    expect(formatDateWithRelativeTime('2026-10-31 01:20:02')).toBe('Yesterday')
+  })
+
+  it('formatDateWithRelativeTime never gives a negative age', async () => {
+    const { formatDateWithRelativeTime } = await import('../date-utils')
+    // A few seconds ahead of the browser clock (clock skew), and a day ahead.
+    expect(formatDateWithRelativeTime('2026-11-01 01:20:30')).toBe('Just now')
+    expect(formatDateWithRelativeTime('2026-11-02 01:20:02')).toBe('Just now')
+  })
+
+  it('formatDateTime shows a server timestamp in local time', async () => {
+    const { formatDateTime } = await import('../date-utils')
+    expect(formatDateTime('2026-11-01 01:10:02')).toBe(
+      new Date(2026, 9, 31, 18, 10, 2).toLocaleString(),
+    )
+    expect(formatDateTime('2026-11-01 01:10:02', { dateStyle: 'medium', timeZone: 'America/Los_Angeles' }))
+      .toBe('Oct 31, 2026')
+    expect(formatDateTime(null)).toBe('N/A')
+  })
+
+  it('displayDateTime orders server timestamps across midnight UTC', async () => {
+    const { displayDateTime } = await import('../date-utils')
+    expect(displayDateTime('2026-11-01 00:00:01')).toBeGreaterThan(displayDateTime('2026-10-31 23:59:59'))
+    expect(displayDateTime('2026-11-01 00:00:01')).toBe(Date.UTC(2026, 10, 1, 0, 0, 1))
+  })
+
+  it('does not shift a collection date or a timeline month', async () => {
+    const { formatDate, parseDisplayDate } = await import('../date-utils')
+    expect(formatDate('2026-11-01')).toBe('Nov 1, 2026')
+    const month = parseDisplayDate('2026-11')
+    expect([month.getFullYear(), month.getMonth(), month.getDate()]).toEqual([2026, 10, 1])
+  })
+})

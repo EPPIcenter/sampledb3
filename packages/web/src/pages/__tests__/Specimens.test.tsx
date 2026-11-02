@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { render, screen, fireEvent, waitFor } from '../../__tests__/helpers/render'
+import userEvent from '@testing-library/user-event'
+import { render, screen, fireEvent, waitFor, within } from '../../__tests__/helpers/render'
 import Specimens from '../Specimens'
+import { SPECIMEN_SEARCH_DEBOUNCE_MS } from '../../components/SpecimenFilter'
+import type { SpecimenListParams } from '../../lib/api/specimens'
 
 function BackButton() {
   const navigate = useNavigate()
@@ -68,9 +71,41 @@ vi.mock('../../lib/api/studies', async () => {
 
 import { api } from '../../lib/api/client'
 
+const emptyPage = { specimens: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }
+
+/** One server page of `count` rows numbered from `firstId`, out of `total`. */
+function specimenPage(page: number, total: number, count = 50, firstId = (page - 1) * 50 + 1) {
+  return {
+    specimens: Array.from({ length: count }, (_, i) => ({
+      id: firstId + i,
+      specimenTypeId: 1,
+      created: '2024-01-01',
+      collectionDate: '2024-01-01',
+      specimenType: { id: 1, name: 'Whole Blood' },
+      studySubject: { id: firstId + i, name: `SUBJ-${firstId + i}` },
+      study: { id: 1, shortCode: 'ST1' },
+    })),
+    pagination: { page, limit: 50, total, totalPages: Math.ceil(total / 50) },
+  }
+}
+
+/** The params of every `GET /specimens` request so far. */
+function specimenRequests(): SpecimenListParams[] {
+  return vi
+    .mocked(api.get)
+    .mock.calls.filter(([url]) => url === '/specimens')
+    .map(([, config]) => (config as { params: SpecimenListParams }).params)
+}
+
+function lastSpecimenRequest(): SpecimenListParams | undefined {
+  const requests = specimenRequests()
+  return requests[requests.length - 1]
+}
+
 describe('Specimens page', () => {
   beforeEach(() => {
-    vi.mocked(api.get).mockResolvedValue({ specimens: [] })
+    vi.mocked(api.get).mockReset()
+    vi.mocked(api.get).mockResolvedValue(emptyPage)
   })
 
   it('renders filters and table area', async () => {
@@ -91,6 +126,7 @@ describe('Specimens page', () => {
           study: { id: 1, shortCode: 'ST1' },
         },
       ],
+      pagination: { page: 1, limit: 50, total: 1, totalPages: 1 },
     })
     await render(<Specimens />)
     await screen.findByText(/Whole Blood/i)
@@ -98,9 +134,114 @@ describe('Specimens page', () => {
   })
 })
 
+describe('Specimens page pagination and sort', () => {
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset()
+  })
+
+  it('requests one page on load and shows the server total', async () => {
+    vi.mocked(api.get).mockResolvedValue(specimenPage(1, 120))
+
+    await render(<Specimens />)
+
+    await screen.findByText('SUBJ-1')
+    expect(specimenRequests()).toEqual([expect.objectContaining({ page: 1, limit: 50 })])
+    expect(specimenRequests()[0]).not.toHaveProperty('sort')
+    expect(screen.getByText(/Showing/)).toHaveTextContent('Showing 1 to 50 of 120 results')
+  })
+
+  it('requests the next page from the server instead of slicing the loaded rows', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.get).mockImplementation((_url, config) => {
+      const { page } = (config as { params: SpecimenListParams }).params
+      return Promise.resolve(page === 2 ? specimenPage(2, 120) : specimenPage(1, 120))
+    })
+    await render(<Specimens />)
+    await screen.findByText('SUBJ-1')
+
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    await screen.findByText('SUBJ-51')
+    expect(lastSpecimenRequest()).toEqual(expect.objectContaining({ page: 2, limit: 50 }))
+    expect(screen.getByText(/Showing/)).toHaveTextContent('Showing 51 to 100 of 120 results')
+  })
+
+  it('sorts on the server across all pages and goes back to page 1', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.get).mockImplementation((_url, config) => {
+      const { page } = (config as { params: SpecimenListParams }).params
+      return Promise.resolve(specimenPage(page ?? 1, 120))
+    })
+    await render(<Specimens />)
+    await screen.findByText('SUBJ-1')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByText('SUBJ-51')
+
+    await user.click(screen.getByRole('columnheader', { name: 'Collected' }))
+    await waitFor(() =>
+      expect(lastSpecimenRequest()).toEqual(
+        expect.objectContaining({ page: 1, limit: 50, sort: 'collection_date', order: 'asc' })
+      )
+    )
+
+    await user.click(screen.getByRole('columnheader', { name: 'Collected' }))
+    await waitFor(() =>
+      expect(lastSpecimenRequest()).toEqual(
+        expect.objectContaining({ page: 1, sort: 'collection_date', order: 'desc' })
+      )
+    )
+
+    await user.click(screen.getByRole('columnheader', { name: 'Created' }))
+    await waitFor(() =>
+      expect(lastSpecimenRequest()).toEqual(expect.objectContaining({ sort: 'created', order: 'asc' }))
+    )
+  })
+
+  it('shows the rows in the order the server returns them', async () => {
+    const user = userEvent.setup()
+    const page = specimenPage(1, 3, 3)
+    page.specimens[0].collectionDate = '2024-06-01'
+    page.specimens[1].collectionDate = '2022-01-01'
+    page.specimens[2].collectionDate = '2023-01-01'
+    vi.mocked(api.get).mockResolvedValue(page)
+    await render(<Specimens />)
+    await screen.findByText('SUBJ-1')
+
+    await user.click(screen.getByRole('columnheader', { name: 'Collected' }))
+    await waitFor(() => expect(specimenRequests()).toHaveLength(2))
+
+    const sources = screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => within(row).getAllByRole('cell')[1].textContent)
+    expect(sources).toEqual(['SUBJ-1', 'SUBJ-2', 'SUBJ-3'])
+  })
+
+  it('shows the skeleton, not the table or empty state, and disables Apply, while the first page loads', async () => {
+    vi.mocked(api.get).mockReturnValue(new Promise(() => {}))
+
+    await render(<Specimens />)
+
+    expect(screen.getByRole('button', { name: /apply filters/i })).toBeDisabled()
+    expect(screen.queryByText('No specimens found')).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Collected' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Showing/)).not.toBeInTheDocument()
+  })
+
+  it('shows an inline error with retry when the page fails to load', async () => {
+    vi.mocked(api.get).mockRejectedValue(new Error('boom'))
+
+    await render(<Specimens />)
+
+    expect(await screen.findByRole('button', { name: /try again/i })).toBeInTheDocument()
+    expect(screen.getByText('boom')).toBeInTheDocument()
+  })
+})
+
 describe('Specimens page URL filters', () => {
   beforeEach(() => {
-    vi.mocked(api.get).mockResolvedValue({ specimens: [] })
+    vi.mocked(api.get).mockReset()
+    vi.mocked(api.get).mockResolvedValue(emptyPage)
   })
 
   it('keeps filter edits local until Apply, and Back undoes the applied change', async () => {
@@ -117,15 +258,32 @@ describe('Specimens page URL filters', () => {
     expect(page.sourceType()).toHaveValue('')
   })
 
-  it('applies search as it is typed without adding a history entry per keystroke', async () => {
+  it('sends one search request after typing pauses, without a history entry per keystroke', async () => {
+    const user = userEvent.setup()
     const page = await renderAt('/start', '/specimens')
+    await waitFor(() => expect(specimenRequests()).toHaveLength(1))
 
-    fireEvent.change(page.search(), { target: { value: 'S' } })
-    fireEvent.change(page.search(), { target: { value: 'SU' } })
-    await waitFor(() => expect(page.url()).toBe('/specimens?search=SU'))
+    await user.type(screen.getByRole('textbox', { name: /search specimens/i }), 'SUBJ')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    // Nothing applies while the user is still typing.
+    expect(page.url()).toBe('/specimens')
+    await waitFor(() => expect(page.url()).toBe('/specimens?search=SUBJ'))
+    await waitFor(() => expect(specimenRequests()).toHaveLength(2))
+    await new Promise((resolve) => setTimeout(resolve, SPECIMEN_SEARCH_DEBOUNCE_MS * 2))
+    expect(specimenRequests().map((params) => params.search)).toEqual([undefined, 'SUBJ'])
+    expect(specimenRequests()[1]).toEqual(expect.objectContaining({ page: 1, limit: 50 }))
+
+    await user.click(screen.getByRole('button', { name: 'Back' }))
     await waitFor(() => expect(page.url()).toBe('/start'))
+  })
+
+  it('applies a typed search at once on Enter', async () => {
+    const user = userEvent.setup()
+    const page = await renderAt('/specimens')
+
+    await user.type(screen.getByRole('textbox', { name: /search specimens/i }), 'QC{Enter}')
+
+    expect(page.url()).toBe('/specimens?search=QC')
   })
 
   it('keeps unapplied filter edits while a search is typed', async () => {

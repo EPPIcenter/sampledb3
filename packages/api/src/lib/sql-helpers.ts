@@ -1,6 +1,28 @@
-import { lt, lte } from 'drizzle-orm'
+import { gte, lt, lte, sql, type SQL } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
-import { shiftCalendarDate } from './datetime'
+import { shiftCalendarDate, toStoredTimestamp } from './datetime'
+
+/**
+ * `column >= instant` for a stored timestamp column (`YYYY-MM-DD HH:MM:SS`, UTC). The bound is
+ * written in the stored format, so the text comparison orders the same as the instants.
+ */
+export function timestampAtOrAfter(column: SQLiteColumn, instant: Date): SQL {
+  return gte(column, toStoredTimestamp(instant))
+}
+
+/** `column < instant` for a stored timestamp column; see `timestampAtOrAfter`. */
+export function timestampBefore(column: SQLiteColumn, instant: Date): SQL {
+  return lt(column, toStoredTimestamp(instant))
+}
+
+/**
+ * `column` holds a real calendar date written YYYY-MM-DD. Migration 008 leaves a collection date
+ * it cannot read (`13/2/2024`) as it was, and compared as text such a value passes or fails a
+ * date bound by accident; add this condition to keep it out of every date filter.
+ */
+export function isCalendarDate(column: SQLiteColumn): SQL {
+  return sql`date(${column}) IS ${column}`
+}
 
 /**
  * Upper bound for a "to" date filter. A bare YYYY-MM-DD includes that whole day, so a
@@ -12,11 +34,37 @@ export function dateToUpperBound(column: SQLiteColumn, dateTo: string) {
 }
 
 /**
+ * Conditions for a `created_from` / `created_to` query pair on a timestamp column. Either
+ * bound may be absent; `dateTo` includes its whole day (see `dateToUpperBound`).
+ */
+export function dateRangeConditions(
+  column: SQLiteColumn,
+  dateFrom: string | undefined,
+  dateTo: string | undefined,
+): SQL[] {
+  const conditions: SQL[] = []
+  if (dateFrom) conditions.push(gte(column, dateFrom))
+  if (dateTo) conditions.push(dateToUpperBound(column, dateTo))
+  return conditions
+}
+
+/**
  * Ids per `IN (...)` list when a list is chunked. SQLite caps bound parameters per statement
  * (32766 today, 999 before 3.32); 500 stays far under either cap, leaving room for the
  * query's other parameters, while keeping the number of round trips low.
  */
 export const SQL_IN_CHUNK_SIZE = 500
+
+/**
+ * Bound parameters one multi-row INSERT may use. bun:sqlite rejects a statement with more
+ * than 65,535; 8,000 stays well under that and under SQLite's own 32,766 default.
+ */
+const INSERT_PARAMETER_BUDGET = 8000
+
+/** Rows per multi-row INSERT for a table that binds `parametersPerRow` values per row. */
+export function rowsPerInsert(parametersPerRow: number): number {
+  return Math.max(1, Math.floor(INSERT_PARAMETER_BUDGET / parametersPerRow))
+}
 
 /** Batch an array into chunks for SQLite variable limits. */
 export function chunkArray<T>(array: T[], chunkSize: number): T[][] {

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData, type QueryClient } from '@tanstack/react-query'
 import { specimensApi, type SpecimenListParams } from '../lib/api/specimens'
 import { containersApi } from '../lib/api/containers'
 import { subjectsApi } from '../lib/api/subjects'
@@ -97,13 +97,66 @@ export function invalidateSpecimenQueries(
   }
 }
 
-export function useSpecimens(filters?: SpecimenListParams) {
-  return useQuery({
-    queryKey: specimenKeys.list(filters),
-    queryFn: async () => {
-      const res = await specimensApi.search(filters)
-      return res.specimens
+export type CreateSpecimenWithNewSubjectInput = {
+  studyShortCode: string
+  subjectName: string
+  specimenTypeName: string
+  collectionDate?: string
+  /** Flat form state; mapped to write shape before API call. */
+  container?: ContainerData | SpecimenContainerWriteInput
+}
+
+/**
+ * Create a subject and its first specimen in one request (`POST /subjects/with-specimens`).
+ * The API writes both in one transaction, so a specimen that fails leaves no subject behind.
+ * It sends `newSubjectOnly`, so a name the study already has is refused (409) rather than reused.
+ */
+export function useCreateSpecimenWithNewSubject(options?: { silent?: boolean }) {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  return useMutation({
+    mutationFn: async ({ studyShortCode, subjectName, container, ...specimen }: CreateSpecimenWithNewSubjectInput) => {
+      const res = await subjectsApi.createWithSpecimens({
+        studyShortCode,
+        subjectName,
+        newSubjectOnly: true,
+        specimens: [
+          {
+            ...specimen,
+            ...(container
+              ? {
+                  container: isFlatContainerRegistration(container)
+                    ? flatContainerRegistrationToWriteInput(container)
+                    : container,
+                }
+              : {}),
+          },
+        ],
+      })
+      if (res.specimens.length === 0) throw new Error('The API created no specimen')
+      return { ...res.specimens[0], studyId: res.subject.studyId }
     },
+    onError: (err: unknown) => {
+      if (options?.silent) return
+      showError(getMutationErrorMessage(err, 'Failed to create specimen'))
+    },
+    onSuccess: (specimen) => {
+      invalidateSpecimenQueries(queryClient, { specimen })
+      success('Specimen created successfully')
+    },
+  })
+}
+
+/**
+ * One page of specimens and the pagination totals. The previous page stays on screen while
+ * the next page, sort, or filter loads.
+ */
+export function useSpecimens(params: SpecimenListParams) {
+  return useQuery({
+    queryKey: specimenKeys.list(params),
+    queryFn: () => specimensApi.search(params),
+    placeholderData: keepPreviousData,
   })
 }
 

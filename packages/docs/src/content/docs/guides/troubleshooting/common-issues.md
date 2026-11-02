@@ -23,7 +23,9 @@ For more column rules, see [CSV file guidelines](/docs/guides/troubleshooting/cs
 
 **Not found.** Check barcode or position, collection, and that the container was not deleted. Identifiers must match exactly.
 
-**Barcode already exists.** Micronix barcodes are unique across the system. Use a different barcode or open the existing container.
+**Barcode already exists.** A new or changed micronix or cryovial barcode can't match any other tube's barcode, of either type, ignoring case and surrounding spaces. Use a different barcode or open the existing container. A container whose barcode was already shared before this rule still saves when you leave its barcode unchanged.
+
+**Ambiguous barcode.** The barcode is on more than one container, so the app won't guess which one you mean. The message lists the matching containers. Identify the container by its id or by its collection and position instead. **Data integrity** lists every shared tube barcode.
 
 **Position occupied or out of range.** `A13` is invalid on a 96-well plate (columns 01-12). Pick an empty well.
 

@@ -89,7 +89,7 @@ export default function Collections() {
     {
       key: 'name',
       label: 'Name',
-      sortable: true,
+      sortType: 'text',
       render: (_, row) => (
         <Link to={getCollectionDetailUrl(row)} className="dashboard-link font-medium hover:underline">
           {row.name}
@@ -99,7 +99,7 @@ export default function Collections() {
     {
       key: 'type',
       label: 'Type',
-      sortable: true,
+      sortType: 'text',
       render: (_, row) => getTypeLabel(row.type),
     },
     {
@@ -115,7 +115,7 @@ export default function Collections() {
     {
       key: 'itemCount',
       label: 'Items',
-      sortable: true,
+      sortType: 'number',
       render: (value) => (typeof value === 'number' ? value : '—'),
     },
   ]

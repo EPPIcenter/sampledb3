@@ -166,7 +166,6 @@ describe('ReviewStep multi-batch CSV', () => {
       // Both densities go in one all-or-nothing request.
       expect(mockCreateBatchesWithSpecimens).toHaveBeenCalledTimes(1)
     })
-    expect(mockSuggestBatchName).toHaveBeenCalled()
     const batches = mockCreateBatchesWithSpecimens.mock.calls[0][0].batches as Array<{ batch: { controlDefinitionId: number } }>
     expect(batches).toHaveLength(2)
     const definitionIds = batches.map((b) => b.batch.controlDefinitionId)
@@ -473,5 +472,96 @@ describe('ReviewStep CSV unit fallback', () => {
     const payload = mockCreateBatchWithSpecimens.mock.calls[0][0]
     const container = payload.specimens[0].containers[0]
     expect(container.unitSymbol).toBe('µL')
+  })
+})
+
+describe('ReviewStep multi-batch CSV batch names', () => {
+  const compositionStrains: CompositionStrains = [{ id: 1, percentage: 100 }]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSuggestBatchName.mockResolvedValue({ name: 'Def 5000 2024-06-01' })
+    mockCreateBatchesWithSpecimens.mockResolvedValue({ batches: [{ batch: { id: 101 }, specimens: [], createdCollections: [] }] })
+  })
+
+  it('leaves naming to the server, so two files with the same density do not send the same name', async () => {
+    const user = userEvent.setup()
+    const def5000: ControlDefinition = {
+      id: 10,
+      name: 'Def 5000',
+      controlType: 'blood',
+      created: '',
+      lastUpdated: '',
+      targetDensity: 5000,
+    }
+    await render(
+      <ReviewStep
+        batchInfo={makeBatchInfo()}
+        compositionStrains={compositionStrains}
+        compositionDefinitions={[def5000]}
+        specimenTypes={[]}
+        csvFiles={[
+          makeCsvFile({ filename: 'a.csv', rows: [{ specimen_type_name: 'Whole Blood', density: 5000 }] }),
+          makeCsvFile({ filename: 'b.csv', rows: [{ specimen_type_name: 'Whole Blood', density: 5000 }] }),
+        ]}
+        onBack={() => {}}
+        onCancel={() => {}}
+        onSuccess={() => {}}
+        isAddMode={false}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /Create Batch/i }))
+
+    await waitFor(() => {
+      expect(mockCreateBatchesWithSpecimens).toHaveBeenCalledTimes(1)
+    })
+    const batches = mockCreateBatchesWithSpecimens.mock.calls[0][0].batches as Array<{ batch: { name?: string; productionDate?: string } }>
+    expect(batches).toHaveLength(2)
+    for (const { batch } of batches) {
+      expect(batch).not.toHaveProperty('name')
+      expect(batch.productionDate).toBe('2024-06-01')
+    }
+  })
+})
+
+describe('ReviewStep CSV zero quantity', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockCreateBatchWithSpecimens.mockResolvedValue({ batch: { id: 102 }, specimens: [], createdCollections: [] })
+  })
+
+  it('sends a quantity of 0 from a CSV row as 0', async () => {
+    const user = userEvent.setup()
+    await render(
+      <ReviewStep
+        batchInfo={makeBatchInfo({ controlDefinitionId: 1, name: 'Batch A' })}
+        specimenTypes={[]}
+        csvFiles={[
+          makeCsvFile({
+            containerType: 'micronix_tube',
+            rows: [{ specimen_type_name: 'Whole Blood', position: 'A1', quantity: 0 }],
+          }),
+          makeCsvFile({
+            containerType: 'paper',
+            sheetName: 'Sheet1',
+            rows: [{ specimen_type_name: 'DBS', quantity: 0 }],
+          }),
+        ]}
+        onBack={() => {}}
+        onCancel={() => {}}
+        onSuccess={() => {}}
+        isAddMode={false}
+      />
+    )
+
+    await user.click(await screen.findByRole('button', { name: /Create Batch/i }))
+
+    await waitFor(() => {
+      expect(mockCreateBatchWithSpecimens).toHaveBeenCalledTimes(1)
+    })
+    const specimens = mockCreateBatchWithSpecimens.mock.calls[0][0].specimens as Array<{ containers: Array<{ quantity?: number }> }>
+    const quantities = specimens.flatMap((s) => s.containers.map((c) => c.quantity))
+    expect(quantities).toEqual([0, 0])
   })
 })

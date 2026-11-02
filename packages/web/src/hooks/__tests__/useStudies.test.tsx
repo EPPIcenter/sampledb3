@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactNode } from 'react'
 import { ToastProvider } from '../../contexts/ToastContext'
@@ -9,9 +9,11 @@ import {
   useStudySubjects,
   useCreateStudy,
   useUpdateStudy,
+  useStudySummaryCards,
   studyKeys,
 } from '../useStudies'
-import { studiesApi } from '../../lib/api/studies'
+import { invalidateAfterBulkWrite } from '../../lib/query-client'
+import { studiesApi, type StudySummaryBasic } from '../../lib/api/studies'
 
 vi.mock('../../lib/api/studies', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
@@ -202,12 +204,12 @@ describe('useStudies Hooks', () => {
       expect(invalidateSpy).toHaveBeenCalled()
     })
 
-    it('invalidates the Studies page infinite list (limit 50)', async () => {
+    it('invalidates the Studies page list of all studies', async () => {
       vi.mocked(studiesApi.create).mockResolvedValue({
         study: { id: 4, title: 'T', shortCode: 'T4', isLongitudinal: false, leadPerson: 'L', created: '2024-01-01', lastUpdated: '2024-01-01' },
       })
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-      queryClient.setQueryData(studyKeys.infinite(50), { pages: [], pageParams: [] })
+      queryClient.setQueryData(studyKeys.browse(''), { studies: [], total: 0 })
       const wrapper = ({ children }: { children: ReactNode }) => (
         <QueryClientProvider client={queryClient}>
           <ToastProvider>{children}</ToastProvider>
@@ -218,7 +220,7 @@ describe('useStudies Hooks', () => {
       result.current.mutate({ title: 'T', shortCode: 'T4', isLongitudinal: false, leadPerson: 'L' })
       await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-      expect(queryClient.getQueryState(studyKeys.infinite(50))?.isInvalidated).toBe(true)
+      expect(queryClient.getQueryState(studyKeys.browse(''))?.isInvalidated).toBe(true)
     })
   })
 
@@ -275,5 +277,72 @@ describe('useStudies Hooks', () => {
   })
 })
 
+describe('useStudySummaryCards', () => {
+  function summary(studyId: number, totalSpecimens: number) {
+    return { studyId, totalSpecimens } as unknown as StudySummaryBasic
+  }
 
+  function setup() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    )
+    return { queryClient, ...renderHook(() => useStudySummaryCards(), { wrapper }) }
+  }
 
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('loads a card once while its summary is current', async () => {
+    vi.mocked(studiesApi.getSummaries).mockResolvedValue({ summaries: [summary(1, 4)] })
+    const { result } = setup()
+
+    act(() => result.current.prefetch([1]))
+    await waitFor(() => expect(result.current.getCardState(1).summary).toEqual(summary(1, 4)))
+    act(() => result.current.prefetch([1]))
+
+    expect(studiesApi.getSummaries).toHaveBeenCalledTimes(1)
+  })
+
+  it('refetches a loaded card when a write invalidates it', async () => {
+    vi.mocked(studiesApi.getSummaries)
+      .mockResolvedValueOnce({ summaries: [summary(1, 4), summary(2, 0)] })
+      .mockResolvedValueOnce({ summaries: [summary(1, 5), summary(2, 1)] })
+    const { queryClient, result } = setup()
+
+    act(() => result.current.prefetch([1, 2]))
+    await waitFor(() => expect(result.current.getCardState(1).summary).toEqual(summary(1, 4)))
+
+    await act(() => invalidateAfterBulkWrite(queryClient))
+
+    await waitFor(() => expect(result.current.getCardState(1).summary).toEqual(summary(1, 5)))
+    expect(result.current.getCardState(2).summary).toEqual(summary(2, 1))
+    expect(studiesApi.getSummaries).toHaveBeenCalledTimes(2)
+    expect(studiesApi.getSummaries).toHaveBeenLastCalledWith([1, 2])
+  })
+
+  it('refetches an invalidated card that comes into view later', async () => {
+    vi.mocked(studiesApi.getSummaries)
+      .mockResolvedValueOnce({ summaries: [summary(1, 4)] })
+      .mockResolvedValueOnce({ summaries: [summary(1, 5)] })
+    const { queryClient, result, unmount } = setup()
+    act(() => result.current.prefetch([1]))
+    await waitFor(() => expect(result.current.getCardState(1).summary).toEqual(summary(1, 4)))
+    unmount()
+
+    // The write happens on another page; the Studies page is not mounted.
+    await invalidateAfterBulkWrite(queryClient)
+    const remounted = renderHook(() => useStudySummaryCards(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      ),
+    })
+    act(() => remounted.result.current.prefetch([1]))
+
+    await waitFor(() => expect(remounted.result.current.getCardState(1).summary).toEqual(summary(1, 5)))
+    expect(studiesApi.getSummaries).toHaveBeenCalledTimes(2)
+  })
+})

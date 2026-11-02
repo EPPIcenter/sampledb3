@@ -25,6 +25,9 @@ import { requireParam } from '../lib/common-validators'
 import { withWriteTransaction } from '../db/write-transaction'
 import { assertNotUsedInQpcr } from '../lib/qpcr-usage'
 import { insertedRow } from '../lib/inserted-row'
+import { timestampFilter } from '../lib/date-filters'
+import { likeContains } from '../lib/sql-like'
+import { collectionDateRangeOf, collectionTimeline, daysBetweenCalendarDates, enrollmentTimeline } from '../lib/studies/study-dates'
 
 /** Short code prefix for tutorial namespace. Any study whose short code starts with this (case-insensitive) may be deleted by any member. Only admins may rename a study into or out of this namespace. */
 const TUTORIAL_SHORT_CODE_PREFIX = 'TUT'
@@ -60,7 +63,15 @@ studies.get('/', authMiddleware, async (c) => {
     const page = validatePage(c.req.query('page'))
     const limit = await validateLimit(database, c.req.query('limit'))
 
-    return c.json(await listStudies(database, { search, page, limit }))
+    return c.json(
+      await listStudies(database, {
+        search,
+        createdFrom: timestampFilter('created_from', c.req.query('created_from')),
+        createdTo: timestampFilter('created_to', c.req.query('created_to')),
+        page,
+        limit,
+      }),
+    )
   } catch (error) {
     return handleRouteError(error, c)
   }
@@ -137,8 +148,16 @@ studies.get('/:id/subjects', authMiddleware, async (c) => {
     }
     const offset = returnAll ? undefined : (page - 1) * limit!
 
-    const whereClause = eq(studySubject.studyId, id)
-    
+    // search matches a subject name containing the text, or the exact subject ID.
+    const search = c.req.query('search')?.trim()
+    const searchId = search && /^\d+$/.test(search) ? Number(search) : undefined
+    const whereClause = and(
+      eq(studySubject.studyId, id),
+      search
+        ? or(likeContains(studySubject.name, search), searchId !== undefined ? eq(studySubject.id, searchId) : undefined)
+        : undefined,
+    )
+
     // Get all subjects or paginated subset
     let query = database
       .select({
@@ -283,23 +302,6 @@ studies.get('/:id/summary', authMiddleware, async (c) => {
     const totalSpecimens = specimens.length
 
     if (specimens.length === 0) {
-      // Calculate enrollment timeline from subjects
-      const enrollmentTimeline = subjects
-        .map(s => ({
-          date: s.created.split('T')[0], // Just the date part
-          count: 1,
-        }))
-        .reduce((acc, item) => {
-          const existing = acc.find(x => x.date === item.date)
-          if (existing) {
-            existing.count += item.count
-          } else {
-            acc.push(item)
-          }
-          return acc
-        }, [] as Array<{ date: string; count: number }>)
-        .sort((a, b) => a.date.localeCompare(b.date))
-
       return c.json({
         study: studyRecord,
         summary: {
@@ -312,7 +314,7 @@ studies.get('/:id/summary', authMiddleware, async (c) => {
           collectionDateRange: null,
           studyDurationDays: null,
           collectionTimeline: [],
-          enrollmentTimeline,
+          enrollmentTimeline: enrollmentTimeline(subjects.map(s => s.created)),
         },
       })
     }
@@ -377,57 +379,11 @@ studies.get('/:id/summary', authMiddleware, async (c) => {
       percentage: totalSpecimens > 0 ? (count / totalSpecimens) * 100 : 0,
     }))
 
-    // Collection date range
-    const collectionDates = (specimens
-      .map(s => s.collectionDate)
-      .filter(Boolean) as string[])
-      .sort()
-
-    const collectionDateRange = collectionDates.length > 0
-      ? {
-          earliest: collectionDates[0],
-          latest: collectionDates[collectionDates.length - 1],
-        }
-      : null
-
-    // Study duration in days
+    const collectionDates = specimens.map(s => s.collectionDate)
+    const collectionDateRange = collectionDateRangeOf(collectionDates)
     const studyDurationDays = collectionDateRange
-      ? Math.ceil(
-          (new Date(collectionDateRange.latest).getTime() -
-            new Date(collectionDateRange.earliest).getTime()) /
-            (1000 * 60 * 60 * 24)
-        )
+      ? daysBetweenCalendarDates(collectionDateRange.earliest, collectionDateRange.latest)
       : null
-
-    // Collection timeline (daily counts)
-    const collectionTimeline = collectionDates.reduce((acc, date) => {
-      const dateOnly = date.split('T')[0]
-      const existing = acc.find(x => x.date === dateOnly)
-      if (existing) {
-        existing.count += 1
-      } else {
-        acc.push({ date: dateOnly, count: 1 })
-      }
-      return acc
-    }, [] as Array<{ date: string; count: number }>)
-      .sort((a, b) => a.date.localeCompare(b.date))
-
-    // Enrollment timeline (daily counts)
-    const enrollmentTimeline = subjects
-      .map(s => ({
-        date: s.created.split('T')[0],
-        count: 1,
-      }))
-      .reduce((acc, item) => {
-        const existing = acc.find(x => x.date === item.date)
-        if (existing) {
-          existing.count += item.count
-        } else {
-          acc.push(item)
-        }
-        return acc
-      }, [] as Array<{ date: string; count: number }>)
-      .sort((a, b) => a.date.localeCompare(b.date))
 
     return c.json({
       study: studyRecord,
@@ -440,8 +396,8 @@ studies.get('/:id/summary', authMiddleware, async (c) => {
         containerTypes: containerTypeCounts,
         collectionDateRange,
         studyDurationDays,
-        collectionTimeline,
-        enrollmentTimeline,
+        collectionTimeline: collectionTimeline(collectionDates),
+        enrollmentTimeline: enrollmentTimeline(subjects.map(s => s.created)),
       },
     })
   } catch (error) {
@@ -503,7 +459,7 @@ studies.get('/:id/timeline', authMiddleware, async (c) => {
       id: number
       studySubjectId: number
       specimenTypeId: number
-      collectionDate: string
+      collectionDate: string | null
     }>
 
     if (specimens.length === 0) {
@@ -527,7 +483,7 @@ studies.get('/:id/timeline', authMiddleware, async (c) => {
     // Group specimens by subject
     const specimensBySubject = new Map<number, Array<{
       id: number
-      collectionDate: string
+      collectionDate: string | null
       specimenTypeId: number
       specimenTypeName: string
     }>>()
@@ -551,14 +507,7 @@ studies.get('/:id/timeline', authMiddleware, async (c) => {
       specimens: specimensBySubject.get(subject.id) || [],
     }))
 
-    // Calculate date range
-    const collectionDates = specimens.map(s => s.collectionDate).sort()
-    const dateRange = collectionDates.length > 0
-      ? {
-          earliest: collectionDates[0],
-          latest: collectionDates[collectionDates.length - 1],
-        }
-      : null
+    const dateRange = collectionDateRangeOf(specimens.map(s => s.collectionDate))
 
     return c.json({
       subjects: subjectsWithSpecimens,

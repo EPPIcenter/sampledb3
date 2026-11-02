@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Study, StudySummaryBasic } from '../../lib/api/studies';
 import { SkeletonList } from '../../ui'
+import { parseDisplayDate } from '../../lib/date-utils'
 
 interface RecentStudiesProps {
   studies: Array<Study & { summary?: StudySummaryBasic | null }>
@@ -61,7 +62,7 @@ export default function RecentStudies({ studies, loading }: RecentStudiesProps) 
               </div>
               <div className="ml-4 text-right flex-shrink-0">
                 <span className="text-xs text-[rgb(var(--app-text-muted))]">
-                  {new Date(study.lastUpdated).toLocaleDateString()}
+                  {parseDisplayDate(study.lastUpdated).toLocaleDateString()}
                 </span>
               </div>
             </div>

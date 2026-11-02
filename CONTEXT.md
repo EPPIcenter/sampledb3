@@ -14,6 +14,38 @@ _Avoid_: End user, operator (without context)
 Lab staff responsible for long-term specimen storage, inventory accuracy, and sample retrieval.
 _Avoid_: Curator (unless that is your org's term)
 
+### Roles
+
+Every account has one role. The API enforces it on each route, and the web app hides actions the role cannot take.
+
+**Admin**:
+Can do everything a **Member** can, plus manage users, settings, **Reference data**, **Locations**, and every **Destructive action**.
+
+**Member**:
+Lab staff who create and change **Operational data**: register, store, move, derive, and import. A member cannot take a **Destructive action**, except deleting a tutorial **Study** (short code starting with TUT).
+_Avoid_: User (every role is a user)
+
+**Viewer**:
+Can read data and run exports, but not create or change anything.
+
+**Destructive action**:
+An action that removes or rewrites recorded **Operational data** or configuration in bulk, or that the app cannot undo. Admin-only. Today these are:
+
+- Deleting a **Collection** with its contents, and its preflight (removes every **Container** in it, orphaned **Specimens**, and optionally emptied **Subjects**)
+- Deleting an empty **Collection** (Data Integrity)
+- Deleting a **Control batch** (removes its **Specimens** and their **Containers**)
+- Editing or deleting a **Derivation** record
+- Deleting a non-tutorial **Study** (removes its **Subjects**, **Specimens**, and **Containers**)
+- Deleting **Reference data**, a **Location**, or a user account
+
+Members may also take these actions, which cannot be undone but are part of everyday lab work, so they are not destructive actions:
+
+- Merging two **Subjects**
+- Deleting a qPCR experiment with its plate layout and results
+- Deleting one **Specimen** and its **Containers** from a **Control batch**
+
+_Avoid_: Calling an ordinary edit (renaming a **Collection**, changing a **Container**'s quantity, removing a **Tag** from a **Container**) a destructive action.
+
 ### Provenance hierarchy
 
 **Study → Subject → Specimen** is the primary provenance chain. Most specimens trace back to a study participant or sample source through this path.
@@ -25,11 +57,15 @@ The top-level organizational unit for a research project, clinical trial, or oth
 _Avoid_: Project (unless referring to non-study work), trial (as a synonym for study)
 
 **Subject**:
-A participant or sample source within a study, identified by a unique name within that study.
+A participant or sample source within a study, identified by a unique name within that study. Names compare ignoring case (ASCII letters, as SQLite's `NOCASE` does): a study can't have both `ABC-1` and `abc-1`, and creating, renaming or importing a Subject whose name differs from an existing one only by case is refused. The write paths enforce it; there is no database index for it, because a database from before the rule may already hold such names, and an index would stop it from starting. The integrity report lists those pairs for an operator to merge or rename. Decided in issue #124 (decision 6).
 _Avoid_: Patient (unless the study is clinical and that is your org's term), donor (unless that is your org's term)
 
 **Specimen**:
 The collected unit — a registered biological material from a specific collection event. One collection event, one specimen record.
+
+**Specimen identity**:
+A Subject's Specimen is identified by its Subject, Specimen type and collection date: **Specimen registration** adds Containers to the Specimen with that combination instead of creating a second one. Existing duplicates stay as they are (issue #124, decision 7): no migration merges them or adds a unique index to an upgraded database, and the integrity report lists them. Migration 008 can create dated duplicates by converting legacy `M/D/YY` dates, and clearing a placeholder collection date can make a Specimen an undated duplicate of another. Known difference: fresh installs have the unique index `idx_specimen_study_subject_type_date` on (`study_subject_id`, `specimen_type_id`, `collection_date`) and upgraded databases do not. That index treats an empty collection date as distinct, so fresh installs also allow undated duplicates.
+_Avoid_: Assuming the database refuses a duplicate Specimen; on an upgraded database only registration's lookup prevents one.
 _Avoid_: Sample (as the domain term; see **Sample** below)
 
 **Sample**:
@@ -132,8 +168,12 @@ Where a **Container** sits in the physical storage hierarchy — its **grid posi
 _Avoid_: Enrichment (implementation term); conflating placement with specimen or source lookups; placing paper directly on a box or bag without a sheet
 
 **Grid position**:
-The well or slot of a tube or well **Container** in its plate or box (e.g. A01). Optional: a tube or well may belong to a **Collection** with no grid position (legacy rows). At most one Container occupies a given grid position in a Collection; a missing position occupies no cell. Not applicable to **Paper**.
+The well or slot of a tube or well **Container** in its plate or box, stored as a row letter plus a two-digit column (A01). One rule, the Grid position rule, says which positions a **Collection** has (micronix plate A01–H12, cryovial box A01–J10) and how a typed position maps onto one: `a1`, `A1` and `a01` all mean A01, and anything else, including a cell outside the plate or box, is not a Grid position. Every write that sets a position applies the rule and rejects a position it does not accept; every read that lays Containers out on the grid applies the same rule, so a position a write would reject places no Container (see **Unplaced container**). Migration 010 repairs the legacy malformed positions it can and leaves the rest as they were; the integrity report flags any stored position that fails the rule. Optional: a tube or well may belong to a **Collection** with no grid position (legacy rows). At most one Container occupies a given grid position in a Collection; a missing position occupies no cell. Not applicable to **Paper**.
 _Avoid_: Well (as the domain term); treating a missing position as occupying a slot; requiring every tube to have a position before it can exist in a Collection
+
+**Unplaced container**:
+A tube or well **Container** that belongs to a plate or box but occupies no cell: it has no **Grid position**, or its stored position fails the Grid position rule for that Collection. It still counts as part of the Collection. Plate and box pages list unplaced Containers in their own section, labelled with the stored value, and plate scan validation expects them rather than treating them as extras.
+_Avoid_: Empty (an empty cell holds no Container); treating an unplaced Container as missing from its Collection
 
 ### Export
 
@@ -217,6 +257,10 @@ _Avoid_: Stuffing paper spot ids into `collection.barcode`; sending JSON `null` 
 **SampleDB**:
 The application — a specimen inventory and workflow system for research and clinical labs.
 _Avoid_: LIMS (unless describing the broader category externally), ELN, SRA submission system (not available today)
+
+**Data fix**:
+A one-time SQL change that one install's operator runs by hand against that install's database with `bun run data-fix` in `packages/api`, to carry out decisions about that install's own data. Unlike a numbered migration, it ships to no other install, so it may name that install's rows by id. The runner copies the database first, refuses a database below the current schema version, runs the fix in one transaction, and records it in `data_fix_log` so it runs only once. The EPPIcenter lab's fixes live in `ops/data-fixes/`.
+_Avoid_: Migration (for a change to one install's data); a migration changes every install's schema.
 
 ## Scope
 

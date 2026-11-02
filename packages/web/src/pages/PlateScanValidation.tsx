@@ -23,6 +23,8 @@ function statusLabel(s: WellStatus): string {
       return 'Missing in scan'
     case 'extra_in_scan':
       return 'Extra in scan'
+    case 'unplaced_in_scan':
+      return 'Unplaced in plate'
     default:
       return s
   }
@@ -38,6 +40,8 @@ function statusClass(s: WellStatus): string {
       return 'bg-amber-100 text-amber-800 border-amber-200'
     case 'extra_in_scan':
       return 'bg-sky-100 text-sky-800 border-sky-200'
+    case 'unplaced_in_scan':
+      return 'bg-app-surface text-app-text border-app-border'
     default:
       return 'bg-app-surface text-app-text'
   }
@@ -69,6 +73,7 @@ function buildValidationReportCsv(result: ValidatePlateScanResult): string {
   lines.push(`Mismatch,${summary.mismatch}`)
   lines.push(`Missing in scan,${summary.missingInScan}`)
   lines.push(`Extra in scan,${summary.extraInScan}`)
+  lines.push(`Unplaced in plate (found in scan),${summary.unplacedInScan}`)
   lines.push(`Exhausted count,${summary.exhaustedCount}`)
   lines.push(`Tagged count,${summary.taggedCount}`)
   lines.push('')
@@ -89,6 +94,14 @@ function buildValidationReportCsv(result: ValidatePlateScanResult): string {
       tags,
     ]
     lines.push(row.map((c) => csvEscape(String(c))).join(','))
+  }
+  if (result.unplaced.length > 0) {
+    lines.push('')
+    lines.push('Unplaced tubes (no grid position in the plate)')
+    lines.push(['Barcode', 'Stored position', 'Scanned position'].map(csvEscape).join(','))
+    for (const t of result.unplaced) {
+      lines.push([t.barcode, t.storedPosition ?? '', t.scannedPosition ?? ''].map(csvEscape).join(','))
+    }
   }
   return lines.join('\r\n')
 }
@@ -583,7 +596,7 @@ export default function PlateScanValidation() {
                   Download report
                 </button>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-4">
                 <div className="p-3 rounded-lg bg-app-surface border border-app-border">
                   <div className="text-2xl font-semibold text-app-text">{result.summary.matched}</div>
                   <div className="text-sm text-app-text-muted">Matched</div>
@@ -599,6 +612,10 @@ export default function PlateScanValidation() {
                 <div className="p-3 rounded-lg bg-app-surface border border-app-border">
                   <div className="text-2xl font-semibold text-app-text">{result.summary.extraInScan}</div>
                   <div className="text-sm text-app-text-muted">Extra in scan</div>
+                </div>
+                <div className="p-3 rounded-lg bg-app-surface border border-app-border">
+                  <div className="text-2xl font-semibold text-app-text">{result.summary.unplacedInScan}</div>
+                  <div className="text-sm text-app-text-muted">Unplaced in plate</div>
                 </div>
               </div>
               {result.inferredPlate && (
@@ -617,6 +634,12 @@ export default function PlateScanValidation() {
                   ? 'Scan matches the database.'
                   : 'There are discrepancies. Review the well grid below.'}
               </p>
+              {result.unplaced.length > 0 && (
+                <p className="mt-1 text-sm text-app-text-muted">
+                  {result.unplaced.length} {result.unplaced.length === 1 ? 'tube belongs' : 'tubes belong'} to this plate
+                  without a grid position; {result.summary.unplacedInScan} found in the scan.
+                </p>
+              )}
             </div>
 
             <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-4">
@@ -673,6 +696,35 @@ export default function PlateScanValidation() {
               </div>
             </div>
           </>
+        )}
+
+        {result && result.unplaced.length > 0 && (
+          <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-4">
+            <h2 className="storage-section-title mb-2">Unplaced tubes</h2>
+            <p className="text-sm text-app-text-muted mb-4">
+              These tubes belong to this plate but have no grid position, or a stored position that is not a plate cell.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr>
+                    <th scope="col" className="border border-app-border bg-app-surface px-2 py-1 text-left font-medium">Barcode</th>
+                    <th scope="col" className="border border-app-border bg-app-surface px-2 py-1 text-left font-medium">Stored position</th>
+                    <th scope="col" className="border border-app-border bg-app-surface px-2 py-1 text-left font-medium">Scanned position</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.unplaced.map((t) => (
+                    <tr key={t.barcode} className="border-b border-app-border">
+                      <td className="border border-app-border px-2 py-1 font-mono">{t.barcode}</td>
+                      <td className="border border-app-border px-2 py-1 font-mono">{t.storedPosition ?? 'None'}</td>
+                      <td className="border border-app-border px-2 py-1 font-mono">{t.scannedPosition ?? 'Not in scan'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
 
         {inferenceReport && (

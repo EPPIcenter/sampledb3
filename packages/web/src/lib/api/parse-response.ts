@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   parseContainerDetailWire as parseContainerDetailWireSchema,
   parseContainersListWire,
+  enrichedContainerWireSchema,
   type ContainerDetailWire,
   type EnrichedContainerWire,
 } from '@sampledb/contract/wire'
@@ -85,6 +86,13 @@ export function parseContainerDetailWire(body: unknown): ParsedContainerDetailWi
     }
     throw error
   }
+}
+
+const containerUpdateWireSchema = z.object({ container: enrichedContainerWireSchema })
+
+/** Parse the PATCH /containers/:id body and return the updated container. */
+export function parseContainerUpdate(body: unknown): EnrichedContainerWire {
+  return parseWithSchema(containerUpdateWireSchema, body, 'PATCH /containers/:id').container
 }
 
 export type ContainersListResult = {

@@ -11,9 +11,12 @@ import {
   createTestUnit,
   createTestSpecimenTypeContainerType,
   createTestContainerTypeUnit,
+  createTestStorageContainer,
+  createTestMicronixTube,
 } from '../../../__tests__/helpers/factories'
 import type { Database } from '../../../db/client'
 import {
+  cryovialTube,
   micronixPlate,
   micronixTube,
   paper,
@@ -302,12 +305,96 @@ describe('Specimen registration', () => {
     )
   })
 
+  describe('tube barcodes across types', () => {
+    const cryovial = (barcode: string, position: string): RegistrationContainer => ({
+      containerType: 'cryovial_tube',
+      barcode,
+      collection: { type: 'cryovial_box', name: 'CB1', locationId, position },
+    })
+
+    it('rejects a micronix barcode a cryovial tube already has, ignoring case', async () => {
+      await registerSpecimens(db, [entry([cryovial('CV-9', 'A01')])])
+
+      const error = await rejection([entry([tube('cv-9', { name: 'P1', position: 'A01' })])])
+
+      expect(error.errors).toEqual([
+        { entryIndex: 0, containerIndex: 0, field: 'barcode', message: "Barcode 'cv-9' already exists as 'CV-9'. Use a different barcode." },
+      ])
+      expect(await count(storageContainer)).toBe(1)
+    })
+
+    it('rejects a cryovial barcode a micronix tube already has', async () => {
+      await registerSpecimens(db, [entry([tube('MX-9', { name: 'P1', position: 'A01' })])])
+
+      const error = await rejection([entry([cryovial('MX-9', 'A01')])])
+
+      expect(error.errors).toEqual([
+        { entryIndex: 0, containerIndex: 0, field: 'barcode', message: "Barcode 'MX-9' already exists. Use a different barcode." },
+      ])
+    })
+
+    it('rejects one barcode on two tube types in the same request', async () => {
+      const error = await rejection([entry([tube('X1', { name: 'P1', position: 'A01' }), cryovial('x1', 'A01')])])
+
+      expect(error.errors).toEqual([
+        {
+          entryIndex: 0,
+          containerIndex: 1,
+          field: 'barcode',
+          message: "Barcode 'x1' is used more than once in this request. Each barcode must be unique.",
+        },
+      ])
+    })
+  })
+
   it('keys a missing position to the position field', async () => {
     const error = await rejection([entry([tube('T1', { name: 'P1' })])])
 
     expect(error.errors).toEqual([
       { entryIndex: 0, containerIndex: 0, field: 'position', message: 'Position is required for micronix tubes (e.g. A01).' },
     ])
+  })
+
+  describe('Grid position rule', () => {
+    it.each([
+      { position: 'Z99', message: 'Position "Z99" is outside a micronix plate (A01–H12)' },
+      { position: 'A13', message: 'Position "A13" is outside a micronix plate (A01–H12)' },
+      { position: 'I01', message: 'Position "I01" is outside a micronix plate (A01–H12)' },
+      { position: 'hello world', message: expect.stringContaining('Position "hello world" is not a grid position') },
+      { position: 'NA01', message: expect.stringContaining('Position "NA01" is not a grid position') },
+    ])('rejects $position on a plate and writes nothing', async ({ position, message }) => {
+      const error = await rejection([entry([tube('T1', { name: 'P1', position })])])
+
+      expect(error.errors).toEqual([{ entryIndex: 0, containerIndex: 0, field: 'position', message }])
+      expect(await count(specimen)).toBe(0)
+      expect(await count(storageContainer)).toBe(0)
+    })
+
+    it('accepts J10 in a cryovial box and rejects K01', async () => {
+      const box = (barcode: string, position: string): RegistrationContainer => ({
+        containerType: 'cryovial_tube',
+        barcode,
+        collection: { type: 'cryovial_box', name: 'BOX', locationId, position },
+      })
+      const error = await rejection([entry([box('C1', 'j10'), box('C2', 'K01')])])
+      expect(error.errors).toEqual([
+        { entryIndex: 0, containerIndex: 1, field: 'position', message: 'Position "K01" is outside a cryovial box (A01–J10)' },
+      ])
+
+      await registerSpecimens(db, [entry([box('C1', 'j10')])])
+      const [row] = await db.select().from(cryovialTube)
+      expect(row?.position).toBe('J10')
+    })
+
+    it('registers into a plate that holds a legacy malformed position', async () => {
+      const container = await createTestStorageContainer(db, { unitId })
+      await createTestMicronixTube(db, { containerId: container.id, collectionId: plate.id, barcode: 'LEGACY', position: '--A01' })
+
+      await registerSpecimens(db, [entry([tube('T1', { name: 'P1', position: 'A1' })])])
+
+      const rows = await db.select().from(micronixTube)
+      expect(Object.fromEntries(rows.map((r) => [r.barcode, r.position]))).toEqual({ LEGACY: '--A01', T1: 'A01' })
+    })
   })
 
   it('rejects a unit not allowed for the container type', async () => {

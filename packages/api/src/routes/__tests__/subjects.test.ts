@@ -40,9 +40,46 @@ describe('Subjects API', () => {
       expect(Array.isArray(data.subjects)).toBe(true)
     })
 
+    it('counts only subjects created inside created_from and created_to', async () => {
+      const s = await createTestStudy(ctx.db, { title: 'Study', shortCode: 'S1' })
+      await createTestStudySubject(ctx.db, { studyId: s.id, name: 'before', created: '2026-08-31 23:59:59' })
+      await createTestStudySubject(ctx.db, { studyId: s.id, name: 'first', created: '2026-09-01 00:00:00' })
+      await createTestStudySubject(ctx.db, { studyId: s.id, name: 'last', created: '2026-09-30 23:59:59' })
+      await createTestStudySubject(ctx.db, { studyId: s.id, name: 'after', created: '2026-10-01 00:00:00' })
+
+      const res = await ctx.request('/api/subjects?created_from=2026-09-01&created_to=2026-09-30&limit=1')
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { pagination: { total: number } }
+      expect(data.pagination.total).toBe(2)
+
+      const fromOnly = await ctx.request('/api/subjects?created_from=2026-09-01&limit=1')
+      expect(((await fromOnly.json()) as { pagination: { total: number } }).pagination.total).toBe(3)
+    })
+
+    it.each([
+      ['created_from', 'yesterday'],
+      ['created_to', '2024-13-01'],
+    ])('returns 400 for %s=%s', async (param, value) => {
+      const res = await ctx.request(`/api/subjects?${param}=${encodeURIComponent(value)}`)
+
+      expect(res.status).toBe(400)
+      const data = (await res.json()) as { error: string }
+      expect(data.error).toContain(param)
+    })
+
     it('returns 401 when not authenticated', async () => {
       const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects', { method: 'GET' })
       expect(res.status).toBe(401)
+    })
+  })
+
+  describe('GET /api/subjects oversized page (#120)', () => {
+    it.each([
+      ['/api/subjects?page=99999999999999999999', 'page'],
+    ])('returns 400 for %s', async (url, param) => {
+      const res = await ctx.request(url)
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain(param)
     })
   })
 
@@ -72,6 +109,106 @@ describe('Subjects API', () => {
         json: { studyId: 1, name: 'Subject 1' },
       })
       expect(res.status).toBe(401)
+    })
+  })
+
+  describe('Subject names ignore case within a Study', () => {
+    const caseError = "Subject name 'abc-1' differs only by case from Subject 'ABC-1' in this study. Subject names in a study ignore case."
+
+    async function studyWithSubject() {
+      const studyRecord = await createTestStudy(ctx.db, { title: 'Case Study', shortCode: 'CASE' })
+      const subject = await createTestStudySubject(ctx.db, { studyId: studyRecord.id, name: 'ABC-1' })
+      return { studyRecord, subject }
+    }
+
+    it('POST /api/subjects refuses a name that differs from an existing one only by case', async () => {
+      const { studyRecord } = await studyWithSubject()
+
+      const res = await ctx.request('/api/subjects', { method: 'POST', json: { studyId: studyRecord.id, name: ' abc-1 ' } })
+
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toBe(caseError)
+      expect((await ctx.db.select().from(studySubject)).map((s) => s.name)).toEqual(['ABC-1'])
+    })
+
+    it('POST /api/subjects accepts the same name in a different study', async () => {
+      await studyWithSubject()
+      const other = await createTestStudy(ctx.db, { title: 'Other Study', shortCode: 'OTHER' })
+
+      const res = await ctx.request('/api/subjects', { method: 'POST', json: { studyId: other.id, name: 'abc-1' } })
+
+      expect(res.status).toBe(201)
+    })
+
+    it('POST /api/subjects/bulk refuses a case variant of an existing name and creates nothing', async () => {
+      await studyWithSubject()
+
+      const res = await ctx.request('/api/subjects/bulk', {
+        method: 'POST',
+        json: { subjects: [{ studyShortCode: 'CASE', name: 'NEW-1' }, { studyShortCode: 'CASE', name: 'abc-1' }] },
+      })
+
+      expect(res.status).toBe(400)
+      const data = (await res.json()) as { errors: Array<{ index: number; error: string }> }
+      expect(data.errors).toEqual([{ index: 1, error: caseError }])
+      expect((await ctx.db.select().from(studySubject)).map((s) => s.name)).toEqual(['ABC-1'])
+    })
+
+    it('POST /api/subjects/bulk refuses two names in one batch that differ only by case', async () => {
+      await createTestStudy(ctx.db, { title: 'Case Study', shortCode: 'CASE' })
+
+      const res = await ctx.request('/api/subjects/bulk', {
+        method: 'POST',
+        json: { subjects: [{ studyShortCode: 'CASE', name: 'Dup' }, { studyShortCode: 'CASE', name: 'DUP' }] },
+      })
+
+      expect(res.status).toBe(400)
+      const data = (await res.json()) as { errors: Array<{ index: number; error: string }> }
+      expect(data.errors).toEqual([{ index: 1, error: "Duplicate subject name 'DUP' in study" }])
+      expect(await ctx.db.select().from(studySubject)).toHaveLength(0)
+    })
+
+    it('POST /api/subjects/bulk/validate reports case variants, in the batch and against the study', async () => {
+      await studyWithSubject()
+
+      const res = await ctx.request('/api/subjects/bulk/validate', {
+        method: 'POST',
+        json: {
+          subjects: [
+            { studyShortCode: 'CASE', name: 'abc-1' },
+            { studyShortCode: 'CASE', name: 'Same' },
+            { studyShortCode: 'CASE', name: 'SAME' },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { valid: boolean; errors: Array<{ index: number; message: string }> }
+      expect(data.valid).toBe(false)
+      expect(data.errors).toEqual([
+        { index: 0, message: caseError },
+        { index: 1, message: "Duplicate subject name 'SAME' in study" },
+      ])
+    })
+
+    it('PUT /api/subjects/:id refuses a rename to a case variant of another Subject', async () => {
+      const { studyRecord } = await studyWithSubject()
+      const other = await createTestStudySubject(ctx.db, { studyId: studyRecord.id, name: 'XYZ-2' })
+
+      const res = await ctx.request(`/api/subjects/${other.id}`, { method: 'PUT', json: { name: 'abc-1' } })
+
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toBe(caseError)
+      expect((await ctx.db.select().from(studySubject)).map((s) => s.name).sort()).toEqual(['ABC-1', 'XYZ-2'])
+    })
+
+    it('PUT /api/subjects/:id lets a Subject change the case of its own name', async () => {
+      const { subject } = await studyWithSubject()
+
+      const res = await ctx.request(`/api/subjects/${subject.id}`, { method: 'PUT', json: { name: 'abc-1' } })
+
+      expect(res.status).toBe(200)
+      expect(((await res.json()) as { subject: { name: string } }).subject.name).toBe('abc-1')
     })
   })
 

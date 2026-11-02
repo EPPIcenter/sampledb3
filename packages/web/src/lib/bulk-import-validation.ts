@@ -5,22 +5,31 @@
 import type { ContainerType } from './container-types'
 import { getCollectionNameColumn } from './container-columns'
 import type { FlatBulkImportContainer } from './bulk-import-payload'
-import { parseCsv } from '@sampledb/contract'
+import { parseCsvFileRows } from './csv-file-rows'
 
 export interface CSVRow {
   [key: string]: string
 }
 
+/** An import error and the spreadsheet rows it concerns (header is row 1); none for a file-wide error. */
 export interface BulkImportValidationError {
-  row: number
+  fileRows: number[]
   error: string
+}
+
+/** "Row 3: …", "Rows 2, 5: …", or the bare message for a file-wide error. */
+export function formatBulkImportError({ fileRows, error }: BulkImportValidationError): string {
+  if (fileRows.length === 0) return error
+  return `${fileRows.length === 1 ? 'Row' : 'Rows'} ${fileRows.join(', ')}: ${error}`
 }
 
 export type ImportType = 'subjects' | 'specimens' | 'combined'
 
+export type BulkImportCollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+
 export function getBulkImportCollectionType(
   containerType: ContainerType | 'none' | ''
-): 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | null {
+): BulkImportCollectionType | null {
   switch (containerType) {
     case 'micronix_tube':
     case 'static_well':
@@ -52,7 +61,8 @@ export function getBulkImportRequiredFields(opts: {
   const containerFields: Record<ContainerType, string[]> = {
     micronix_tube: ['plate_name', 'barcode', 'position'],
     cryovial_tube: ['box_name', 'position'],
-    paper: ['box_name', 'bag_name', 'sheet_name'],
+    // A paper row names its box or its bag, never both.
+    paper: ['box_name or bag_name', 'sheet_name'],
     static_well: ['plate_name', 'position'],
   }
   return [...base, ...containerFields[containerType]]
@@ -82,22 +92,27 @@ function normalizeHeader(header: string): string {
 }
 
 export function parseBulkImportCSV(text: string): CSVRow[] {
+  return parseBulkImportCsvFileRows(text).rows
+}
+
+/**
+ * Parse bulk import CSV into header-keyed rows, dropping rows whose cells are all blank.
+ * `fileRows[i]` is the spreadsheet row of `rows[i]`, counting the header as row 1.
+ */
+export function parseBulkImportCsvFileRows(text: string): { rows: CSVRow[]; fileRows: number[] } {
   // Shared RFC 4180 parser: quoted commas ("low vol, hemolyzed"), quotes, CRLF, and BOM.
-  const lines = parseCsv(text, { skipBlankRows: true })
-  if (lines.length < 2) return []
+  const parsed = parseCsvFileRows(text)
+  if (!parsed) return { rows: [], fileRows: [] }
 
-  const headers = lines[0].map((h) => normalizeHeader(h.trim()))
-  const rows: CSVRow[] = []
-
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i]
+  const headers = parsed.header.map((h) => normalizeHeader(h.trim()))
+  const rows = parsed.rows.map(({ cells }) => {
     const row: CSVRow = {}
     headers.forEach((header, j) => {
-      row[header] = values[j]?.trim() ?? ''
+      row[header] = cells[j]?.trim() ?? ''
     })
-    rows.push(row)
-  }
-  return rows
+    return row
+  })
+  return { rows, fileRows: parsed.rows.map((r) => r.fileRow) }
 }
 
 /** Resolve paper parent from bulk import CSV row (exactly one of box_name or bag_name). */
@@ -137,23 +152,38 @@ export function getBulkImportRowCollectionName(
   return t || undefined
 }
 
-/** Per-row collection check for missing-collection resolution (supports mixed box/bag paper rows). */
-export function getBulkImportRowCollectionCheck(
+/**
+ * The Collection a row places its container in. `name` comes from the name column
+ * (plate_name, box_name, or bag_name) and `barcode` from collection_barcode; a value is
+ * never reclassified by its shape.
+ */
+export interface BulkImportCollectionRef {
+  type: BulkImportCollectionType
+  name?: string
+  barcode?: string
+}
+
+/** Per-row Collection reference for missing-collection resolution (supports mixed box/bag paper rows). */
+export function getBulkImportRowCollectionRef(
   row: CSVRow,
   containerType: ContainerType | 'none' | ''
-): { identifier: string; type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' } | undefined {
+): BulkImportCollectionRef | undefined {
   if (containerType === 'paper') {
     const parent = resolveBulkImportPaperParent(row)
     if (!parent || 'error' in parent) return undefined
-    return {
-      identifier: parent.collectionName,
-      type: parent.parentCollectionType,
-    }
+    return { type: parent.parentCollectionType, name: parent.collectionName }
   }
-  const collectionType = getBulkImportCollectionType(containerType)
+  const type = getBulkImportCollectionType(containerType)
+  if (!type) return undefined
   const name = getBulkImportRowCollectionName(row, containerType)
-  if (!collectionType || !name) return undefined
-  return { identifier: name, type: collectionType }
+  // Only plates and cryovial boxes carry barcodes.
+  const barcode = trimCell(row.collection_barcode) || undefined
+  if (!name && !barcode) return undefined
+  return {
+    type,
+    ...(name ? { name } : {}),
+    ...(barcode ? { barcode } : {}),
+  }
 }
 
 function getRowCollectionName(

@@ -1,5 +1,6 @@
+import { parseGridPosition } from '@sampledb/contract'
 import { inferDestinationPlateForScan } from '../plate-destination-inference'
-import { parseScannerPlateCsv, validateScannerPlateCsv } from '../scanner-plate-csv'
+import { findDuplicateRows, parseScannerPlateCsv, validateScannerPlateCsv } from '../scanner-plate-csv'
 import { parseBuiltinMoveCsv } from './ingest'
 import type { ScanMoveCsvRow, ScanMoveIdentifier, ScanMoveInference, ScanMoveVariant } from './types'
 
@@ -89,7 +90,34 @@ export const cryovialScanMoveVariant: ScanMoveVariant = {
   capabilities: { createDestinations: true, relocationValidation: false },
 
   parseAndValidate(text) {
-    return parseBuiltinMoveCsv(text, CRYOVIAL_MOVE_CSV_SPEC)
+    const { csvRows, errors } = parseBuiltinMoveCsv(text, CRYOVIAL_MOVE_CSV_SPEC)
+    // Grid position rule on the target only: a legacy source position must still resolve.
+    const targets = csvRows.map((row, i) => {
+      const target = csvCell(row, 'target_position')
+      if (target === '') return null
+      const parsed = parseGridPosition(target, 'cryovial_box')
+      if (parsed.ok) return parsed.position
+      errors.push({ row: i + 1, error: parsed.error })
+      return null
+    })
+    errors.push(
+      ...findDuplicateRows(
+        targets,
+        (position, firstRow) => `Target position ${position} appears more than once (also row ${firstRow})`,
+      ),
+      // The same source tube listed twice would be moved twice.
+      ...findDuplicateRows(
+        csvRows.map((row) => {
+          const box = csvCell(row, 'source_collection_name')
+          const position = csvCell(row, 'source_position')
+          if (box === '' || position === '') return null
+          const parsed = parseGridPosition(position, 'cryovial_box')
+          return `${box} ${parsed.ok ? parsed.position : position}`
+        }),
+        (source, firstRow) => `Source tube ${source} appears more than once (also row ${firstRow})`,
+      ),
+    )
+    return { csvRows, errors }
   },
 
   inferDestination(filename, _csvRows, ctx): ScanMoveInference {

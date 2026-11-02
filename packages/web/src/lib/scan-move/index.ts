@@ -1,5 +1,5 @@
 export * from './types'
-export { initialScanMoveState, scanMoveReducer, planNextFromUpload } from './reducer'
+export { initialScanMoveState, scanMoveReducer, planNextFromUpload, blockingErrors } from './reducer'
 export type { ScanMoveUploadPlan } from './reducer'
 export {
   splitCsvLine,

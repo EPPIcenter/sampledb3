@@ -85,7 +85,52 @@ describe('validateScannerPlateCsv', () => {
     const rows = parseScannerPlateCsv(text, singleConfig)
     const result = validateScannerPlateCsv(rows, singleConfig)
     expect(result.valid).toBe(false)
-    expect(result.errors[0].error).toMatch(/Found 95 valid position/)
+    expect(result.errors).toContainEqual({ row: 96, error: 'Position A01 appears more than once (also row 1)' })
+    expect(result.errors.some((e) => /Found 95 valid position/.test(e.error))).toBe(true)
+  })
+
+  // Traxcer exports (examples/move-micronix-test): "Tube ID,Position", unpadded wells.
+  const traxcerConfig: ScannerConfiguration = {
+    id: 'cfg-traxcer',
+    name: 'Traxcer',
+    barcodeColumn: 'Tube ID',
+    positionType: 'single',
+    positionColumn: 'Position',
+    skipRows: 0,
+    isDefault: true,
+  }
+
+  /** Full plate in Traxcer form with unpadded positions (A1 … H12). */
+  function traxcerPlate(barcodes: Record<string, string>, positionOverride: Record<string, string> = {}): string {
+    const lines = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].flatMap((row) =>
+      Array.from({ length: 12 }, (_, i) => {
+        const pos = `${row}${i + 1}`
+        return `${barcodes[pos] ?? ''},${positionOverride[pos] ?? pos}`
+      }),
+    )
+    return 'Tube ID,Position\n' + lines.join('\n')
+  }
+
+  it('accepts unpadded scanner positions like A1', () => {
+    const rows = parseScannerPlateCsv(traxcerPlate({ A1: '1043659134', A2: '1106665111' }), traxcerConfig)
+    expect(validateScannerPlateCsv(rows, traxcerConfig)).toEqual({ valid: true, errors: [] })
+  })
+
+  it('catches A1 and A01 in one scan as the same well', () => {
+    // Row 2 (A2) is written as a01, so A01 appears twice and A02 is missing.
+    const rows = parseScannerPlateCsv(traxcerPlate({}, { A2: 'a01' }), traxcerConfig)
+    const result = validateScannerPlateCsv(rows, traxcerConfig)
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContainEqual({ row: 2, error: 'Position A01 appears more than once (also row 1)' })
+  })
+
+  it('rejects the same barcode in two wells', () => {
+    const rows = parseScannerPlateCsv(traxcerPlate({ A1: '1043659134', C7: '1043659134' }), traxcerConfig)
+    const result = validateScannerPlateCsv(rows, traxcerConfig)
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual([
+      { row: 31, error: 'Barcode 1043659134 appears more than once (also row 1)' },
+    ])
   })
 
   it('rejects invalid well positions like I01', () => {

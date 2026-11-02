@@ -1,6 +1,18 @@
 import type { Database } from '../db/client'
-import { study, studySubject, specimenType, micronixTube, storageContainer, cryovialTube, paper } from '../db/schema'
-import { eq, and, inArray } from 'drizzle-orm'
+import {
+  study,
+  studySubject,
+  specimenType,
+  micronixTube,
+  micronixPlate,
+  cryovialTube,
+  cryovialBox,
+  paper,
+  sheet,
+} from '../db/schema'
+import { eq, and, inArray, sql } from 'drizzle-orm'
+import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
+import { ValidationError } from './error-handler'
 import type { DatabaseOrTransaction } from './db-types'
 import { chunkArray, SQL_IN_CHUNK_SIZE } from './sql-helpers'
 
@@ -52,35 +64,142 @@ export async function resolveSpecimenTypeByName(database: Database, name: string
   return specimenTypeRecord?.id ?? null
 }
 
+/** A Container a barcode lookup matched. Paper matches on its sublabel. */
+export interface BarcodeMatch {
+  containerId: number
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper'
+  /** The stored barcode (or sublabel), which may differ in case or whitespace under `ignoreCase`. */
+  barcode: string
+  currentCollectionId: number
+  currentCollectionName: string | null
+  currentCollectionType: 'micronix_plate' | 'cryovial_box' | 'sheet'
+  currentPosition: string | null
+}
+
+export interface FindContainersByBarcodeOptions {
+  /** Compare trimmed and case-folded, as tube barcode uniqueness does. Default: exact match. */
+  ignoreCase?: boolean
+  /** Match micronix and cryovial tube barcodes only, not Paper sublabels. */
+  tubesOnly?: boolean
+}
+
 /**
- * Resolve container barcode to container ID
+ * Every Container whose barcode (or Paper sublabel) is `barcode`, ordered by Container id.
+ * Barcodes aren't unique across tube types, and cryovial barcodes aren't unique at all, so
+ * a caller that needs one Container must handle several matches, for example with
+ * `requireSingleBarcodeMatch`.
  */
-export async function resolveContainerByBarcode(database: DatabaseOrTransaction, barcode: string): Promise<number | null> {
-  // Try micronix tube
+export async function findContainersByBarcode(
+  database: DatabaseOrTransaction,
+  barcode: string,
+  options: FindContainersByBarcodeOptions = {},
+): Promise<BarcodeMatch[]> {
+  const matches = (column: SQLiteColumn) =>
+    options.ignoreCase ? sql`lower(trim(${column})) = lower(${barcode.trim()})` : eq(column, barcode)
+
   const micronix = await database
-    .select({ id: micronixTube.id })
+    .select({
+      containerId: micronixTube.id,
+      barcode: micronixTube.barcode,
+      currentCollectionId: micronixTube.collectionId,
+      currentCollectionName: micronixPlate.name,
+      currentPosition: micronixTube.position,
+    })
     .from(micronixTube)
-    .where(eq(micronixTube.barcode, barcode))
-    .get()
-  if (micronix) return micronix.id
-
-  // Try cryovial tube
+    .leftJoin(micronixPlate, eq(micronixPlate.id, micronixTube.collectionId))
+    .where(matches(micronixTube.barcode))
   const cryovial = await database
-    .select({ id: cryovialTube.id })
+    .select({
+      containerId: cryovialTube.id,
+      barcode: cryovialTube.barcode,
+      currentCollectionId: cryovialTube.collectionId,
+      currentCollectionName: cryovialBox.name,
+      currentPosition: cryovialTube.position,
+    })
     .from(cryovialTube)
-    .where(eq(cryovialTube.barcode, barcode))
-    .get()
-  if (cryovial) return cryovial.id
+    .leftJoin(cryovialBox, eq(cryovialBox.id, cryovialTube.collectionId))
+    .where(matches(cryovialTube.barcode))
+  const papers = options.tubesOnly
+    ? []
+    : await database
+        .select({
+          containerId: paper.id,
+          barcode: paper.sublabel,
+          currentCollectionId: paper.sheetId,
+          currentCollectionName: sheet.name,
+        })
+        .from(paper)
+        .leftJoin(sheet, eq(sheet.id, paper.sheetId))
+        .where(matches(paper.sublabel))
 
-  // Try paper
-  const paperRec = await database
-    .select({ id: paper.id })
-    .from(paper)
-    .where(eq(paper.sublabel, barcode))
-    .get()
-  if (paperRec) return paperRec.id
-  
-  return null
+  const all: BarcodeMatch[] = [
+    ...micronix.map((row) => ({ ...row, containerType: 'micronix_tube' as const, currentCollectionType: 'micronix_plate' as const })),
+    ...cryovial.map((row) => ({
+      ...row,
+      barcode: row.barcode ?? '',
+      containerType: 'cryovial_tube' as const,
+      currentCollectionType: 'cryovial_box' as const,
+    })),
+    ...papers.map((row) => ({
+      ...row,
+      barcode: row.barcode ?? '',
+      currentPosition: null,
+      containerType: 'paper' as const,
+      currentCollectionType: 'sheet' as const,
+    })),
+  ]
+  return all.sort((a, b) => a.containerId - b.containerId)
+}
+
+/** How many candidates an ambiguous-barcode message names before summarising the rest. */
+const LISTED_CANDIDATES = 10
+
+function describeBarcodeMatch(match: BarcodeMatch): string {
+  const place = [match.currentCollectionName, match.currentPosition].filter(Boolean).join(' ')
+  return `container ${match.containerId} (${match.containerType}${place ? ` in ${place}` : ''})`
+}
+
+/**
+ * A barcode lookup matched more than one Container and won't guess between them. `details`
+ * lists every candidate; the message names the first few.
+ */
+export class AmbiguousBarcodeError extends ValidationError {
+  constructor(
+    readonly barcode: string,
+    readonly candidates: BarcodeMatch[],
+  ) {
+    const listed = candidates.slice(0, LISTED_CANDIDATES).map(describeBarcodeMatch).join(', ')
+    const more = candidates.length > LISTED_CANDIDATES ? `, and ${candidates.length - LISTED_CANDIDATES} more` : ''
+    super(
+      `Ambiguous barcode '${barcode}': it matches ${candidates.length} containers (${listed}${more}). ` +
+        'Identify the container by its id or position instead.',
+      { code: 'AMBIGUOUS_BARCODE', barcode, candidates },
+    )
+    this.name = 'AmbiguousBarcodeError'
+  }
+}
+
+/** The one Container `barcode` names, or null when none does. Throws `AmbiguousBarcodeError` for several. */
+export async function resolveContainerByBarcode(
+  database: DatabaseOrTransaction,
+  barcode: string,
+): Promise<BarcodeMatch | null> {
+  const matches = await findContainersByBarcode(database, barcode)
+  if (matches.length > 1) throw new AmbiguousBarcodeError(barcode, matches)
+  return matches[0] ?? null
+}
+
+/**
+ * Tubes (micronix or cryovial) whose barcode equals `barcode` ignoring case and surrounding
+ * whitespace, other than `exceptContainerId`. A new or changed tube barcode must match none.
+ */
+export async function findTubesUsingBarcode(
+  database: DatabaseOrTransaction,
+  barcode: string,
+  exceptContainerId?: number,
+): Promise<BarcodeMatch[]> {
+  const matches = await findContainersByBarcode(database, barcode, { ignoreCase: true, tubesOnly: true })
+  return matches.filter((match) => match.containerId !== exceptContainerId)
 }
 
 /**

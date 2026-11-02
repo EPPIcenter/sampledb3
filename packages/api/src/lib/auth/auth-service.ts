@@ -1,10 +1,11 @@
-import { eq, and, isNull } from 'drizzle-orm'
+import { eq, and, gt, isNull, ne } from 'drizzle-orm'
+import { createHash, randomBytes } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { nanoid } from 'nanoid'
 import type { Database } from '../../db/client'
 import { users, sessions, type users as usersTable } from '../../db/schema'
 import { getSessionSettings } from '../settings'
-import { UnauthorizedError, ValidationError } from '../error-handler'
+import { ConflictError, UnauthorizedError, ValidationError } from '../error-handler'
 import { utcNow } from '../datetime'
 
 export type PublicUser = {
@@ -77,23 +78,107 @@ export async function verifyLoginCredentials(
   return user
 }
 
+/**
+ * SHA-256 of a session cookie token, hex encoded. The sessions table stores only this hash, so a
+ * copy of the database or an admin session listing cannot be replayed as a cookie. The token has
+ * 256 bits of entropy, so an unsalted fast hash is enough and keeps the lookup an indexed equality.
+ */
+export function hashSessionToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+/**
+ * Start a session for a user. Returns the cookie token, which is not stored, and the session's
+ * public id, which admins list and revoke by.
+ */
 export async function createUserSession(
   database: Database,
-  userId: number
-): Promise<{ sessionId: string; expiresAt: number; maxAgeSeconds: number }> {
-  const sessionSettings = await getSessionSettings(database)
+  userId: number,
+  settingsDatabase: Database = database
+): Promise<{ sessionToken: string; publicId: string; expiresAt: number; maxAgeSeconds: number }> {
+  const sessionSettings = await getSessionSettings(settingsDatabase)
   if (!sessionSettings) {
     throw new Error('Session settings are not configured. Please run database initialization.')
   }
   const maxAgeSeconds = sessionSettings.maxAgeSeconds
-  const sessionId = nanoid()
+  const sessionToken = randomBytes(32).toString('base64url')
+  const publicId = nanoid()
   const expiresAt = Math.floor(Date.now() / 1000) + maxAgeSeconds
   await database.insert(sessions).values({
-    id: sessionId,
+    id: publicId,
+    tokenHash: hashSessionToken(sessionToken),
     userId,
     expiresAt,
   })
-  return { sessionId, expiresAt, maxAgeSeconds }
+  return { sessionToken, publicId, expiresAt, maxAgeSeconds }
+}
+
+/** The unexpired session a cookie token belongs to, or null. */
+export async function findActiveSessionByToken(
+  database: Database,
+  sessionToken: string
+): Promise<{ id: string; userId: number; expiresAt: number } | null> {
+  return (
+    (await database
+      .select({ id: sessions.id, userId: sessions.userId, expiresAt: sessions.expiresAt })
+      .from(sessions)
+      .where(and(
+        eq(sessions.tokenHash, hashSessionToken(sessionToken)),
+        gt(sessions.expiresAt, Math.floor(Date.now() / 1000))
+      ))
+      .get()) ?? null
+  )
+}
+
+/** End the session a cookie token belongs to, if any. */
+export async function deleteSessionByToken(database: Database, sessionToken: string): Promise<void> {
+  await database.delete(sessions).where(eq(sessions.tokenHash, hashSessionToken(sessionToken)))
+}
+
+/**
+ * End all of a user's sessions, or all but the one a cookie token belongs to when `keepToken`
+ * is given.
+ */
+export async function deleteUserSessions(
+  database: Database,
+  userId: number,
+  keepToken?: string
+): Promise<void> {
+  await database
+    .delete(sessions)
+    .where(keepToken
+      ? and(eq(sessions.userId, userId), ne(sessions.tokenHash, hashSessionToken(keepToken)))
+      : eq(sessions.userId, userId))
+}
+
+/**
+ * Check that an email and a username can be given to a user: `userId`, or a new user when
+ * omitted. Emails and usernames are unique across every user, soft-deleted ones included, so
+ * a deleted user still holds theirs. An active holder throws a `ValidationError` (400, as
+ * before); a soft-deleted holder throws a `ConflictError` (409) that says to restore that user.
+ */
+export async function assertUserIdentityFree(
+  database: Database,
+  identity: { email?: string | null; username?: string | null },
+  userId?: number
+): Promise<void> {
+  const fields = [
+    { label: 'Email', column: users.email, value: identity.email },
+    { label: 'Username', column: users.username, value: identity.username },
+  ]
+  for (const { label, column, value } of fields) {
+    if (!value) continue
+    const holder = await database
+      .select({ id: users.id, deletedAt: users.deletedAt })
+      .from(users)
+      .where(userId === undefined ? eq(column, value) : and(eq(column, value), ne(users.id, userId)))
+      .get()
+    if (!holder) continue
+    if (holder.deletedAt === null) throw new ValidationError(`${label} already in use`)
+    throw new ConflictError(
+      `${label} already in use by a deleted user. Restore that user, or choose another ${label.toLowerCase()}.`
+    )
+  }
 }
 
 export async function registerApprovedUser(
@@ -106,20 +191,7 @@ export async function registerApprovedUser(
     role: string
   }
 ): Promise<typeof usersTable.$inferSelect> {
-  const existingEmail = await database.select().from(users).where(eq(users.email, data.email)).get()
-  if (existingEmail) {
-    throw new ValidationError('Email already in use')
-  }
-  if (data.username) {
-    const existingUsername = await database
-      .select()
-      .from(users)
-      .where(eq(users.username, data.username))
-      .get()
-    if (existingUsername) {
-      throw new ValidationError('Username already in use')
-    }
-  }
+  await assertUserIdentityFree(database, { email: data.email, username: data.username })
   const passwordHash = await bcrypt.hash(data.password, BCRYPT_COST)
   const createdAt = utcNow()
   const [user] = await database

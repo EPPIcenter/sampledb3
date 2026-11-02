@@ -10,8 +10,11 @@ import {
   specimen,
   studySubject,
   micronixTube,
+  micronixPlate,
 } from '../../db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, or } from 'drizzle-orm'
+import { newCollectionName } from '@sampledb/contract'
+import { runBulkCombinedImport } from '../bulk-combined-import'
 import {
   createTestStudy,
   createTestStudySubject,
@@ -21,6 +24,8 @@ import {
   createTestLocation,
   createTestMicronixPlate,
   createTestMicronixTube,
+  createTestCryovialBox,
+  createTestCryovialTube,
   createTestBag,
   createTestSpecimen,
   createTestStorageContainer,
@@ -361,6 +366,92 @@ describe('derivations-csv', () => {
       expect(result.rows[2].error).toMatch(/more than once in your file/)
     })
 
+    it('rejects an out-of-range or garbage position in validation', async () => {
+      const { parent } = await seedParent()
+      const csv = [header, `${parent.id},PlateDef,b1,C1`, `${parent.id},PlateDef,Z99,C2`, `${parent.id},PlateDef,hello world,C3`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows.map((r) => r.valid)).toEqual([true, false, false])
+      expect(result.rows[1].error).toBe('Position "Z99" is outside a micronix plate (A01–H12)')
+      expect(result.rows[2].error).toContain('Position "hello world" is not a grid position')
+    })
+
+    it('imports a1 as A01 and refuses an out-of-range position', async () => {
+      const { parent } = await seedParent()
+
+      const bad = await importDerivationsFromCsv(testDb, [header, `${parent.id},PlateDef,I01,C1`].join('\n'), { settings })
+      expect(bad.rows[0]?.success).toBe(false)
+      expect(bad.rows[0]?.error).toContain('Position "I01" is outside a micronix plate')
+
+      const good = await importDerivationsFromCsv(testDb, [header, `${parent.id},PlateDef,b1,C1`].join('\n'), { settings })
+      expect(good.rows[0]?.success).toBe(true)
+      const child = await testDb.select().from(micronixTube).where(eq(micronixTube.barcode, 'C1')).get()
+      expect(child?.position).toBe('B01')
+    })
+
+    it('rejects a derivation_date that is not a date, in validation and on import', async () => {
+      const { parent } = await seedParent()
+      const perRow = { ...settings, derivationDate: '' }
+      const csv = [`${header},derivation_date`, `${parent.id},PlateDef,B01,C1,not a date`, `${parent.id},PlateDef,B02,C2,2025-01-16`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, perRow)
+      expect(result.rows.map((r) => r.valid)).toEqual([false, true])
+      expect(result.rows[0].error).toBe("derivation_date 'not a date' is not a date (use YYYY-MM-DD)")
+
+      const imported = await importDerivationsFromCsv(testDb, csv, { settings: perRow })
+      expect(imported.rows[0]?.success).toBe(false)
+      expect(imported.rows[0]?.error).toContain("derivation_date 'not a date' is not a date")
+      expect(await testDb.select().from(containerDerivation)).toHaveLength(0)
+    })
+
+    it('refuses a shared derivation date that is not a date and saves nothing', async () => {
+      const { parent } = await seedParent()
+      const csv = [header, `${parent.id},PlateDef,B01,C1`].join('\n')
+
+      const imported = await importDerivationsFromCsv(testDb, csv, { settings: { ...settings, derivationDate: '2025-02-30' } })
+
+      expect(imported.rows[0]?.success).toBe(false)
+      expect(imported.rows[0]?.error).toContain("'2025-02-30' is not a date")
+      expect(await testDb.select().from(containerDerivation)).toHaveLength(0)
+    })
+
+    /** A cryovial tube with `barcode`, on the parent's Specimen. */
+    async function addCryovial(seed: Awaited<ReturnType<typeof seedParent>>, barcode: string) {
+      const cryoBox = await createTestCryovialBox(testDb, { name: 'BoxDef', locationId: seed.loc.id })
+      const [sc] = await testDb
+        .insert(storageContainer)
+        .values({ specimenId: seed.parent.specimenId, unitId: seed.unit.id, totalQuantity: 5, remainingQuantity: 5 })
+        .returning()
+      await createTestCryovialTube(testDb, { containerId: sc.id, collectionId: cryoBox.id, barcode, position: 'A01' })
+      return sc
+    }
+
+    it('rejects a row whose parent barcode is on several Containers instead of drawing from one', async () => {
+      const seed = await seedParent()
+      const cryovial = await addCryovial(seed, 'MT-PARENT')
+      const csv = ['parent_container_barcode,plate_name,position,container_barcode', 'MT-PARENT,PlateDef,B01,C1'].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows[0].valid).toBe(false)
+      expect(result.rows[0].error).toBe(
+        `Ambiguous barcode 'MT-PARENT': it matches 2 containers (container ${seed.parent.id} (micronix_tube in PlateDef A01), ` +
+          `container ${cryovial.id} (cryovial_tube in BoxDef A01)). Identify the container by its id or position instead.`,
+      )
+    })
+
+    it('rejects a child barcode another tube type already has, ignoring case', async () => {
+      const seed = await seedParent()
+      await addCryovial(seed, 'cv-777')
+      const csv = [header, `${seed.parent.id},PlateDef,B01,CV-777`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows[0].valid).toBe(false)
+      expect(result.rows[0].error).toMatch(/already used for another container/)
+    })
+
     it('warns about a mismatched source type even when the first row has no parent', async () => {
       const { parent, plate, unit } = await seedParent()
       const plasmaType = await createTestSpecimenType(testDb, { name: 'Plasma' })
@@ -399,6 +490,78 @@ describe('derivations-csv', () => {
       expect(after?.remainingQuantity).toBe(10)
     })
 
+    it('rejects a quantity used of 0 or less, with the row', async () => {
+      const { parent } = await seedParent()
+      const csv = [`${header},quantity_used`, `${parent.id},PlateDef,B01,C1,0`, `${parent.id},PlateDef,B02,C2,-100`].join('\n')
+
+      const validation = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(validation.rows.map((r) => r.error)).toEqual([
+        'Quantity used must be greater than 0 (got 0).',
+        'Quantity used must be greater than 0 (got -100).',
+      ])
+
+      const result = await importDerivationsFromCsv(testDb, csv, { settings })
+
+      expect(result.rows.find((r) => !r.success && r.index === 0)?.error).toBe(
+        'Row 1: Quantity used must be greater than 0 (got 0). No derivations were created; please fix the error and try again.',
+      )
+      const after = await testDb.select().from(storageContainer).where(eq(storageContainer.id, parent.id)).get()
+      expect(after?.remainingQuantity).toBe(10)
+    })
+
+    it('rejects a shared quantity used of 0 or less', async () => {
+      const { parent } = await seedParent()
+      const csv = [header, `${parent.id},PlateDef,B01,C1`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, { ...settings, quantityUsed: -1 })
+
+      expect(result.rows[0].error).toBe('Quantity used must be greater than 0 (got -1).')
+    })
+
+    it('rejects a negative Child container quantity', async () => {
+      const { parent } = await seedParent()
+      const csv = [`${header},quantity`, `${parent.id},PlateDef,B01,C1,-2`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows[0].error).toBe('Child container: Total quantity must be 0 or more (got -2).')
+    })
+
+    it('rejects rows that together draw more than the Parent container holds', async () => {
+      const { parent } = await seedParent()
+      const csv = [
+        `${header},quantity_used`,
+        `${parent.id},PlateDef,B01,C1,6`,
+        `${parent.id},PlateDef,B02,C2,4`,
+        `${parent.id},PlateDef,B03,C3,1`,
+      ].join('\n')
+
+      const validation = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(validation.rows.map((r) => r.valid)).toEqual([true, true, false])
+      expect(validation.rows[2].error).toBe(
+        "Quantity used (1) exceeds the Parent container's remaining quantity (0). Earlier rows in this file draw from the same Parent container.",
+      )
+
+      const result = await importDerivationsFromCsv(testDb, csv, { settings })
+
+      expect(result.rows.find((r) => r.index === 2)?.error).toBe(
+        "Row 3: Quantity used (1) exceeds the Parent container's remaining quantity (0). No derivations were created; please fix the error and try again.",
+      )
+      const after = await testDb.select().from(storageContainer).where(eq(storageContainer.id, parent.id)).get()
+      expect(after?.remainingQuantity).toBe(10)
+    })
+
+    it('rejects a single row drawing more than the Parent container holds', async () => {
+      const { parent } = await seedParent()
+      const csv = [`${header},quantity_used`, `${parent.id},PlateDef,B01,C1,11`].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows[0].error).toBe("Quantity used (11) exceeds the Parent container's remaining quantity (10).")
+    })
+
     it('rejects paper rows whose box does not exist', async () => {
       const { parent } = await seedParent()
       const csv = ['parent_container_id,container_type,box_name,sheet_name,sublabel', `${parent.id},paper,No Such Box,Sheet-1,S1`].join('\n')
@@ -426,6 +589,118 @@ describe('derivations-csv', () => {
       const result = await validateDerivationsCsv(testDb, csv, { ...settings, containerType: '' })
 
       expect(result.rows[0].error).toBe('box_name or bag_name is required for paper')
+    })
+  })
+
+  describe('Collections named by barcode across imports', () => {
+    let testDb: Database
+    let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
+
+    beforeEach(async () => {
+      const setup = await setupTestDatabase()
+      testDb = setup.db
+      sqlite = setup.sqlite
+    })
+
+    afterEach(() => {
+      if (sqlite) cleanupTestDatabase(sqlite)
+    })
+
+    const settings = {
+      derivationType: 'Extraction',
+      specimenTypeName: 'DNA',
+      containerType: 'micronix_tube' as const,
+      protocol: 'Standard',
+      derivationDate: '2025-01-15',
+    }
+
+    /** A parent tube to derive from, and a study and location bulk import can register into. */
+    async function seed() {
+      const now = utcNow()
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(testDb, { micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' } })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+      const study = await createTestStudy(testDb, { title: 'Deriv Study', shortCode: 'DERIV' })
+      const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'Subj1' })
+      const dnaType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      await testDb.insert(specimenTypeContainerType).values({ specimenTypeId: dnaType.id, containerType: 'micronix_tube', created: now })
+      const [parentSpecimen] = await testDb
+        .insert(specimen)
+        .values({ studySubjectId: subject.id, specimenTypeId: dnaType.id, collectionDate: '2025-01-01', created: now, lastUpdated: now })
+        .returning()
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const loc = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id), canContainCollections: true })
+      const parentPlate = await createTestMicronixPlate(testDb, { name: 'ParentPlate', locationId: loc.id })
+      const [parent] = await testDb
+        .insert(storageContainer)
+        .values({ specimenId: parentSpecimen.id, unitId: unit.id, totalQuantity: 10, remainingQuantity: 10, created: now, lastUpdated: now })
+        .returning()
+      await createTestMicronixTube(testDb, { containerId: parent.id, collectionId: parentPlate.id, position: 'A01', barcode: 'MT-PARENT' })
+      return { parent, locationId: loc.id }
+    }
+
+    /** Register one DNA tube on a plate through bulk import. */
+    async function bulkImportTube(barcode: string, collection: { name?: string; barcode?: string; locationId: number; position: string }) {
+      return runBulkCombinedImport(
+        testDb,
+        {
+          studyShortCode: 'DERIV',
+          atomicMode: 'full_file',
+          subjects: [
+            {
+              subjectName: 'Subj1',
+              specimens: [
+                {
+                  specimenTypeName: 'DNA',
+                  collectionDate: '2025-02-01',
+                  container: { containerType: 'micronix_tube', barcode, collection: { type: 'micronix_plate', ...collection } },
+                },
+              ],
+            },
+          ],
+        },
+        undefined,
+      )
+    }
+
+    const platesCalled = (identifier: string) =>
+      testDb
+        .select({ id: micronixPlate.id, name: micronixPlate.name, barcode: micronixPlate.barcode })
+        .from(micronixPlate)
+        .where(or(eq(micronixPlate.name, identifier), eq(micronixPlate.barcode, identifier)))
+        .all()
+
+    it('finds the plate bulk import created from a barcode alone, by its name or its barcode', async () => {
+      const { parent, locationId } = await seed()
+      await bulkImportTube('MT-BULK', { barcode: 'PB-1', locationId, position: 'A01' })
+      expect(platesCalled('PB-1')).toEqual([expect.objectContaining({ name: 'PB-1', barcode: 'PB-1' })])
+
+      const byName = await validateDerivationsCsv(testDb, ['parent_container_id,plate_name,position,container_barcode', `${parent.id},PB-1,B01,C1`].join('\n'), settings)
+      const byBarcode = await validateDerivationsCsv(testDb, ['parent_container_id,collection_barcode,position,container_barcode', `${parent.id},PB-1,B01,C1`].join('\n'), settings)
+
+      expect(byName.collections).toEqual([expect.objectContaining({ name: 'PB-1', status: 'existing' })])
+      expect(byBarcode.collections).toEqual([expect.objectContaining({ barcode: 'PB-1', status: 'existing' })])
+    })
+
+    it('lets bulk import find the plate the Derivations import creates from a barcode alone', async () => {
+      const { parent, locationId } = await seed()
+      const barcodeOnlyCsv = ['parent_container_id,collection_barcode,position,container_barcode', `${parent.id},PB-2,A01,C1`].join('\n')
+      const validation = await validateDerivationsCsv(testDb, barcodeOnlyCsv, settings)
+      const [missing] = validation.collections
+      expect(missing).toMatchObject({ barcode: 'PB-2', status: 'will_be_created' })
+      // The Derivations import wizard creates each missing Collection under this name.
+      await createTestMicronixPlate(testDb, { name: newCollectionName(missing)!, barcode: missing.barcode, locationId })
+      const derived = await importDerivationsFromCsv(testDb, barcodeOnlyCsv, { settings })
+      expect(derived.rows).toEqual([expect.objectContaining({ success: true })])
+
+      const byName = await bulkImportTube('MT-BULK-1', { name: 'PB-2', locationId, position: 'A02' })
+      const byBarcode = await bulkImportTube('MT-BULK-2', { barcode: 'PB-2', locationId, position: 'A03' })
+
+      expect(byName.errors ?? []).toEqual([])
+      expect(byBarcode.errors ?? []).toEqual([])
+      expect(platesCalled('PB-2')).toEqual([expect.objectContaining({ name: 'PB-2', barcode: 'PB-2' })])
+      const tubes = await testDb.select({ position: micronixTube.position }).from(micronixTube).where(eq(micronixTube.collectionId, platesCalled('PB-2')[0].id)).all()
+      expect(tubes.map((t) => t.position).sort()).toEqual(['A01', 'A02', 'A03'])
     })
   })
 })

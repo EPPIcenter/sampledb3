@@ -7,7 +7,7 @@ import {
   getBulkImportCollectionType,
   getBulkImportRowCollectionName,
   resolveBulkImportPaperParent,
-  getBulkImportRowCollectionCheck,
+  getBulkImportRowCollectionRef,
 } from '../bulk-import-validation'
 
 describe('bulk-import-validation', () => {
@@ -51,6 +51,11 @@ describe('bulk-import-validation', () => {
       expect(fields).toContain('plate_name')
       expect(fields).toContain('barcode')
       expect(fields).toContain('position')
+    })
+    it('lists box_name and bag_name for paper as alternatives, not both required', () => {
+      expect(
+        getBulkImportRequiredFields({ importType: 'combined', containerType: 'paper', fixedStudyShortCode: 'ST' })
+      ).toEqual(['subject_name', 'specimen_type_name', 'box_name or bag_name', 'sheet_name'])
     })
   })
 
@@ -177,12 +182,38 @@ describe('bulk-import-validation', () => {
     })
   })
 
-  describe('getBulkImportRowCollectionCheck', () => {
+  describe('getBulkImportRowCollectionRef', () => {
     it('returns bag type for paper bag rows', () => {
-      expect(getBulkImportRowCollectionCheck({ bag_name: 'Bag-A' }, 'paper')).toEqual({
-        identifier: 'Bag-A',
+      expect(getBulkImportRowCollectionRef({ bag_name: 'Bag-A' }, 'paper')).toEqual({
+        name: 'Bag-A',
         type: 'bag',
       })
+    })
+
+    it('reads a barcode-shaped plate_name as a name', () => {
+      expect(getBulkImportRowCollectionRef({ plate_name: 'PLATE-001' }, 'micronix_tube')).toEqual({
+        name: 'PLATE-001',
+        type: 'micronix_plate',
+      })
+    })
+
+    it('reads a name-shaped collection_barcode as a barcode', () => {
+      expect(getBulkImportRowCollectionRef({ collection_barcode: 'my box' }, 'cryovial_tube')).toEqual({
+        barcode: 'my box',
+        type: 'cryovial_box',
+      })
+    })
+
+    it('keeps the name and barcode of one row together', () => {
+      expect(
+        getBulkImportRowCollectionRef({ plate_name: 'Plate A', collection_barcode: 'PB-1' }, 'static_well')
+      ).toEqual({ name: 'Plate A', barcode: 'PB-1', type: 'micronix_plate' })
+    })
+
+    it('returns undefined when the row names no Collection', () => {
+      expect(getBulkImportRowCollectionRef({ plate_name: ' ' }, 'micronix_tube')).toBeUndefined()
+      expect(getBulkImportRowCollectionRef({ box_name: 'B', bag_name: 'G' }, 'paper')).toBeUndefined()
+      expect(getBulkImportRowCollectionRef({ plate_name: 'P' }, 'none')).toBeUndefined()
     })
   })
 })

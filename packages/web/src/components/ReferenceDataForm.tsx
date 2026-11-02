@@ -311,7 +311,7 @@ export default function ReferenceDataForm<T extends { id?: number }>({
                 disabled={loading}
                 className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover disabled:opacity-50"
               >
-                {loading ? 'Saving...' : item ? 'Update' : 'Create'}
+                {loading ? 'Saving...' : item?.id != null ? 'Update' : 'Add'}
               </button>
             </div>
           </form>

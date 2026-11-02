@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { initialScanMoveState, planNextFromUpload, scanMoveReducer } from '../reducer'
+import { blockingErrors, initialScanMoveState, planNextFromUpload, scanMoveReducer } from '../reducer'
 import { cryovialScanMoveVariant, micronixScanMoveVariant } from '../variants'
 import { makeFile, makeState } from './helpers'
 
@@ -86,18 +86,55 @@ describe('scanMoveReducer', () => {
       advanced: true,
     })
     expect(advanced.step).toBe('resolve')
-    // No new errors: the stale relocation error from the prior attempt stays untouched
-    // only when the outcome carries errors; a clean outcome leaves prior errors as-is.
     expect(advanced.files[0].resolvedContainers).toHaveLength(1)
+    // A clean resolve clears the stale error from the previous attempt.
+    expect(advanced.files[0].validationErrors).toEqual([])
   })
 
-  it('RESOLVE_FAILED appends the failure to every file without advancing', () => {
+  it('RESOLVE_FAILED tags the failure as a lookup error on every file without advancing', () => {
     const state = makeState({ files: [makeFile(), makeFile({ filename: 'b.csv' })] })
     const next = scanMoveReducer(state, { type: 'RESOLVE_FAILED', message: 'boom' })
     expect(next.step).toBe('upload')
     for (const file of next.files) {
-      expect(file.validationErrors).toEqual([{ row: 0, error: 'boom' }])
+      expect(file.validationErrors).toEqual([
+        { row: 0, error: 'Lookup failed: boom. Select Next to try again.', kind: 'lookup' },
+      ])
     }
+  })
+
+  it('a failed lookup leaves Next able to retry, without stacking errors', () => {
+    const file = makeFile({
+      selectedDestinationName: 'PLATE-1',
+      csvRows: [{ container_barcode: 'BC1', target_position: 'A01' }],
+    })
+    const plates = [{ id: 1, name: 'PLATE-1' }]
+    let state = makeState({ files: [file] })
+    state = scanMoveReducer(state, { type: 'RESOLVE_FAILED', message: 'Request failed with status code 500' })
+    expect(blockingErrors(state.files[0])).toEqual([])
+    expect(planNextFromUpload(state, plates, micronixScanMoveVariant).kind).toBe('resolve')
+
+    state = scanMoveReducer(state, { type: 'RESOLVE_FAILED', message: 'again' })
+    expect(state.files[0].validationErrors).toHaveLength(1)
+    expect(planNextFromUpload(state, plates, micronixScanMoveVariant).kind).toBe('resolve')
+
+    state = scanMoveReducer(state, {
+      type: 'RESOLVE_COMPLETED',
+      outcomes: [{ fileIndex: 0, resolvedContainers: [], unresolvedContainers: [], errors: [] }],
+      advanced: true,
+    })
+    expect(state.step).toBe('resolve')
+    expect(state.files[0].validationErrors).toEqual([])
+  })
+
+  it('upload format errors still block Next after a failed lookup', () => {
+    const file = makeFile({
+      selectedDestinationName: 'PLATE-1',
+      validationErrors: [{ row: 3, error: 'Position A01 appears more than once (also row 1)' }],
+    })
+    const state = scanMoveReducer(makeState({ files: [file] }), { type: 'RESOLVE_FAILED', message: 'boom' })
+    expect(planNextFromUpload(state, [{ id: 1, name: 'PLATE-1' }], micronixScanMoveVariant).kind).toBe(
+      'has_errors',
+    )
   })
 
   it('MOVE_COMPLETED stores the result and lands on execute', () => {

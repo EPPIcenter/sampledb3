@@ -12,6 +12,7 @@ export interface User {
 }
 
 export interface UserSession {
+  /** Public session id for listing and revoking; it is not the session cookie and cannot log in. */
   id: string
   expiresAt: number
 }

@@ -54,6 +54,30 @@ describe('study-read', () => {
       expect(result.studies.some((s) => s.shortCode === 'OTH01')).toBe(false)
     })
 
+    describe('search matches each field', () => {
+      beforeEach(async () => {
+        await createTestStudy(testDb, { title: 'Malaria cohort', shortCode: 'MAL01', leadPerson: 'Ada Lovelace' })
+        await createTestStudy(testDb, {
+          title: 'Vector survey',
+          shortCode: 'VEC02',
+          leadPerson: 'Greenhouse lab',
+          description: 'Household mosquito collections in Tororo',
+        })
+        await createTestStudy(testDb, { title: 'Serology', shortCode: 'SER03', leadPerson: 'Greenhouse Lab' })
+      })
+
+      it.each([
+        ['title', 'malaria', ['MAL01']],
+        ['short code', 'vec0', ['VEC02']],
+        ['lead person, in any letter case', 'greenhouse', ['VEC02', 'SER03']],
+        ['description', 'mosquito collections', ['VEC02']],
+      ])('matches %s', async (_field, search, codes) => {
+        const result = await listStudies(testDb, { search, page: 1, limit: 10 })
+        expect(result.studies.map((s) => s.shortCode).sort()).toEqual([...codes].sort())
+        expect(result.pagination.total).toBe(codes.length)
+      })
+    })
+
     it('matches "_" and "%" in the search term literally', async () => {
       await createTestStudy(testDb, { title: 'Cohort A_1', shortCode: 'UND01' })
       await createTestStudy(testDb, { title: 'Cohort AB1', shortCode: 'WLD01' })
@@ -114,6 +138,27 @@ describe('study-read', () => {
           },
         },
       ])
+    })
+
+    it('orders the collection date range by date across mixed years and formats (#107)', async () => {
+      const study = await createTestStudy(testDb, { title: 'Mixed Study', shortCode: 'MIX01' })
+      const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'Subj 1' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
+      const now = utcNow()
+      // As text, '12/1/2024' sorts first and '2023-06-01' last.
+      for (const collectionDate of ['12/1/2024', '2/1/2023', '2023-06-01', '2024-03-15']) {
+        await testDb.insert(specimen).values({
+          studySubjectId: subject.id,
+          specimenTypeId: specimenType.id,
+          collectionDate,
+          created: now,
+          lastUpdated: now,
+        })
+      }
+
+      const result = await getStudySummaries(testDb, sqlite, [study.id])
+
+      expect(result.summaries[0]!.collectionDateRange).toEqual({ earliest: '2023-02-01', latest: '2024-12-01' })
     })
 
     it('returns empty array when ids is empty', async () => {

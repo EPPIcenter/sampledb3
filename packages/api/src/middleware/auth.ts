@@ -1,9 +1,10 @@
 import { Context, Next } from 'hono'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
-import { sessions, users } from '../db/schema'
-import { eq, and, gt, isNull } from 'drizzle-orm'
+import { users } from '../db/schema'
+import { eq, and, isNull } from 'drizzle-orm'
 import type { Database } from '../db/client'
 import { UnauthorizedError } from '../lib/error-handler'
+import { findActiveSessionByToken } from '../lib/auth/auth-service'
 
 export interface AuthUser {
   id: number
@@ -25,24 +26,13 @@ declare module 'hono' {
 export function createAuthMiddleware(database: Database) {
   return async (c: Context, next: Next) => {
     const dbToUse = database
-    const sessionId = getCookie(c, 'session_id')
+    const sessionToken = getCookie(c, 'session_id')
     
-    if (!sessionId) {
+    if (!sessionToken) {
       throw new UnauthorizedError('No session ID provided')
     }
 
-    const session = await dbToUse
-      .select({
-        id: sessions.id,
-        userId: sessions.userId,
-        expiresAt: sessions.expiresAt,
-      })
-      .from(sessions)
-      .where(and(
-        eq(sessions.id, sessionId),
-        gt(sessions.expiresAt, Math.floor(Date.now() / 1000))
-      ))
-      .get()
+    const session = await findActiveSessionByToken(dbToUse, sessionToken)
 
     if (!session) {
       deleteCookie(c, 'session_id')

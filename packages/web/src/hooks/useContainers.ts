@@ -1,6 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
-import { containersApi, type ContainerDetail } from '../lib/api/containers'
-import { derivationsApi } from '../lib/api/derivations'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { containersApi, type ContainerDetail, type ContainerUpdate } from '../lib/api/containers'
+import { derivationsApi, type CreateDerivationPayload } from '../lib/api/derivations'
+import { specimensApi, type AddContainerData } from '../lib/api/specimens'
+import { invalidateAfterBulkWrite } from '../lib/query-client'
 
 export const containerKeys = {
   all: ['containers'] as const,
@@ -68,5 +70,47 @@ export function useContainerDerivationTree(containerId: number) {
       return { derivations, childContainers }
     },
     enabled: Number.isFinite(containerId) && containerId > 0,
+  })
+}
+
+/**
+ * Save a Container edit. Collection grids, the Specimen's Containers, derivation trees, exports and
+ * dashboard statistics show a Container's quantity, Tags and identifier, so every query is invalidated.
+ * Shows no toast; the caller reports the error.
+ */
+export function useUpdateContainer() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: ContainerUpdate }) => containersApi.update(id, data),
+    onSuccess: () => invalidateAfterBulkWrite(queryClient),
+  })
+}
+
+/**
+ * Derive a Specimen and Container from a parent Container. The write adds a Specimen and a Container
+ * to a Collection and can reduce the parent's quantity, which Collection grids, Specimen lists, study
+ * and Subject summaries and the dashboard show, so every query is invalidated.
+ * Shows no toast; the caller reports the error.
+ */
+export function useCreateDerivation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ parentContainerId, payload }: { parentContainerId: number; payload: CreateDerivationPayload }) =>
+      derivationsApi.createFromContainer(parentContainerId, payload),
+    onSuccess: () => invalidateAfterBulkWrite(queryClient),
+  })
+}
+
+/**
+ * Add a Container to an existing Specimen. The Container lands in a Collection's grid and counts on
+ * the Specimen, study, Subject and dashboard, so every query is invalidated.
+ * Shows no toast; the caller reports the error.
+ */
+export function useAddSpecimenContainer() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ specimenId, container }: { specimenId: number; container: AddContainerData }) =>
+      specimensApi.addContainer(specimenId, container),
+    onSuccess: () => invalidateAfterBulkWrite(queryClient),
   })
 }

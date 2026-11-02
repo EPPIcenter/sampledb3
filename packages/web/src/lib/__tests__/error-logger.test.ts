@@ -10,6 +10,7 @@ vi.mock('../api/client', () => ({
   getLastResponseRequestId: getLastResponseRequestIdMock,
 }))
 
+import { ERROR_REPORT_LIMITS, errorReportSchema } from '@sampledb/contract'
 import { logErrorFromMessage } from '../error-logger'
 
 describe('error-logger', () => {
@@ -61,5 +62,25 @@ describe('error-logger', () => {
     expect(() =>
       logErrorFromMessage('msg', 'warning', { key: 'value' }),
     ).not.toThrow()
+  })
+
+  it('cuts an oversized report to the API size caps before posting it', async () => {
+    logErrorFromMessage('m'.repeat(ERROR_REPORT_LIMITS.message * 2), 'error', {
+      requestId: 'req_big',
+      blob: 'b'.repeat(ERROR_REPORT_LIMITS.contextJson * 2),
+    })
+    await vi.runAllTimersAsync()
+
+    // The module-level queue may still hold reports from earlier tests; pick this one out.
+    const sent = postMock.mock.calls
+      .map((call) => call[1] as { message: string; context: Record<string, unknown> })
+      .find((report) => report.context.requestId === 'req_big')
+    if (!sent) throw new Error('report was not posted')
+    expect(errorReportSchema.safeParse(sent).success).toBe(true)
+    expect(sent.message).toHaveLength(ERROR_REPORT_LIMITS.message)
+    expect(sent.context).toEqual(
+      expect.objectContaining({ contextTruncated: true, requestId: 'req_big', url: window.location.href }),
+    )
+    expect(sent.context).not.toHaveProperty('blob')
   })
 })

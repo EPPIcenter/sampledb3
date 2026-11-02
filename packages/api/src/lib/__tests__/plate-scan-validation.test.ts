@@ -731,4 +731,123 @@ describe('inferPlateOrGetReport', () => {
     expect(result).not.toHaveProperty('inferenceReport')
     expect((result as { plate: { id: number; name: string } }).plate).toEqual({ id: plate.id, name: 'Plate1' })
   })
+
+  it('counts unplaced tubes of the plate as expected, not as extras', async () => {
+    await setScannerConfigurations(testDb, {
+      configurations: [
+        {
+          id: 'test-config',
+          name: 'Test',
+          barcodeColumn: 'Barcode',
+          positionType: 'single',
+          positionColumn: 'Well',
+          skipRows: 0,
+        },
+      ],
+    }, null)
+
+    const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+    const location = await createTestLocation(testDb, {
+      name: 'Loc',
+      storageTypeId: String(storageType.id),
+    })
+    const plate = await createTestMicronixPlate(testDb, { name: 'Plate1', locationId: location.id })
+    const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
+    const specimen = await createTestSpecimen(testDb, specimenType.id)
+    const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+    const tubes: Array<[string, string | null, number]> = [
+      ['MT-PLACED', 'A01', 1],
+      ['MT-NULL-1', null, 1],
+      ['MT-NULL-2', null, 0],
+      ['MT-BAD-POS', 'A1145868849', 1],
+    ]
+    for (const [barcode, position, remainingQuantity] of tubes) {
+      const now = utcNow()
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: specimen.id,
+          unitId: unit.id,
+          totalQuantity: 1.0,
+          remainingQuantity,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+      await testDb.insert(micronixTube).values({ id: container!.id, collectionId: plate.id, barcode, position })
+    }
+
+    const result = await validatePlateScan(testDb, {
+      csvText: 'Well,Barcode\nA01,MT-PLACED\nB01,MT-NULL-1\nC01,MT-NULL-2\nD01,STRANGER',
+      plateId: plate.id,
+      scannerConfigurationId: 'test-config',
+    })
+
+    expect(result.summary).toMatchObject({
+      totalExpected: 4,
+      matched: 1,
+      unplacedInScan: 2,
+      extraInScan: 1,
+      missingInScan: 1,
+      mismatch: 0,
+      exhaustedCount: 1,
+    })
+    expect(result.wells.map((w) => [w.position, w.status])).toEqual([
+      ['A01', 'match'],
+      ['B01', 'unplaced_in_scan'],
+      ['C01', 'unplaced_in_scan'],
+      ['D01', 'extra_in_scan'],
+    ])
+    const c01 = result.wells.find((w) => w.position === 'C01')!
+    expect(c01.exhausted).toBe(true)
+    expect(c01.scanBarcodeOrigin).toEqual({ plateId: plate.id, plateName: 'Plate1', position: '' })
+    expect(result.unplaced).toEqual([
+      { barcode: 'MT-NULL-1', storedPosition: null, scannedPosition: 'B01' },
+      { barcode: 'MT-NULL-2', storedPosition: null, scannedPosition: 'C01' },
+      { barcode: 'MT-BAD-POS', storedPosition: 'A1145868849', scannedPosition: null },
+    ])
+  })
+
+  it('still reports a mismatch when an unplaced tube sits where a placed tube is expected', async () => {
+    await setScannerConfigurations(testDb, {
+      configurations: [
+        {
+          id: 'test-config',
+          name: 'Test',
+          barcodeColumn: 'Barcode',
+          positionType: 'single',
+          positionColumn: 'Well',
+          skipRows: 0,
+        },
+      ],
+    }, null)
+
+    const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+    const location = await createTestLocation(testDb, {
+      name: 'Loc',
+      storageTypeId: String(storageType.id),
+    })
+    const plate = await createTestMicronixPlate(testDb, { name: 'Plate1', locationId: location.id })
+    const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
+    const specimen = await createTestSpecimen(testDb, specimenType.id)
+    const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+    for (const [barcode, position] of [['MT-A01', 'A01'], ['MT-NULL', null]] as const) {
+      const now = utcNow()
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({ specimenId: specimen.id, unitId: unit.id, totalQuantity: 1, remainingQuantity: 1, created: now, lastUpdated: now })
+        .returning()
+      await testDb.insert(micronixTube).values({ id: container!.id, collectionId: plate.id, barcode, position })
+    }
+
+    const result = await validatePlateScan(testDb, {
+      csvText: 'Well,Barcode\nA01,MT-NULL',
+      plateId: plate.id,
+      scannerConfigurationId: 'test-config',
+    })
+
+    expect(result.wells.map((w) => [w.position, w.status])).toEqual([['A01', 'mismatch']])
+    expect(result.summary).toMatchObject({ totalExpected: 2, mismatch: 1, unplacedInScan: 1, extraInScan: 0, missingInScan: 0 })
+    expect(result.unplaced).toEqual([{ barcode: 'MT-NULL', storedPosition: null, scannedPosition: 'A01' }])
+  })
 })

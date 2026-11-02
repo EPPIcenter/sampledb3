@@ -10,6 +10,7 @@ export function createCollectionsScanMoveGateway(variant: ScanMoveVariant): Scan
         containers: response.containers.map((entry) => ({
           identifier: entry.identifier,
           container: (entry.container as ScanMoveContainerInfo | null | undefined) ?? null,
+          ...(entry.error !== undefined && { error: entry.error }),
         })),
       }
     },

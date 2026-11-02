@@ -22,6 +22,8 @@ export interface DerivationsBulkState {
   csvContent: string
   reviewHeaders: string[]
   reviewRows: Record<string, string>[]
+  /** Spreadsheet row of each review row (header is row 1); the API's row index points into this. */
+  reviewFileRows: number[]
   validationResult: ValidationResult | null
   importResults: DerivationCsvImportResultRow[] | null
   error: string | null
@@ -33,7 +35,7 @@ export type DerivationsBulkEvent =
   | { type: 'FILE_CLEARED' }
   | { type: 'ERROR'; message: string }
   | { type: 'ERROR_CLEARED' }
-  | { type: 'VALIDATED'; result: ValidationResult; headers: string[]; rows: Record<string, string>[] }
+  | { type: 'VALIDATED'; result: ValidationResult; headers: string[]; rows: Record<string, string>[]; fileRows: number[] }
   | { type: 'STEP_SET'; step: DerivationsBulkStep }
   | { type: 'REVIEW_CELL_SET'; rowIndex: number; header: string; value: string }
   | { type: 'COLLECTION_PATCHED'; index: number; patch: Partial<MissingDerivationCollection> }

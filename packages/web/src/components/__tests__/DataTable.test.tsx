@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '../../__tests__/helpers/render'
+import { render, screen, within } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import DataTable, { Column } from '../DataTable'
 
@@ -11,13 +11,13 @@ interface TestItem {
 
 describe('DataTable', () => {
   const columns: Column<TestItem>[] = [
-    { key: 'id', label: 'ID', sortable: true },
-    { key: 'name', label: 'Name', sortable: true },
+    { key: 'id', label: 'ID', sortType: 'number' },
+    { key: 'name', label: 'Name', sortType: 'text' },
     { 
       key: 'value', 
       label: 'Value',
       render: (value) => `$${value.toFixed(2)}`,
-      sortable: true,
+      sortType: 'number',
     },
   ]
 
@@ -118,5 +118,130 @@ describe('DataTable', () => {
     expect(screen.getByText('ID')).toBeInTheDocument()
     expect(screen.getByText('Name')).toBeInTheDocument()
   })
-})
 
+  describe('sorting by declared type', () => {
+    interface SubjectRow {
+      id: number
+      name: string
+      specimenCount: number | null
+      created: string | null
+    }
+
+    const subjectColumns: Column<SubjectRow>[] = [
+      { key: 'name', label: 'Name', sortType: 'text' },
+      { key: 'specimenCount', label: 'Specimens', sortType: 'number' },
+      { key: 'created', label: 'Created', sortType: 'date' },
+    ]
+
+    // Names like study 70's: numeric names (which `new Date()` can parse) and alphanumeric ones.
+    const subjects: SubjectRow[] = [
+      { id: 1, name: '140', specimenCount: 3, created: '2024-03-01T00:00:00Z' },
+      { id: 2, name: '100', specimenCount: 12, created: '2023-11-15T00:00:00Z' },
+      { id: 3, name: '2', specimenCount: null, created: '2024-01-10T00:00:00Z' },
+      { id: 4, name: '29PH', specimenCount: 1, created: null },
+      { id: 5, name: '10', specimenCount: 100, created: '2022-06-30T00:00:00Z' },
+      { id: 6, name: '1', specimenCount: 2, created: '2024-12-31T00:00:00Z' },
+      { id: 7, name: '350', specimenCount: 20, created: '2023-01-01T00:00:00Z' },
+      { id: 8, name: '3CDX', specimenCount: 5, created: '2021-05-05T00:00:00Z' },
+    ]
+
+    function columnValues(columnIndex: number): string[] {
+      const rows = screen.getAllByRole('row').slice(1)
+      return rows.map((row) => within(row).getAllByRole('cell')[columnIndex].textContent)
+    }
+
+    it('sorts text naturally, so numeric names run 1, 2, 10, 100', async () => {
+      const user = userEvent.setup()
+      await render(<DataTable data={subjects} columns={subjectColumns} />)
+
+      await user.click(screen.getByRole('columnheader', { name: 'Name' }))
+      expect(columnValues(0)).toEqual(['1', '2', '3CDX', '10', '29PH', '100', '140', '350'])
+
+      await user.click(screen.getByRole('columnheader', { name: 'Name' }))
+      expect(columnValues(0)).toEqual(['350', '140', '100', '29PH', '10', '3CDX', '2', '1'])
+    })
+
+    it('sorts a number column by value and puts missing values last', async () => {
+      const user = userEvent.setup()
+      await render(<DataTable data={subjects} columns={subjectColumns} />)
+
+      await user.click(screen.getByRole('columnheader', { name: 'Specimens' }))
+      expect(columnValues(1)).toEqual(['1', '2', '3', '5', '12', '20', '100', ''])
+
+      await user.click(screen.getByRole('columnheader', { name: 'Specimens' }))
+      expect(columnValues(1)).toEqual(['100', '20', '12', '5', '3', '2', '1', ''])
+    })
+
+    it('sorts a date column by date and puts missing dates last', async () => {
+      const user = userEvent.setup()
+      await render(<DataTable data={subjects} columns={subjectColumns} />)
+
+      await user.click(screen.getByRole('columnheader', { name: 'Created' }))
+      expect(columnValues(0)).toEqual(['3CDX', '10', '350', '100', '2', '140', '1', '29PH'])
+
+      await user.click(screen.getByRole('columnheader', { name: 'Created' }))
+      expect(columnValues(0)).toEqual(['1', '140', '2', '100', '350', '10', '3CDX', '29PH'])
+    })
+
+    it('starts sorted by initialSortColumn in initialSortDirection', async () => {
+      await render(
+        <DataTable data={subjects} columns={subjectColumns} initialSortColumn="name" initialSortDirection="asc" />
+      )
+      expect(columnValues(0).slice(0, 3)).toEqual(['1', '2', '3CDX'])
+    })
+
+    it('does not sort when a column declares no sort type', async () => {
+      const user = userEvent.setup()
+      const unsortable: Column<SubjectRow>[] = [{ key: 'name', label: 'Name' }]
+      await render(<DataTable data={subjects} columns={unsortable} />)
+
+      await user.click(screen.getByRole('columnheader', { name: 'Name' }))
+      expect(columnValues(0)).toEqual(subjects.map((s) => s.name))
+    })
+  })
+
+  describe('server-paged and server-sorted lists', () => {
+    const page2: TestItem[] = [
+      { id: 53, name: 'Item 53', value: 3 },
+      { id: 51, name: 'Item 51', value: 1 },
+      { id: 52, name: 'Item 52', value: 2 },
+    ]
+
+    function names(): string[] {
+      return screen
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => within(row).getAllByRole('cell')[1].textContent)
+    }
+
+    it('shows the given page as is and counts pages from totalItems', async () => {
+      await render(
+        <DataTable
+          data={page2}
+          columns={columns}
+          pagination={{ page: 2, pageSize: 3, onPageChange: vi.fn(), totalItems: 8 }}
+        />
+      )
+
+      expect(names()).toEqual(['Item 53', 'Item 51', 'Item 52'])
+      expect(screen.getByText(/Showing/)).toHaveTextContent('Showing 4 to 6 of 8 results')
+    })
+
+    it('reports a header click to sort.onChange and leaves the rows in server order', async () => {
+      const user = userEvent.setup()
+      const onChange = vi.fn()
+      const { rerender } = await render(
+        <DataTable data={page2} columns={columns} sort={{ column: null, direction: 'asc', onChange }} />
+      )
+
+      await user.click(screen.getByRole('columnheader', { name: 'Name' }))
+      expect(onChange).toHaveBeenLastCalledWith('name', 'asc')
+      expect(names()).toEqual(['Item 53', 'Item 51', 'Item 52'])
+
+      rerender(<DataTable data={page2} columns={columns} sort={{ column: 'name', direction: 'asc', onChange }} />)
+      await user.click(screen.getByRole('columnheader', { name: 'Name' }))
+      expect(onChange).toHaveBeenLastCalledWith('name', 'desc')
+      expect(names()).toEqual(['Item 53', 'Item 51', 'Item 52'])
+    })
+  })
+})

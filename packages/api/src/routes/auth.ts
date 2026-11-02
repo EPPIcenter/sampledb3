@@ -4,18 +4,20 @@ import { users, sessions } from '../db/schema'
 import { eq, and, isNull, gt, ne, or, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
-import { nanoid } from 'nanoid'
 import type { Database } from '../db/client'
 import { getPasswordRequirements, getSessionSettings } from '../lib/settings'
 import { createAuthMiddleware, createAdminMiddleware } from '../middleware/auth'
 import { rateLimit } from '../middleware/rate-limit'
-import { handleRouteError } from '../lib/error-handler'
+import { ConflictError, handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import {
   toPublicUser,
   verifyLoginCredentials,
   verifyPasswordConstantTime,
   createUserSession,
+  deleteSessionByToken,
+  deleteUserSessions,
   registerApprovedUser,
+  assertUserIdentityFree,
   BCRYPT_COST,
 } from '../lib/auth/auth-service'
 
@@ -23,7 +25,10 @@ function publicUserResponse(user: ReturnType<typeof toPublicUser>) {
   return { user: { ...user, username: user.username || undefined } }
 }
 import { utcNow } from '../lib/datetime'
-import { requireParam } from '../lib/common-validators'
+import { requireParam, setsNoField } from '../lib/common-validators'
+
+/** 400 for a PATCH or PUT whose body sets no field. */
+const NOTHING_TO_UPDATE = 'Nothing to update: send at least one field to change.'
 
 export function createAuthRoutes(database: Database, settingsDb?: Database) {
   const auth = new Hono()
@@ -82,7 +87,7 @@ auth.post('/login', rateLimit(10, 60 * 1000), async (c) => {
     const { emailOrUsername, password } = loginSchema.parse(body)
 
     const user = await verifyLoginCredentials(database, emailOrUsername, password)
-    const { sessionId, maxAgeSeconds } = await createUserSession(database, user.id)
+    const { sessionToken, maxAgeSeconds } = await createUserSession(database, user.id)
 
     // Update last login
     await database
@@ -90,7 +95,7 @@ auth.post('/login', rateLimit(10, 60 * 1000), async (c) => {
       .set({ lastLogin: utcNow() })
       .where(eq(users.id, user.id))
 
-    setCookie(c, 'session_id', sessionId, {
+    setCookie(c, 'session_id', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -134,27 +139,7 @@ auth.post('/self-register', rateLimit(5, 60 * 1000), async (c) => {
     const schema = await createSelfRegisterSchema()
     const data = schema.parse(body)
 
-    const existingEmail = await database
-      .select()
-      .from(users)
-      .where(and(eq(users.email, data.email), isNull(users.deletedAt)))
-      .get()
-
-    if (existingEmail) {
-      return c.json({ error: 'Email already in use' }, 400)
-    }
-
-    if (data.username) {
-      const existingUsername = await database
-        .select()
-        .from(users)
-        .where(and(eq(users.username, data.username), isNull(users.deletedAt)))
-        .get()
-
-      if (existingUsername) {
-        return c.json({ error: 'Username already in use' }, 400)
-      }
-    }
+    await assertUserIdentityFree(database, { email: data.email, username: data.username })
 
     const passwordHash = await bcrypt.hash(data.password, BCRYPT_COST)
     const createdAt = utcNow()
@@ -191,9 +176,9 @@ auth.post('/self-register', rateLimit(5, 60 * 1000), async (c) => {
 
 // Logout
 auth.post('/logout', async (c) => {
-  const sessionId = getCookie(c, 'session_id')
-  if (sessionId) {
-    await database.delete(sessions).where(eq(sessions.id, sessionId))
+  const sessionToken = getCookie(c, 'session_id')
+  if (sessionToken) {
+    await deleteSessionByToken(database, sessionToken)
   }
   deleteCookie(c, 'session_id')
   return c.json({ message: 'Logged out' })
@@ -270,42 +255,11 @@ auth.patch('/me', authMiddleware, async (c) => {
       return c.json({ error: 'User not found' }, 404)
     }
 
-    // If email is being updated, check for duplicates (excluding current user)
-    if (data.email && data.email !== existing.email) {
-      const duplicate = await database
-        .select()
-        .from(users)
-        .where(and(
-          eq(users.email, data.email),
-          isNull(users.deletedAt),
-          ne(users.id, currentUser.id)
-        ))
-        .get()
-
-      if (duplicate) {
-        return c.json({ error: 'Email already in use' }, 400)
-      }
+    if (setsNoField(data)) {
+      throw new ValidationError(NOTHING_TO_UPDATE)
     }
 
-    // If username is being updated, check for duplicates (excluding current user)
-    if (data.username !== undefined) {
-      // Allow setting username to null (clearing it)
-      if (data.username !== null && data.username !== existing.username) {
-        const duplicate = await database
-          .select()
-          .from(users)
-          .where(and(
-            eq(users.username, data.username),
-            isNull(users.deletedAt),
-            ne(users.id, currentUser.id)
-          ))
-          .get()
-
-        if (duplicate) {
-          return c.json({ error: 'Username already in use' }, 400)
-        }
-      }
-    }
+    await assertUserIdentityFree(database, { email: data.email, username: data.username }, currentUser.id)
 
     const [updated] = await database
       .update(users)
@@ -330,7 +284,7 @@ auth.patch('/me', authMiddleware, async (c) => {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -383,18 +337,8 @@ auth.patch('/me/password', authMiddleware, async (c) => {
       .where(eq(users.id, currentUser.id))
 
     // Revoke all existing sessions except the current one for security
-    const sessionId = getCookie(c, 'session_id')
-    if (sessionId) {
-      await database
-        .delete(sessions)
-        .where(and(
-          eq(sessions.userId, currentUser.id),
-          ne(sessions.id, sessionId)
-        ))
-    } else {
-      // If no session cookie, revoke all sessions
-      await database.delete(sessions).where(eq(sessions.userId, currentUser.id))
-    }
+    // (all of them when there is no session cookie)
+    await deleteUserSessions(database, currentUser.id, getCookie(c, 'session_id'))
 
     return c.json({ message: 'Password changed successfully' })
   } catch (error) {
@@ -476,23 +420,15 @@ auth.post('/switch', rateLimit(10, 60 * 1000), authMiddleware, async (c) => {
     if (!sessionSettings) {
       return c.json({ error: 'Session settings are not configured. Please run database initialization.' }, 500)
     }
-    const maxAgeSeconds = sessionSettings.maxAgeSeconds
-    
+
     // Delete old session
-    const sessionId = getCookie(c, 'session_id')
-    if (sessionId) {
-      await database.delete(sessions).where(eq(sessions.id, sessionId))
+    const oldSessionToken = getCookie(c, 'session_id')
+    if (oldSessionToken) {
+      await deleteSessionByToken(database, oldSessionToken)
     }
     
     // Create new session for target user
-    const newSessionId = nanoid()
-    const expiresAt = Math.floor(Date.now() / 1000) + maxAgeSeconds
-    
-    await database.insert(sessions).values({
-      id: newSessionId,
-      userId: targetUser.id,
-      expiresAt,
-    })
+    const { sessionToken, maxAgeSeconds } = await createUserSession(database, targetUser.id, dbForSettings)
     
     // Update last login
     await database
@@ -500,7 +436,7 @@ auth.post('/switch', rateLimit(10, 60 * 1000), authMiddleware, async (c) => {
       .set({ lastLogin: utcNow() })
       .where(eq(users.id, targetUser.id))
     
-    setCookie(c, 'session_id', newSessionId, {
+    setCookie(c, 'session_id', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -553,42 +489,11 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
       return c.json({ error: 'User not found' }, 404)
     }
 
-    // If email is being updated, check for duplicates (excluding soft-deleted users)
-    if (data.email && data.email !== existing.email) {
-      const duplicate = await database
-        .select()
-        .from(users)
-        .where(and(
-          eq(users.email, data.email),
-          isNull(users.deletedAt),
-          ne(users.id, id)
-        ))
-        .get()
-
-      if (duplicate) {
-        return c.json({ error: 'Email already in use' }, 400)
-      }
+    if (setsNoField(data)) {
+      throw new ValidationError(NOTHING_TO_UPDATE)
     }
 
-    // If username is being updated, check for duplicates (excluding soft-deleted users)
-    if (data.username !== undefined) {
-      // Allow setting username to null (clearing it)
-      if (data.username !== null && data.username !== existing.username) {
-        const duplicate = await database
-          .select()
-          .from(users)
-          .where(and(
-            eq(users.username, data.username),
-            isNull(users.deletedAt),
-            ne(users.id, id)
-          ))
-          .get()
-
-        if (duplicate) {
-          return c.json({ error: 'Username already in use' }, 400)
-        }
-      }
-    }
+    await assertUserIdentityFree(database, { email: data.email, username: data.username }, id)
 
     // Prevent removing the last admin
     if (data.role && data.role !== 'admin' && existing.role === 'admin') {
@@ -632,7 +537,7 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -724,7 +629,7 @@ auth.patch('/users/:id/password', adminMiddleware, async (c) => {
       .where(eq(users.id, id))
 
     // Revoke all existing sessions for this user
-    await database.delete(sessions).where(eq(sessions.userId, id))
+    await deleteUserSessions(database, id)
 
     return c.json({ message: 'Password reset successfully' })
   } catch (error) {
@@ -785,7 +690,7 @@ auth.delete('/users/:id', adminMiddleware, async (c) => {
       return c.json({ error: 'User not found' }, 404)
     }
     // Revoke all existing sessions for this user
-    await database.delete(sessions).where(eq(sessions.userId, id))
+    await deleteUserSessions(database, id)
 
     return c.json({ message: 'User deleted successfully' })
   } catch (error) {
@@ -816,21 +721,20 @@ auth.post('/users/:id/restore', adminMiddleware, async (c) => {
       return c.json({ error: 'User is not deleted' }, 400)
     }
 
-    // Check if email is still available (not taken by another active user)
-    const emailConflict = await database
-      .select()
-      .from(users)
-      .where(and(
-        eq(users.email, existing.email),
-        isNull(users.deletedAt),
-        ne(users.id, id)
-      ))
-      .get()
-
-    if (emailConflict) {
-      return c.json({ 
-        error: 'Cannot restore user: email is already in use by another user' 
-      }, 400)
+    // Emails and usernames are unique across all users; check both before restoring.
+    for (const [label, column, value] of [
+      ['email', users.email, existing.email],
+      ['username', users.username, existing.username],
+    ] as const) {
+      if (!value) continue
+      const holder = await database
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(column, value), ne(users.id, id)))
+        .get()
+      if (holder) {
+        throw new ConflictError(`Cannot restore user: ${label} is already in use by another user`)
+      }
     }
 
     // Restore: clear deletedAt
@@ -858,27 +762,28 @@ auth.post('/users/:id/restore', adminMiddleware, async (c) => {
       },
     })
   } catch (error) {
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
-// Get active sessions for a user (admin only)
+// Get active sessions for a user (admin only). Each session is listed by its public id, which
+// revokes it through DELETE /sessions/:id but cannot be used as a session cookie.
 auth.get('/users/:id/sessions', adminMiddleware, async (c) => {
   try {
     const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
-      return c.json({ error: 'Invalid user ID' }, 400)
+      throw new ValidationError('Invalid user ID')
     }
 
     // Check if user exists
     const user = await database
-      .select()
+      .select({ id: users.id })
       .from(users)
       .where(eq(users.id, id))
       .get()
 
     if (!user) {
-      return c.json({ error: 'User not found' }, 404)
+      throw new NotFoundError('User', id)
     }
 
     const now = Math.floor(Date.now() / 1000)
@@ -895,27 +800,27 @@ auth.get('/users/:id/sessions', adminMiddleware, async (c) => {
 
     return c.json({ sessions: activeSessions })
   } catch (error) {
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
-// Revoke a session (admin only)
+// Revoke a session by its public id (admin only)
 auth.delete('/sessions/:id', adminMiddleware, async (c) => {
   try {
-    const sessionId = requireParam(c, 'id')
+    const publicId = requireParam(c, 'id')
 
     const deleted = await database
       .delete(sessions)
-      .where(eq(sessions.id, sessionId))
-      .returning()
+      .where(eq(sessions.id, publicId))
+      .returning({ id: sessions.id })
 
     if (deleted.length === 0) {
-      return c.json({ error: 'Session not found' }, 404)
+      throw new NotFoundError('Session')
     }
 
     return c.json({ message: 'Session revoked successfully' })
   } catch (error) {
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 

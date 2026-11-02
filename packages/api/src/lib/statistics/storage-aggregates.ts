@@ -97,20 +97,18 @@ async function loadLocationMap(database: Database, locationIds: number[]) {
     return current
   }
 
-  const locationCountMap = new Map<string, number>()
+  // Every Location holding Containers, busiest first. The list is not capped: its length is the
+  // dashboard's count of Locations in use, and the web shows only the top entries in its chart.
+  const containerCountByLocation = new Map<number, number>()
   locationIds.forEach((id) => {
-    const loc = locationMap.get(id)
-    if (loc) {
-      const path = loc.path || loc.name || `Location ${loc.id}`
-      locationCountMap.set(path, (locationCountMap.get(path) || 0) + 1)
-    }
+    if (locationMap.has(id)) containerCountByLocation.set(id, (containerCountByLocation.get(id) || 0) + 1)
   })
 
-  Array.from(locationCountMap.entries())
+  Array.from(containerCountByLocation.entries())
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 20)
-    .forEach(([locationPath, count]) => {
-      byLocation.push({ location: locationPath, count })
+    .forEach(([id, count]) => {
+      const loc = locationMap.get(id)!
+      byLocation.push({ location: loc.path || loc.name || `Location ${loc.id}`, count })
     })
 
   locationIds.forEach((id) => {

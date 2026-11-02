@@ -32,6 +32,16 @@ SampleDB **container export** CSV files (Multi-Study Export, Study export modal,
 - **Collection table snapshot export** on collection detail pages uses the same CSV download conventions; cell content was not wrapped in Excel formulas.
 - Import templates and **Export filter file** uploads are separate from download format; see [CSV file guidelines](/docs/guides/troubleshooting/csv-guidelines/).
 
+## Sign-in sessions and error reporting (security hardening)
+
+**Everyone signs in again once.** After this upgrade, every existing session ends and each user sees the sign-in page on their next request. SampleDB now stores only a hash of each session's cookie, and sessions saved by the old version can't be converted, so the upgrade removes them.
+
+**What changed**
+
+- In **Admin > Users > View sessions**, the ID shown for each session is a separate public ID. Use it to revoke the session; it can't be used to sign in as the user.
+- Error reports that the browser sends to **Error Logs** have size limits: 2,000 characters for the message, 16,000 for the stack trace, 200 for the error code, 16,000 characters of JSON for the context, and 64 KB for the whole request. The API rejects a larger report. The SampleDB web app shortens its own reports to fit.
+- When the server fails with an unexpected error in production, the response says only `Internal server error`. The full error, with its stack trace, still goes to the server log and to **Error Logs**.
+
 ## Related documentation
 
 - [Multi-study export](/docs/guides/bulk-operations/export/): CSV vs XLSX guidance for multi-study container export

@@ -12,6 +12,7 @@ Use validate plate scan when you want to:
 - Check that a scanned plate CSV matches the plate record in the database.
 - Find wells that are missing from the scan (expected in DB but not scanned or scanned empty).
 - Find wells that appear in the scan but are not in the database (extra in scan).
+- Find tubes that belong to the plate but have no grid position recorded (unplaced).
 - Spot barcode mismatches (same position, different barcode in scan vs DB).
 - See which wells are exhausted (remaining quantity zero) or have tags.
 
@@ -37,15 +38,17 @@ Validation is read-only: it does not change any data.
 
 The result shows:
 
-- **Summary counts**: Matched wells, mismatch (same position, different barcode), missing in scan (in DB but not in scan or scanned empty), and extra in scan (in scan but not in DB). If any wells are exhausted or have tags, those counts are shown as well.
+- **Summary counts**: Matched wells, mismatch (same position, different barcode), missing in scan (in DB but not in scan or scanned empty), extra in scan (in scan but not in DB), and unplaced in plate (a scanned tube that belongs to this plate but has no grid position recorded). Unplaced tubes count as expected: one found in the scan is not an extra, and one missing from the scan counts as missing. If any wells are exhausted or have tags, those counts are shown as well.
 - **Overall status**: A short message indicates whether the scan matches the database or there are discrepancies.
 - **Well table**: Each row is a well (position). Columns show:
   - **Position** (e.g. A01)
   - **Scanned** barcode from the CSV (or — if empty)
   - **Expected** barcode from the database (or — for static wells)
   - **Scanned barcode from**: For mismatch or extra-in-scan, where that scanned barcode is registered in the database (plate name and position). Helps you see if a tube was misplaced from another plate. Shows — when the barcode is not in the database.
-  - **Status**: Match (green), Mismatch (red), Missing in scan (amber), Extra in scan (blue)
+  - **Status**: Match (green), Mismatch (red), Missing in scan (amber), Extra in scan (blue), Unplaced in plate (grey)
   - **Notes**: Badges for "Exhausted" and any tag names on the container
+
+- **Unplaced tubes**: When the plate has tubes with no grid position, or a stored position that is not a plate cell, a second table lists each one with its stored position and where the scan found it (or **Not in scan**). The downloaded report includes the same list.
 
 Use the table to track down specific wells that don’t match or are missing so you can correct the physical plate or the database as needed.
 

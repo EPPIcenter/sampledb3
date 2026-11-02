@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { SkeletonList } from '../../ui'
+import { parseDisplayDate } from '../../lib/date-utils'
 
 interface ActivityItem {
   id: number
@@ -15,9 +16,10 @@ interface ActivityFeedProps {
 }
 
 function formatRelativeTime(timestamp: string): string {
-  const date = new Date(timestamp)
+  const date = parseDisplayDate(timestamp)
   const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
+  // Clock skew can put a server timestamp slightly ahead of this clock; never show a negative age.
+  const diffMs = Math.max(0, now.getTime() - date.getTime())
   const diffMins = Math.floor(diffMs / 60000)
   const diffHours = Math.floor(diffMs / 3600000)
   const diffDays = Math.floor(diffMs / 86400000)
@@ -147,7 +149,7 @@ function groupActivitiesByDate(activities: ActivityItem[]): {
   }
 
   activities.forEach((activity) => {
-    const activityDate = new Date(activity.timestamp)
+    const activityDate = parseDisplayDate(activity.timestamp)
     if (activityDate >= today) {
       grouped.today.push(activity)
     } else if (activityDate >= yesterday) {

@@ -1,26 +1,20 @@
 import type { Database } from '../db/client'
-
-// Cache for pagination settings
-let paginationCache: { defaultPageSize: number; maxPageSize: number } | null = null
+import { pageQueryParam } from './query-params'
 
 /**
- * Get pagination settings from cache or database
+ * Get pagination settings through the settings cache, which is keyed per database and
+ * cleared when an admin saves settings, so a new page size applies without a restart.
  * @param db - Database instance
  * @throws Error if pagination settings are not configured
  */
 async function getPaginationSettings(db: Database): Promise<{ defaultPageSize: number; maxPageSize: number }> {
-  if (paginationCache) {
-    return paginationCache
-  }
-
   const { getPaginationSettings } = await import('./settings')
   const settings = await getPaginationSettings(db)
-  
+
   if (!settings) {
     throw new Error('Pagination settings are not configured. Please run database initialization.')
   }
 
-  paginationCache = settings
   return settings
 }
 
@@ -43,16 +37,9 @@ export async function validateLimit(db: Database, limit: string | number | undef
 }
 
 /**
- * Validates and normalizes a page number
- * @param page - The page number to validate (can be string or number)
- * @returns A valid page number (minimum 1)
+ * Validates and normalizes a page number: page 1 when omitted or not a number, at least 1, and
+ * a `ValidationError` (400) above `MAX_PAGE`. `name` is the query parameter, for the message.
  */
-export function validatePage(page: string | number | undefined): number {
-  const parsed = typeof page === 'string' ? parseInt(page, 10) : page
-  if (isNaN(parsed as number) || parsed === undefined) {
-    return 1
-  }
-  const num = Number(parsed)
-  return Math.max(1, num)
+export function validatePage(page: string | number | undefined, name = 'page'): number {
+  return pageQueryParam(page, name)
 }
-

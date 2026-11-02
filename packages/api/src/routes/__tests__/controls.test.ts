@@ -6,9 +6,17 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createControlsRoutes } from '../controls'
-import { controlDefinition } from '../../db/schema'
+import { containerTypeUnit, controlBatch, controlDefinition, specimen, specimenTypeContainerType } from '../../db/schema'
+import { setContainerDefaults } from '../../lib/settings'
+import { utcNow } from '../../lib/datetime'
 import {
+  createTestControlBatch,
   createTestControlDefinition,
+  createTestLocation,
+  createTestMicronixPlate,
+  createTestSpecimen,
+  createTestSpecimenType,
+  createTestStorageType,
   createTestStrain,
   createTestUnit,
 } from '../../__tests__/helpers/factories'
@@ -26,6 +34,7 @@ describe('Controls API', () => {
         password: 'password123',
         role: 'admin',
       },
+      additionalUsers: [{ key: 'member', email: 'member@test.com', password: 'password123', role: 'member' }],
       mount: (app, { db }) => {
         app.route('/api/blood-controls', createControlsRoutes(db))
       },
@@ -91,6 +100,41 @@ describe('Controls API', () => {
     })
   })
 
+  describe(`POST ${BASE}/batches/create-many-with-specimens`, () => {
+    it('gives two unnamed batches with the same definition and date different names', async () => {
+      const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(ctx.db, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      await ctx.db.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+      const def = await createTestControlDefinition(ctx.db, { name: 'D100' })
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'DNA' })
+      await ctx.db.insert(specimenTypeContainerType).values({ specimenTypeId: specimenType.id, containerType: 'micronix_tube', created: utcNow() })
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const location = await createTestLocation(ctx.db, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'Plate1', locationId: location.id })
+      const tube = (barcode: string, position: string) => ({
+        containerType: 'micronix_tube',
+        barcode,
+        collection: { type: 'micronix_plate', id: plate.id, position },
+      })
+
+      const res = await ctx.request(`${BASE}/batches/create-many-with-specimens`, {
+        method: 'POST',
+        json: {
+          batches: [
+            { batch: { controlDefinitionId: def.id, productionDate: '2024-06-01' }, specimens: [{ specimenTypeName: 'DNA', containers: [tube('MT1', 'A01')] }] },
+            { batch: { controlDefinitionId: def.id, productionDate: '2024-06-01' }, specimens: [{ specimenTypeName: 'DNA', containers: [tube('MT2', 'A02')] }] },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(201)
+      const data = (await res.json()) as { batches: Array<{ batch: { name: string } }> }
+      expect(data.batches.map((b) => b.batch.name)).toEqual(['D100 2024-06-01', 'D100 2024-06-01 (1)'])
+    })
+  })
+
   describe(`GET ${BASE}/batches`, () => {
     it('returns 200 and batches list when authenticated', async () => {
       const res = await ctx.request(`${BASE}/batches`, {
@@ -122,6 +166,26 @@ describe('Controls API', () => {
       const data = (await res.json()) as { batch: { id: number; controlDefinitionId: number } }
       expect(data.batch).toBeDefined()
       expect(data.batch.controlDefinitionId).toBe(definition.id)
+    })
+
+    it('stores batch properties as a JSON object and reads them back as one', async () => {
+      const definition = await createTestControlDefinition(ctx.db, { name: 'Props Def', controlType: 'blood' })
+      const properties = { lead_person: 'Ann', nested: { strains: [1, 2] } }
+
+      const res = await ctx.request(`${BASE}/${definition.id}/batches`, {
+        method: 'POST',
+        json: { productionDate: '2024-01-01', properties },
+      })
+
+      expect(res.status).toBe(201)
+      const created = (await res.json()) as { batch: { id: number; properties: unknown } }
+      expect(created.batch.properties).toEqual(properties)
+      const stored = ctx.sqlite
+        .prepare('SELECT json_type(properties) AS type FROM control_batch WHERE id = ?')
+        .get(created.batch.id) as { type: string }
+      expect(stored.type).toBe('object')
+      const readRes = await ctx.request(`${BASE}/batches/${created.batch.id}`, { method: 'GET' })
+      expect(((await readRes.json()) as { batch: { properties: unknown } }).batch.properties).toEqual(properties)
     })
 
     it('returns 404 when definition does not exist', async () => {
@@ -639,6 +703,31 @@ describe('Controls API', () => {
         json: { targetDensity: 1000, strains: [] },
       })
       expect(res.status).toBe(401)
+    })
+  })
+  describe(`DELETE ${BASE}/batches/:id`, () => {
+    async function createBatchWithSpecimen(name: string) {
+      const definition = await createTestControlDefinition(ctx.db, { name: `Def-${name}` })
+      const batch = await createTestControlBatch(ctx.db, definition.id, { name })
+      const specType = await createTestSpecimenType(ctx.db, { name: `Type-${name}` })
+      const spec = await createTestSpecimen(ctx.db, specType.id, { controlBatchId: batch.id })
+      return { batch, spec }
+    }
+
+    it('returns 403 to a member and keeps the Control batch and its Specimens', async () => {
+      const { batch, spec } = await createBatchWithSpecimen('BatchMemberDel')
+      const res = await ctx.request(`${BASE}/batches/${batch.id}`, { method: 'DELETE', cookie: ctx.cookies.member })
+      expect(res.status).toBe(403)
+      expect(await ctx.db.select().from(controlBatch).where(eq(controlBatch.id, batch.id)).get()).toBeDefined()
+      expect(await ctx.db.select().from(specimen).where(eq(specimen.id, spec.id)).get()).toBeDefined()
+    })
+
+    it('lets an admin delete the Control batch and its Specimens', async () => {
+      const { batch, spec } = await createBatchWithSpecimen('BatchAdminDel')
+      const res = await ctx.request(`${BASE}/batches/${batch.id}`, { method: 'DELETE' })
+      expect(res.status).toBe(200)
+      expect(await ctx.db.select().from(controlBatch).where(eq(controlBatch.id, batch.id)).get()).toBeUndefined()
+      expect(await ctx.db.select().from(specimen).where(eq(specimen.id, spec.id)).get()).toBeUndefined()
     })
   })
 })

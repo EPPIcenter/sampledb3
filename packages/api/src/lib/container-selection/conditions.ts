@@ -16,7 +16,7 @@ import {
   storageContainerTag,
 } from '../../db/schema'
 import type { ContainerSubtype } from '../container-placement'
-import { dateToUpperBound } from '../sql-helpers'
+import { dateToUpperBound, isCalendarDate } from '../sql-helpers'
 import type { ContainerSelectionFilters, DateRange, SpecimenSourceType } from './types'
 
 /**
@@ -37,6 +37,15 @@ export function dateRangeConditions(column: SQLiteColumn, range: DateRange | und
     ...(range?.from ? [gte(column, range.from)] : []),
     ...(range?.to ? [dateToUpperBound(column, range.to)] : []),
   ]
+}
+
+/**
+ * Conditions for an inclusive range on the Specimen collection date. A bound also excludes a
+ * collection date that is not a real YYYY-MM-DD date (see `isCalendarDate`).
+ */
+export function collectionDateConditions(range: DateRange | undefined): SQL[] {
+  const conditions = dateRangeConditions(specimen.collectionDate, range)
+  return conditions.length > 0 ? [...conditions, isCalendarDate(specimen.collectionDate)] : []
 }
 
 /** Specimens of the given source type; undefined, every Specimen. */
@@ -81,9 +90,10 @@ export function containerFilterConditions(filters: ContainerSelectionFilters): S
 
 /**
  * Containers stored in a Location or any Location under it: tubes and static wells on
- * micronix plates, tubes in cryovial boxes, and papers on sheets in boxes or bags there.
+ * micronix plates, tubes in cryovial boxes, and papers on sheets in boxes or bags there. A
+ * condition on `storage_container`, so a caller can page and count in SQL.
  */
-function containerAtLocation(locationId: number): SQL {
+export function containerAtLocation(locationId: number): SQL {
   const here = sql`SELECT id FROM selected_location`
   return sql`${storageContainer.id} IN (
     WITH RECURSIVE selected_location(id) AS (

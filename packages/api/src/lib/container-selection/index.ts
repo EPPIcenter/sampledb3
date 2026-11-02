@@ -7,16 +7,18 @@ import { and, eq, getTableColumns, inArray, type SQL } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { specimen, storageContainer, studySubject } from '../../db/schema'
 import { CONTAINER_SUBTYPES, type ContainerSubtype } from '../container-placement'
+import { collectionDateFilter, timestampFilter } from '../date-filters'
 import {
   containerFilterConditions,
+  collectionDateConditions,
   containerTypeSql,
-  dateRangeConditions,
   sourceTypeCondition,
   specimenFilterConditions,
 } from './conditions'
 import { micronixBarcodeScopes, subjectListScopes, type SelectionScope } from './scopes'
 import type {
   ContainerSelection,
+  ContainerSelectionFilters,
   ContainerSelectionResult,
   ContainerSelectionTypes,
   SelectedContainer,
@@ -24,7 +26,7 @@ import type {
 } from './types'
 
 export * from './types'
-export { containerHasAllTags } from './conditions'
+export { containerAtLocation, containerHasAllTags } from './conditions'
 export { containerTypesFilter, specimenSourceType } from './filters'
 
 /** Select the Containers and Specimens a selection matches, with each Container's type. */
@@ -81,8 +83,9 @@ async function selectionScopes(
     return { scopes: micronixBarcodeScopes(database, selection.barcodes), containerConditions: [] }
   }
 
-  const filters = selection.filters ?? {}
-  const collectionDate = dateRangeConditions(specimen.collectionDate, filters.collectionDate)
+  const filters = checkedDateFilters(selection.filters ?? {})
+  if (selection.kind === 'subjects') checkSubjectDates(selection)
+  const collectionDate = collectionDateConditions(filters.collectionDate)
   let scopes: SelectionScope[]
   switch (selection.kind) {
     case 'study': {
@@ -107,6 +110,41 @@ async function selectionScopes(
   return {
     scopes: scopes.map((scope) => ({ ...scope, specimens: and(scope.specimens, ...specimenConditions) })),
     containerConditions: containerFilterConditions(filters),
+  }
+}
+
+/**
+ * The filters with each date bound checked: a malformed bound throws a `ValidationError` (400)
+ * rather than matching everything or nothing as a string comparison would (issue #104).
+ */
+function checkedDateFilters(filters: ContainerSelectionFilters): ContainerSelectionFilters {
+  return {
+    ...filters,
+    collectionDate: {
+      from: collectionDateFilter('collection date from', filters.collectionDate?.from),
+      to: collectionDateFilter('collection date to', filters.collectionDate?.to),
+    },
+    specimenCreated: {
+      from: timestampFilter('Specimen created from', filters.specimenCreated?.from),
+      to: timestampFilter('Specimen created to', filters.specimenCreated?.to),
+    },
+    containerCreated: {
+      from: timestampFilter('Container created from', filters.containerCreated?.from),
+      to: timestampFilter('Container created to', filters.containerCreated?.to),
+    },
+  }
+}
+
+/** Check every per-Subject collection date of a subject-list selection; see `checkedDateFilters`. */
+function checkSubjectDates(selection: Extract<ContainerSelection, { kind: 'subjects' }>): void {
+  for (const entry of selection.subjects) {
+    for (const date of entry.dates ?? []) {
+      if ('exact' in date) collectionDateFilter('collection date', date.exact)
+      else {
+        collectionDateFilter('collection date from', date.from)
+        collectionDateFilter('collection date to', date.to)
+      }
+    }
   }
 }
 

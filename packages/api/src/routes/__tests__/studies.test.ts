@@ -5,7 +5,7 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createStudiesRoutes } from '../studies'
-import { createTestStudy, createTestSpecimenType, createTestUnit } from '../../__tests__/helpers/factories'
+import { createTestStudy, createTestSpecimenType, createTestUnit, createTestStudySubject } from '../../__tests__/helpers/factories'
 
 describe('Studies API (list, get, create, update)', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -42,9 +42,64 @@ describe('Studies API (list, get, create, update)', () => {
       expect(data.pagination).toHaveProperty('totalPages')
     })
 
+    it.each([
+      ['lead person', 'Greenhouse'],
+      ['description', 'mosquito'],
+    ])('returns the study whose %s matches search', async (_field, search) => {
+      await createTestStudy(ctx.db, {
+        title: 'Vector survey',
+        shortCode: 'VEC02',
+        leadPerson: 'Greenhouse lab',
+        description: 'Household mosquito collections',
+      })
+      await createTestStudy(ctx.db, { title: 'Serology', shortCode: 'SER03', leadPerson: 'Ada Lovelace' })
+
+      const res = await ctx.request(`/api/studies?search=${encodeURIComponent(search)}`)
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { studies: { shortCode: string }[]; pagination: { total: number } }
+      expect(data.studies.map((s) => s.shortCode)).toEqual(['VEC02'])
+      expect(data.pagination.total).toBe(1)
+    })
+
+    it('counts only studies created inside created_from and created_to', async () => {
+      await createTestStudy(ctx.db, { title: 'Before', shortCode: 'B1', created: '2026-08-31 23:59:59' })
+      await createTestStudy(ctx.db, { title: 'First day', shortCode: 'F1', created: '2026-09-01 00:00:00' })
+      await createTestStudy(ctx.db, { title: 'Last day', shortCode: 'L1', created: '2026-09-30 23:59:59' })
+      await createTestStudy(ctx.db, { title: 'After', shortCode: 'A1', created: '2026-10-01 00:00:00' })
+
+      const res = await ctx.request('/api/studies?created_from=2026-09-01&created_to=2026-09-30&limit=1')
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { pagination: { total: number } }
+      expect(data.pagination.total).toBe(2)
+
+      const toOnly = await ctx.request('/api/studies?created_to=2026-09-30&limit=1')
+      expect(((await toOnly.json()) as { pagination: { total: number } }).pagination.total).toBe(3)
+    })
+
+    it.each([
+      ['created_from', 'yesterday'],
+      ['created_to', '2024-13-01'],
+    ])('returns 400 for %s=%s', async (param, value) => {
+      const res = await ctx.request(`/api/studies?${param}=${encodeURIComponent(value)}`)
+
+      expect(res.status).toBe(400)
+      const data = (await res.json()) as { error: string }
+      expect(data.error).toContain(param)
+    })
+
     it('returns 401 when not authenticated', async () => {
       const res = await authenticatedRequest(ctx.createRequestApp(), '/api/studies', { method: 'GET' })
       expect(res.status).toBe(401)
+    })
+  })
+
+  describe('GET /api/studies oversized page (#120)', () => {
+    it.each([
+      ['/api/studies?page=99999999999999999999', 'page'],
+    ])('returns 400 for %s', async (url, param) => {
+      const res = await ctx.request(url)
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain(param)
     })
   })
 
@@ -149,7 +204,127 @@ describe('Studies API (list, get, create, update)', () => {
     })
   })
 
+  describe('GET /api/studies/:id/subjects search', () => {
+    type SubjectsBody = { subjects: { id: number; name: string }[]; pagination: { total: number } }
+
+    it('finds a subject past the first 1,000 by name', async () => {
+      const studyRecord = await createTestStudy(ctx.db, { title: 'Big Study', shortCode: 'BIG02' })
+      const addSubject = ctx.sqlite.prepare(
+        "INSERT INTO study_subject (study_id, name, created, last_updated) VALUES (?, ?, '2024-01-01', '2024-01-01')",
+      )
+      ctx.sqlite.exec('BEGIN')
+      for (let i = 0; i < 1_100; i++) addSubject.run(studyRecord.id, `P${String(i).padStart(5, '0')}`)
+      ctx.sqlite.exec('COMMIT')
+
+      const res = await ctx.request(`/api/studies/${studyRecord.id}/subjects?search=P01050&page=1&limit=20`)
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as SubjectsBody
+      expect(data.subjects.map((s) => s.name)).toEqual(['P01050'])
+      expect(data.pagination.total).toBe(1)
+    })
+
+    it('matches a subject by its exact ID', async () => {
+      const studyRecord = await createTestStudy(ctx.db, { title: 'Study', shortCode: 'IDS01' })
+      const target = await createTestStudySubject(ctx.db, { studyId: studyRecord.id, name: 'Alpha' })
+      await createTestStudySubject(ctx.db, { studyId: studyRecord.id, name: 'Beta' })
+
+      const res = await ctx.request(`/api/studies/${studyRecord.id}/subjects?search=${target.id}&page=1&limit=20`)
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as SubjectsBody
+      expect(data.subjects.map((s) => s.id)).toEqual([target.id])
+    })
+
+    it('takes % and _ in the search literally', async () => {
+      const studyRecord = await createTestStudy(ctx.db, { title: 'Study', shortCode: 'LIT01' })
+      await createTestStudySubject(ctx.db, { studyId: studyRecord.id, name: 'A_1' })
+      await createTestStudySubject(ctx.db, { studyId: studyRecord.id, name: 'AB1' })
+
+      const res = await ctx.request(`/api/studies/${studyRecord.id}/subjects?search=${encodeURIComponent('A_')}&page=1&limit=20`)
+
+      const data = (await res.json()) as SubjectsBody
+      expect(data.subjects.map((s) => s.name)).toEqual(['A_1'])
+    })
+
+    it('keeps only subjects of the requested study', async () => {
+      const first = await createTestStudy(ctx.db, { title: 'First', shortCode: 'ONE01' })
+      const second = await createTestStudy(ctx.db, { title: 'Second', shortCode: 'TWO01' })
+      await createTestStudySubject(ctx.db, { studyId: first.id, name: 'Shared-1' })
+      await createTestStudySubject(ctx.db, { studyId: second.id, name: 'Shared-2' })
+
+      const res = await ctx.request(`/api/studies/${first.id}/subjects?search=Shared&page=1&limit=20`)
+
+      const data = (await res.json()) as SubjectsBody
+      expect(data.subjects.map((s) => s.name)).toEqual(['Shared-1'])
+      expect(data.pagination.total).toBe(1)
+    })
+  })
+
   describe('GET /api/studies/:id/summary', () => {
+    type SummaryBody = {
+      summary: {
+        collectionDateRange: { earliest: string; latest: string } | null
+        studyDurationDays: number | null
+        collectionTimeline: Array<{ date: string; count: number }>
+        enrollmentTimeline: Array<{ date: string; count: number }>
+      }
+    }
+
+    async function subjectEnrolledAt(studyId: number, name: string, created: string) {
+      return createTestStudySubject(ctx.db, { studyId, name, created })
+    }
+
+    it('buckets the enrollment timeline by day (#107)', async () => {
+      const studyRecord = await createTestStudy(ctx.db, { title: 'Enrollment', shortCode: 'ENR01' })
+      await subjectEnrolledAt(studyRecord.id, 'A', '2024-03-01 08:00:00')
+      await subjectEnrolledAt(studyRecord.id, 'B', '2024-03-01 08:00:01')
+      await subjectEnrolledAt(studyRecord.id, 'C', '2024-03-01T23:59:59Z')
+      await subjectEnrolledAt(studyRecord.id, 'D', '2024-03-02 00:00:00')
+
+      const res = await ctx.request(`/api/studies/${studyRecord.id}/summary`)
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as SummaryBody
+      expect(data.summary.enrollmentTimeline).toEqual([
+        { date: '2024-03-01', count: 3 },
+        { date: '2024-03-02', count: 1 },
+      ])
+    })
+
+    it('reports collection dates in date order across mixed years (#107)', async () => {
+      const studyRecord = await createTestStudy(ctx.db, { title: 'Mixed', shortCode: 'MIX02' })
+      const subject = await subjectEnrolledAt(studyRecord.id, 'A', '2023-01-01 09:00:00')
+      const type = await createTestSpecimenType(ctx.db, { name: 'Blood' })
+      const addSpecimen = ctx.sqlite.prepare(
+        "INSERT INTO specimen (study_subject_id, specimen_type_id, collection_date, created, last_updated) VALUES (?, ?, ?, '2024-01-01', '2024-01-01')",
+      )
+      const second = await subjectEnrolledAt(studyRecord.id, 'B', '2023-01-01 17:00:00')
+      // As text, '12/1/2024' sorts first and '2023-06-01' last.
+      for (const date of ['12/1/2024', '2/1/2023', '2023-06-01']) {
+        addSpecimen.run(subject!.id, type.id, date)
+      }
+      addSpecimen.run(second!.id, type.id, '2023-02-01')
+
+      const res = await ctx.request(`/api/studies/${studyRecord.id}/summary`)
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as SummaryBody
+      expect(data.summary.collectionDateRange).toEqual({ earliest: '2023-02-01', latest: '2024-12-01' })
+      expect(data.summary.studyDurationDays).toBe(669)
+      expect(data.summary.collectionTimeline).toEqual([
+        { date: '2023-02-01', count: 2 },
+        { date: '2023-06-01', count: 1 },
+        { date: '2024-12-01', count: 1 },
+      ])
+      expect(data.summary.enrollmentTimeline).toEqual([{ date: '2023-01-01', count: 2 }])
+
+      const timeline = await ctx.request(`/api/studies/${studyRecord.id}/timeline`)
+      expect(timeline.status).toBe(200)
+      const timelineData = (await timeline.json()) as { dateRange: { earliest: string; latest: string } | null }
+      expect(timelineData.dateRange).toEqual({ earliest: '2023-02-01', latest: '2024-12-01' })
+    })
+
     it('handles studies with more specimens than SQLite allows as bound parameters', async () => {
       const studyRecord = await createTestStudy(ctx.db, { title: 'Big Study', shortCode: 'BIG01' })
       const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })

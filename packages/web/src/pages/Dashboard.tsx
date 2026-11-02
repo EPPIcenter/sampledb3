@@ -5,27 +5,43 @@ import MetricCard from '../components/dashboard/MetricCard'
 import RecentStudies from '../components/dashboard/RecentStudies'
 import ActivityFeed from '../components/dashboard/ActivityFeed'
 import SystemInsights from '../components/dashboard/SystemInsights'
-import { SkeletonCard } from '../ui'
 import SearchModal from '../components/SearchModal'
 import { calculateTrend } from '../utils/trends'
 import { useUser } from '../contexts/UserContext'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import {
-  useDashboardCritical,
-  useDashboardTrendStats,
+  useDashboardCounts,
+  useDashboardTrend,
   useDashboardSecondary,
   useDashboardStudySummaries,
   useDashboardQpcr,
   mergeStudiesWithSummaries,
+  type DashboardTrendCounts,
 } from '../hooks/useDashboard'
-import { Button, PageError, SectionMessage, getQueryErrorMessage } from '../ui'
+import type { UseQueryResult } from '@tanstack/react-query'
+import { Button, SectionMessage, SkeletonCard, getQueryErrorMessage } from '../ui'
 
-const EMPTY_STATS = {
-  studies: 0,
-  specimens: 0,
-  subjects: 0,
-  containers: 0,
-  locations: 0,
+const TREND_DESCRIPTION = 'Added in the last 30 days, compared with the 30 days before'
+
+/** Props that put one count query on its stat tile: loading, error with retry, or the value. */
+function countTileProps(query: UseQueryResult<number>, title: string) {
+  if (query.isError) {
+    return {
+      status: 'error' as const,
+      errorMessage: getQueryErrorMessage(query.error, `Could not load ${title.toLowerCase()}.`),
+      onRetry: () => void query.refetch(),
+    }
+  }
+  if (query.data === undefined) return { status: 'loading' as const }
+  return { status: 'ready' as const, value: query.data }
+}
+
+/** Trend badge for a tile, or undefined until both windows load or when there is no meaningful change. */
+function trendBadge(counts: DashboardTrendCounts | undefined) {
+  if (!counts) return undefined
+  const trend = calculateTrend(counts.current, counts.previous)
+  if (!trend) return undefined
+  return { ...trend, label: '30d', description: TREND_DESCRIPTION }
 }
 
 export default function Dashboard() {
@@ -36,8 +52,10 @@ export default function Dashboard() {
   const heroSearchRef = useRef<HTMLInputElement>(null)
   useFocusSearchOnSlash(heroSearchRef)
 
-  const criticalQuery = useDashboardCritical()
-  const trendQuery = useDashboardTrendStats(criticalQuery.isSuccess)
+  const counts = useDashboardCounts()
+  const studiesTrend = useDashboardTrend('studies', counts.studies.isSuccess)
+  const specimensTrend = useDashboardTrend('specimens', counts.specimens.isSuccess)
+  const subjectsTrend = useDashboardTrend('subjects', counts.subjects.isSuccess)
   const secondaryQuery = useDashboardSecondary()
   const qpcrQuery = useDashboardQpcr()
 
@@ -47,8 +65,10 @@ export default function Dashboard() {
   )
   const summariesQuery = useDashboardStudySummaries(studyIds)
 
-  const stats = criticalQuery.data?.stats ?? EMPTY_STATS
-  const previousStats = trendQuery.data ?? null
+  const countsUpdatedAt = Math.max(
+    0,
+    ...Object.values(counts).map((q) => (q.isSuccess ? q.dataUpdatedAt : 0)),
+  )
   const recentStudies = useMemo(
     () => mergeStudiesWithSummaries(secondaryQuery.data?.studies ?? [], summariesQuery.data),
     [secondaryQuery.data?.studies, summariesQuery.data]
@@ -57,13 +77,6 @@ export default function Dashboard() {
   const statisticsData = secondaryQuery.data?.statistics ?? null
   const hasControls = secondaryQuery.data?.hasControls ?? false
   const recentQpcrExperiments = qpcrQuery.data ?? []
-
-  const specimensTrend = previousStats
-    ? calculateTrend(stats.specimens, previousStats.specimens)
-    : null
-  const subjectsTrend = previousStats
-    ? calculateTrend(stats.subjects, previousStats.subjects)
-    : null
 
   const handleSearchSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -79,10 +92,6 @@ export default function Dashboard() {
 
   const formatDataAsOf = (d: Date) =>
     d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
-
-  const metricsErrorMessage = criticalQuery.error
-    ? getQueryErrorMessage(criticalQuery.error, 'Failed to load dashboard metrics')
-    : 'Failed to load dashboard metrics'
 
   return (
     <div className="dashboard-page">
@@ -115,9 +124,9 @@ export default function Dashboard() {
               </Button>
             </div>
           </form>
-          {criticalQuery.data?.fetchedAt && (
+          {countsUpdatedAt > 0 && (
             <p className="mt-2 text-sm text-[rgb(var(--app-text-muted))]" aria-live="polite">
-              Data as of {formatDataAsOf(criticalQuery.data.fetchedAt)}
+              Data as of {formatDataAsOf(new Date(countsUpdatedAt))}
             </p>
           )}
         </header>
@@ -339,88 +348,66 @@ export default function Dashboard() {
           <h2 id="metrics-title" className="dashboard-section-title mb-4 sr-only">
             Key metrics
           </h2>
-          {criticalQuery.isPending ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <SkeletonCard key={i} height="h-24" />
-              ))}
-            </div>
-          ) : criticalQuery.isError ? (
-            <PageError
-              message={metricsErrorMessage}
-              onRetry={() => void criticalQuery.refetch()}
-            />
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="dashboard-metrics-group">
-                <h3 className="dashboard-metrics-group-label">Inventory</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <MetricCard
-                    title="Specimens"
-                    value={stats.specimens}
-                    linkTo="/specimens"
-                    trend={
-                      specimensTrend
-                        ? {
-                            value: specimensTrend.value,
-                            positive: specimensTrend.positive,
-                            label: '30d',
-                          }
-                        : undefined
-                    }
-                    color="green"
-                    index={4}
-                  />
-                  <MetricCard
-                    title="Containers"
-                    value={stats.containers}
-                    linkTo="/locations"
-                    color="orange"
-                    index={5}
-                  />
-                </div>
-              </div>
-              <div className="dashboard-metrics-group">
-                <h3 className="dashboard-metrics-group-label">Studies</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <MetricCard
-                    title="Studies"
-                    value={stats.studies}
-                    linkTo="/studies"
-                    color="blue"
-                    index={6}
-                  />
-                  <MetricCard
-                    title="Subjects"
-                    value={stats.subjects}
-                    trend={
-                      subjectsTrend
-                        ? {
-                            value: subjectsTrend.value,
-                            positive: subjectsTrend.positive,
-                            label: '30d',
-                          }
-                        : undefined
-                    }
-                    color="purple"
-                    index={7}
-                  />
-                </div>
-              </div>
-              <div className="dashboard-metrics-group">
-                <h3 className="dashboard-metrics-group-label">Storage</h3>
-                <div className="grid grid-cols-1 gap-4">
-                  <MetricCard
-                    title="Locations"
-                    value={stats.locations}
-                    linkTo="/locations"
-                    color="indigo"
-                    index={8}
-                  />
-                </div>
+          {/*
+            Each tile needs about 150px of inner width for a six-digit count. Three groups side by
+            side leave that only from 2xl (1536px): at lg the main column is the viewport minus the
+            208px sidebar, so three groups at 1280px would make tiles 157px wide (59px for the
+            number). Below 2xl the groups take two columns, and below lg (no sidebar) one.
+          */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
+            <div className="dashboard-metrics-group">
+              <h3 className="dashboard-metrics-group-label">Inventory</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <MetricCard
+                  title="Specimens"
+                  {...countTileProps(counts.specimens, 'Specimens')}
+                  linkTo="/specimens"
+                  trend={trendBadge(specimensTrend.data)}
+                  color="green"
+                  index={4}
+                />
+                <MetricCard
+                  title="Containers"
+                  {...countTileProps(counts.containers, 'Containers')}
+                  linkTo="/locations"
+                  color="orange"
+                  index={5}
+                />
               </div>
             </div>
-          )}
+            <div className="dashboard-metrics-group">
+              <h3 className="dashboard-metrics-group-label">Studies</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <MetricCard
+                  title="Studies"
+                  {...countTileProps(counts.studies, 'Studies')}
+                  linkTo="/studies"
+                  trend={trendBadge(studiesTrend.data)}
+                  color="blue"
+                  index={6}
+                />
+                <MetricCard
+                  title="Subjects"
+                  {...countTileProps(counts.subjects, 'Subjects')}
+                  trend={trendBadge(subjectsTrend.data)}
+                  color="purple"
+                  index={7}
+                />
+              </div>
+            </div>
+            <div className="dashboard-metrics-group">
+              <h3 className="dashboard-metrics-group-label">Storage</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-1 gap-4">
+                <MetricCard
+                  title="Locations"
+                  {...countTileProps(counts.locations, 'Locations')}
+                  linkTo="/locations"
+                  color="indigo"
+                  index={8}
+                />
+              </div>
+            </div>
+          </div>
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">

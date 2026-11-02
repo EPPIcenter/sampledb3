@@ -489,4 +489,108 @@ describe('ContainerMoveCryovial', () => {
             expect(screen.getByText('Resolved Cryovial Tubes')).toBeInTheDocument()
         })
     })
+
+    describe('a real scanning session', () => {
+        const box1 = { id: 1, name: 'BOX1', barcode: null, locationId: 1, itemCount: 0, location: { path: '/Loc1' } }
+        const resolvedBox1 = {
+            containers: [
+                {
+                    identifier: { sourceCollectionName: 'BOX1', sourcePosition: 'A1' },
+                    container: {
+                        containerId: 2,
+                        currentCollectionId: 1,
+                        currentCollectionName: 'BOX1',
+                        currentCollectionType: 'cryovial_box',
+                        currentPosition: 'A1',
+                    },
+                },
+            ],
+        }
+
+        async function uploadBox1() {
+            vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [box1] } as any)
+            vi.mocked(locationsApi.list).mockResolvedValue({ locations: [{ id: 1, name: 'Loc1', path: '/Loc1', parentId: null }] } as any)
+            const csvContent = 'source_collection_name,source_position,target_position\nBOX1,A1,B1'
+            const file = new File([csvContent], 'BOX1.csv', { type: 'text/csv' })
+            Object.defineProperty(file, 'text', { value: async () => csvContent })
+
+            const { container } = await renderWithProviders(<ContainerMoveCryovial />)
+            await waitFor(() => {
+                expect((container.querySelector('input[type="file"]') as HTMLInputElement).disabled).toBe(false)
+            })
+            fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [file] } })
+            await waitFor(() => expect(screen.getByText('Next: Resolve Containers')).not.toBeDisabled(), { timeout: 3000 })
+        }
+
+        async function reachResolveStep() {
+            vi.mocked(collectionsApi.resolveContainers).mockResolvedValue(resolvedBox1 as any)
+            await uploadBox1()
+            fireEvent.click(screen.getByText('Next: Resolve Containers'))
+            await waitFor(() => expect(screen.getByText('Resolved Cryovial Tubes')).toBeInTheDocument())
+        }
+
+        it('retries a failed lookup with the uploaded files when Next is selected again', async () => {
+            vi.mocked(collectionsApi.resolveContainers)
+                .mockRejectedValueOnce(Object.assign(new Error('Request failed with status code 500'), {
+                    response: { status: 500, data: { error: 'Internal server error' } },
+                }))
+                .mockResolvedValueOnce(resolvedBox1 as any)
+            await uploadBox1()
+
+            fireEvent.click(screen.getByText('Next: Resolve Containers'))
+            await waitFor(() => {
+                expect(screen.getByText(/Lookup failed: Internal server error/)).toBeInTheDocument()
+            })
+            expect(screen.queryByText('Resolved Cryovial Tubes')).not.toBeInTheDocument()
+
+            const next = screen.getByText('Next: Resolve Containers')
+            expect(next).not.toBeDisabled()
+            fireEvent.click(next)
+
+            await waitFor(() => expect(screen.getByText('Resolved Cryovial Tubes')).toBeInTheDocument())
+            expect(collectionsApi.resolveContainers).toHaveBeenCalledTimes(2)
+            expect(vi.mocked(collectionsApi.resolveContainers).mock.calls[1]).toEqual(
+                vi.mocked(collectionsApi.resolveContainers).mock.calls[0],
+            )
+        })
+
+        it('disables Execute Moves while the request is in flight and sends it once', async () => {
+            let finishMove!: (value: unknown) => void
+            vi.mocked(collectionsApi.moveContainers).mockImplementation(
+                () => new Promise((resolve) => { finishMove = resolve }) as any,
+            )
+            await reachResolveStep()
+
+            const execute = screen.getByRole('button', { name: /execute moves/i })
+            fireEvent.click(execute)
+            fireEvent.click(execute)
+
+            await waitFor(() => expect(screen.getByRole('button', { name: /moving/i })).toBeDisabled())
+            fireEvent.click(screen.getByRole('button', { name: /moving/i }))
+            expect(collectionsApi.moveContainers).toHaveBeenCalledTimes(1)
+
+            finishMove({ success: true, moved: 1 })
+            await waitFor(() => expect(screen.getByText('Moves Successful')).toBeInTheDocument())
+            expect(collectionsApi.moveContainers).toHaveBeenCalledTimes(1)
+        })
+
+        it('names the CSV file and row of a failed move', async () => {
+            vi.mocked(collectionsApi.moveContainers).mockRejectedValue(
+                Object.assign(new Error('Request failed with status code 400'), {
+                    response: {
+                        status: 400,
+                        data: { error: 'Move failed', moved: 0, errors: [{ row: 1, error: 'Position B01 is occupied' }] },
+                    },
+                }),
+            )
+            await reachResolveStep()
+
+            fireEvent.click(screen.getByRole('button', { name: /execute moves/i }))
+
+            await waitFor(() => expect(screen.getByText('Moves Failed')).toBeInTheDocument())
+            const perFile = screen.getByText('Per-File Results:').parentElement!
+            expect(perFile).toHaveTextContent('BOX1.csv')
+            expect(perFile).toHaveTextContent('Row 1: Position B01 is occupied')
+        })
+    })
 })

@@ -3,7 +3,12 @@ import { collectionsApi } from '../lib/api/collections'
 import { specimenTypesApi } from '../lib/api/reference-data'
 import { getQueryErrorMessage } from '../ui'
 import type { ContainerType } from '../components/ContainerRegistration'
-import type { CSVRow, ImportType } from '../lib/bulk-import-validation'
+import type {
+  BulkImportCollectionRef,
+  BulkImportCollectionType,
+  CSVRow,
+  ImportType,
+} from '../lib/bulk-import-validation'
 
 export const bulkImportKeys = {
   all: ['bulk-import'] as const,
@@ -13,9 +18,12 @@ export const bulkImportKeys = {
 }
 
 export type BulkImportMissingCollection = {
+  /** From the CSV name column; empty when the rows give only a Collection barcode. */
   name: string
-  collectionType?: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+  collectionType?: BulkImportCollectionType
+  /** From the CSV collection_barcode column. */
   barcode?: string
+  /** Typed in the wizard when the CSV gives no Collection barcode. */
   collectionBarcode?: string
   locationId: number | null
   status: 'pending' | 'creating' | 'success' | 'error'
@@ -65,78 +73,63 @@ export function useBulkImportTemplateSpecimenTypes(options: {
   }
 }
 
-/** Resolve which collections from CSV rows are missing on the server. Throws on API failure. */
+/**
+ * Resolve which Collections the CSV rows reference that the server does not have yet.
+ * Each row's name and barcode come from their own columns (see getBulkImportRowCollectionRef),
+ * so one row yields at most one Collection to create. Throws on API failure.
+ */
 export async function fetchBulkImportMissingCollections(params: {
   rows: CSVRow[]
-  collectionType?: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
-  getRowCollectionName?: (row: CSVRow) => string | undefined
-  getRowCollectionCheck?: (
-    row: CSVRow
-  ) => { identifier: string; type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' } | undefined
+  getRowCollectionRef: (row: CSVRow) => BulkImportCollectionRef | undefined
 }): Promise<BulkImportMissingCollection[]> {
-  const { rows, collectionType, getRowCollectionName, getRowCollectionCheck } = params
+  const { rows, getRowCollectionRef } = params
 
-  const checkData: Array<{ identifier: string; type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' }> =
-    []
-  const seen = new Set<string>()
-
+  // One entry per Collection: rows that share a name (or, without a name, a barcode) share it.
+  const refs = new Map<string, BulkImportCollectionRef>()
   for (const row of rows) {
-    if (getRowCollectionCheck) {
-      const check = getRowCollectionCheck(row)
-      if (check) {
-        const key = `${check.type}:${check.identifier}`
-        if (!seen.has(key)) {
-          checkData.push(check)
-          seen.add(key)
-        }
-      }
-    } else if (collectionType && getRowCollectionName) {
-      const collectionName = getRowCollectionName(row)
-      if (collectionName && !seen.has(`${collectionType}:${collectionName}`)) {
-        checkData.push({ identifier: collectionName, type: collectionType })
-        seen.add(`${collectionType}:${collectionName}`)
-      }
+    const ref = getRowCollectionRef(row)
+    if (!ref) continue
+    const key = ref.name ? `${ref.type}:name:${ref.name}` : `${ref.type}:barcode:${ref.barcode ?? ''}`
+    const existing = refs.get(key)
+    if (!existing) {
+      refs.set(key, ref)
+    } else if (!existing.barcode && ref.barcode) {
+      existing.barcode = ref.barcode
     }
-    if (row.collection_barcode && collectionType) {
-      const key = `${collectionType}:${row.collection_barcode}`
-      if (!seen.has(key)) {
-        checkData.push({ identifier: row.collection_barcode, type: collectionType })
-        seen.add(key)
-      }
-    }
+  }
+
+  const checkData: Array<{ identifier: string; type: BulkImportCollectionType }> = []
+  const checkIndex = new Map<string, number>()
+  const addCheck = (type: BulkImportCollectionType, identifier: string) => {
+    const key = `${type}:${identifier}`
+    if (checkIndex.has(key)) return
+    checkIndex.set(key, checkData.length)
+    checkData.push({ identifier, type })
+  }
+  for (const ref of refs.values()) {
+    if (ref.name) addCheck(ref.type, ref.name)
+    if (ref.barcode) addCheck(ref.type, ref.barcode)
   }
 
   if (checkData.length === 0) return []
 
-  const response = await collectionsApi.check({ collections: checkData })
-  const results = response.results
-
-  const missing: BulkImportMissingCollection[] = []
-  const found = new Set<string>()
-
-  for (let i = 0; i < results.length; i++) {
-    const result = results[i]
-    const check = checkData[i]
-    if (!result.exists) {
-      const isBarcode =
-        result.identifier.match(/^[A-Z0-9-]+$/) != null && result.identifier.length > 5
-
-      const dedupeKey = `${check.type}:${result.identifier}`
-      if (!found.has(dedupeKey)) {
-        missing.push({
-          name: isBarcode ? '' : result.identifier,
-          collectionType: check.type,
-          barcode: isBarcode ? result.identifier : undefined,
-          collectionBarcode: isBarcode ? result.identifier : undefined,
-          locationId: null,
-          status: 'pending',
-        })
-        found.add(dedupeKey)
-      }
-    } else {
-      found.add(`${check.type}:${result.identifier}`)
-    }
+  const { results } = await collectionsApi.check({ collections: checkData })
+  const exists = (type: BulkImportCollectionType, identifier: string | undefined) => {
+    if (!identifier) return false
+    const index = checkIndex.get(`${type}:${identifier}`)
+    return index != null && results[index]?.exists === true
   }
 
+  const missing: BulkImportMissingCollection[] = []
+  for (const ref of refs.values()) {
+    if (exists(ref.type, ref.name) || exists(ref.type, ref.barcode)) continue
+    missing.push({
+      name: ref.name ?? '',
+      collectionType: ref.type,
+      ...(ref.barcode ? { barcode: ref.barcode } : {}),
+      locationId: null,
+      status: 'pending',
+    })
+  }
   return missing
 }

@@ -31,6 +31,9 @@ export async function moveSheetsToCollection(
   targetCollectionId: number,
   targetCollectionType: 'box' | 'bag',
 ): Promise<{ moved: number }> {
+  // A Sheet listed twice moves once and counts once.
+  const uniqueSheetIds = [...new Set(sheetIds)]
+
   // Checks and updates run synchronously inside the transaction: with no await between
   // them, a concurrent move cannot slip in, so its loser gets SheetNameConflictError
   // rather than the UNIQUE constraint error.
@@ -44,8 +47,8 @@ export async function moveSheetsToCollection(
     if (targetCollectionType === 'box') {
       // Sheet names are unique within a box (bags still allow repeated legacy names).
       const moving =
-        sheetIds.length > 0
-          ? tx.select({ id: sheet.id, name: sheet.name }).from(sheet).where(inArray(sheet.id, sheetIds)).all()
+        uniqueSheetIds.length > 0
+          ? tx.select({ id: sheet.id, name: sheet.name }).from(sheet).where(inArray(sheet.id, uniqueSheetIds)).all()
           : []
       const staying = tx
         .select({ id: sheet.id, name: sheet.name })
@@ -60,7 +63,7 @@ export async function moveSheetsToCollection(
       }
     }
 
-    for (const sheetId of sheetIds) {
+    for (const sheetId of uniqueSheetIds) {
       const updated = tx
         .update(sheet)
         .set({
@@ -77,5 +80,5 @@ export async function moveSheetsToCollection(
     }
   })
 
-  return { moved: sheetIds.length }
+  return { moved: uniqueSheetIds.length }
 }

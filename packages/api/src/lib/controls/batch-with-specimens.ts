@@ -32,7 +32,8 @@ import { insertedRow } from '../inserted-row'
 export interface CreateBatchWithSpecimensRequest {
   batch: {
     controlDefinitionId: number
-    name: string
+    /** Omit to have the server generate a unique name from the definition and production date. */
+    name?: string
     productionDate?: string
     properties?: Record<string, unknown>
   }
@@ -196,7 +197,7 @@ export async function createBatchWithSpecimens(
     controlDefinitionId: number
     name: string
     productionDate: string | null
-    properties: string | null
+    properties: Record<string, unknown> | null
     created: string
     lastUpdated: string
   }
@@ -234,7 +235,7 @@ export async function createBatchWithSpecimens(
         controlDefinitionId: data.batch.controlDefinitionId,
         name: batchName,
         productionDate: data.batch.productionDate || null,
-        properties: data.batch.properties ? JSON.stringify(data.batch.properties) : null,
+        properties: data.batch.properties ?? null,
       })
       .returning()
 
@@ -281,7 +282,7 @@ export async function createBatchWithSpecimens(
         controlDefinitionId: batchRecord.controlDefinitionId,
         name: batchRecord.name,
         productionDate: batchRecord.productionDate,
-        properties: (batchRecord.properties as string | null) ?? null,
+        properties: (batchRecord.properties as Record<string, unknown> | null) ?? null,
         created: batchRecord.created,
         lastUpdated: batchRecord.lastUpdated,
       },
@@ -386,7 +387,8 @@ export async function createBatchesWithSpecimens(
         const conflict = error instanceof Error ? sqliteConstraintConflict(error) : null
         const reason = conflict ?? (error instanceof Error ? error.message : String(error))
         const sentence = /[.!?]$/.test(reason) ? reason : `${reason}.`
-        const message = `Control batch ${index + 1} ('${data.batch.name}'): ${sentence} No control batches were created.`
+        const label = data.batch.name ? ` ('${data.batch.name}')` : ''
+        const message = `Control batch ${index + 1}${label}: ${sentence} No control batches were created.`
         if (conflict || error instanceof ConflictError) throw new ConflictError(message)
         throw new ValidationError(message)
       }

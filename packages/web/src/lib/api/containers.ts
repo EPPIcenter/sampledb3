@@ -2,6 +2,7 @@ import type { EnrichedContainerWire, SpecimenSummaryWire } from '@sampledb/contr
 import { api } from './client'
 import {
   parseContainerDetailWire,
+  parseContainerUpdate,
   parseContainersList,
   type ParsedContainerDetailWire,
 } from './parse-response'
@@ -75,6 +76,19 @@ export type ContainersListParams = {
   limit?: number
 }
 
+/** Fields PATCH /containers/:id accepts. Omit a field to leave it unchanged. */
+export type ContainerUpdate = {
+  comment?: string
+  remainingQuantity?: number
+  unitId?: number
+  /** Replaces the Container's Tags. */
+  tagIds?: number[]
+  /** Micronix or cryovial tube barcode; null clears a cryovial barcode. */
+  barcode?: string | null
+  /** Paper sublabel; null clears it. */
+  sublabel?: string | null
+}
+
 export const containersApi = {
   list: async (params?: ContainersListParams) => {
     const body = await api.get<unknown>('/containers', { params })
@@ -84,5 +98,10 @@ export const containersApi = {
   get: async (id: number): Promise<ContainerDetail> => {
     const body = await api.get<unknown>(`/containers/${id}`)
     return normalizeContainerDetail(parseContainerDetailWire(body))
+  },
+
+  update: async (id: number, data: ContainerUpdate): Promise<EnrichedContainerWire> => {
+    const body = await api.patch<unknown>(`/containers/${id}`, data)
+    return parseContainerUpdate(body)
   },
 }

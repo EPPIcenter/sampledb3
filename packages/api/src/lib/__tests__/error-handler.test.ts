@@ -196,4 +196,78 @@ describe('error-handler', () => {
       expect(data.details).toBe('timeout')
     })
   })
+
+  describe('with NODE_ENV=production', () => {
+    const sqlMessage = 'SQLITE_ERROR: no such column: storage_container.secret_col in SELECT * FROM storage_container'
+    let previousNodeEnv: string | undefined
+    let previousLogFormat: string | undefined
+    let originalConsoleError: typeof console.error
+    let stderrLines: string[]
+
+    beforeEach(() => {
+      previousNodeEnv = process.env.NODE_ENV
+      previousLogFormat = process.env.LOG_FORMAT
+      process.env.NODE_ENV = 'production'
+      process.env.LOG_FORMAT = 'json'
+      stderrLines = []
+      originalConsoleError = console.error
+      console.error = (...args: unknown[]) => {
+        stderrLines.push(args.map(String).join(' '))
+      }
+    })
+
+    afterEach(() => {
+      console.error = originalConsoleError
+      process.env.NODE_ENV = previousNodeEnv
+      if (previousLogFormat === undefined) delete process.env.LOG_FORMAT
+      else process.env.LOG_FORMAT = previousLogFormat
+    })
+
+    it('answers a 500 with a generic message and still logs the full error', async () => {
+      const app = createAppWithError(new Error(sqlMessage))
+      const res = await app.request('http://localhost/test')
+
+      expect(res.status).toBe(500)
+      const text = await res.text()
+      expect(JSON.parse(text)).toEqual({ error: 'Internal server error', errorCode: 'INTERNAL_ERROR' })
+      expect(text).not.toContain('SQLITE')
+      expect(text).not.toContain('storage_container')
+
+      // stdout/stderr gets the full error
+      expect(stderrLines.some((line) => line.includes(sqlMessage))).toBe(true)
+      // error_logs gets the full error, with its stack
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const rows = await testDb.select().from(errorLogs).where(eq(errorLogs.message, sqlMessage))
+      expect(rows).toHaveLength(1)
+      expect(rows[0].level).toBe('error')
+      expect(rows[0].stack).toContain(sqlMessage)
+    })
+
+    it('answers a 500 for a non-Error thrown value with a generic message and no details', async () => {
+      const res = handleRouteError(sqlMessage, createMockContext())
+      expect(res.status).toBe(500)
+      expect(await getJson(res)).toEqual({ error: 'Internal server error', errorCode: 'INTERNAL_ERROR' })
+      expect(stderrLines.some((line) => line.includes(sqlMessage))).toBe(true)
+    })
+
+    it('keeps the cause out of the containers and search 500 bodies', async () => {
+      const containers = createAppWithError(
+        new RouteError(500, containersFetchFailedBody('Failed to fetch containers', new Error(sqlMessage)))
+      )
+      const containersRes = await containers.request('http://localhost/test')
+      expect(containersRes.status).toBe(500)
+      expect(await getJson(containersRes)).toEqual({ error: 'Failed to fetch containers' })
+
+      const search = createAppWithError(new RouteError(500, searchFailedBody('flu', new Error(sqlMessage))))
+      const searchText = await (await search.request('http://localhost/test')).text()
+      expect(searchText).not.toContain(sqlMessage)
+    })
+
+    it('keeps the raw SQLite text out of a constraint-conflict 409', async () => {
+      const error = Object.assign(new Error('UNIQUE constraint failed: study.title'), { code: 'SQLITE_CONSTRAINT_UNIQUE' })
+      const res = await createAppWithError(error).request('http://localhost/test')
+      expect(res.status).toBe(409)
+      expect(await res.text()).not.toContain('UNIQUE constraint failed')
+    })
+  })
 })

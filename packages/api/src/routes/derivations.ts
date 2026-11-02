@@ -9,10 +9,10 @@ import {
 import { and, eq } from 'drizzle-orm'
 import { createDerivation } from '../lib/derivations'
 import { resolveSpecimenSource } from '../lib/specimens/provenance'
-import { createDerivationRequestSchema } from '../lib/derivation-schemas'
-import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
-import { requireParam } from '../lib/common-validators'
-import { handleRouteError } from '../lib/error-handler'
+import { createDerivationRequestSchema, derivationDateSchema } from '../lib/derivation-schemas'
+import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { requireParam, setsNoField } from '../lib/common-validators'
+import { handleRouteError, ValidationError } from '../lib/error-handler'
 import { enrichContainersForApi } from '../lib/container-api-enrichment'
 import { mapEnrichedContainerToWire } from '../lib/container-wire-mapper'
 
@@ -24,6 +24,7 @@ export function createDerivationsRoutes(database: Database): Hono {
   const derivations = new Hono()
   const authMiddleware = createAuthMiddleware(database)
   const memberMiddleware = createMemberMiddleware(database)
+  const adminMiddleware = createAdminMiddleware(database)
 
 // Create derivation from parent container
 derivations.post('/containers/:id/derive', memberMiddleware, async (c) => {
@@ -236,8 +237,8 @@ derivations.get('/containers/:id/derivation-chain', authMiddleware, async (c) =>
   }
 })
 
-// Update derivation metadata
-derivations.patch('/derivations/:id', memberMiddleware, async (c) => {
+// Update derivation metadata (admin-only: CONTEXT.md, Roles)
+derivations.patch('/derivations/:id', adminMiddleware, async (c) => {
   try {
     const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
@@ -246,12 +247,15 @@ derivations.patch('/derivations/:id', memberMiddleware, async (c) => {
 
     const body = await c.req.json()
     const schema = z.object({
-      derivationDate: z.string().optional(),
+      derivationDate: derivationDateSchema.optional(),
       protocol: z.string().optional(),
       notes: z.string().optional(),
       properties: z.record(z.string(), z.any()).optional(),
     })
     const data = schema.parse(body)
+    if (setsNoField(data)) {
+      throw new ValidationError('Nothing to update: send derivationDate, protocol, notes or properties.')
+    }
 
     const [updated] = await database
       .update(containerDerivation)
@@ -274,8 +278,8 @@ derivations.patch('/derivations/:id', memberMiddleware, async (c) => {
   }
 })
 
-// Delete derivation (relationship only)
-derivations.delete('/derivations/:id', memberMiddleware, async (c) => {
+// Delete derivation (relationship only; admin-only: CONTEXT.md, Roles)
+derivations.delete('/derivations/:id', adminMiddleware, async (c) => {
   try {
     const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {

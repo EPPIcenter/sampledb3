@@ -26,11 +26,12 @@ import { exportInventoryCsv } from '../lib/export/inventory-csv'
 import { exportSpecimensCsv } from '../lib/export/specimens-csv'
 import type { ExportFilters, MultiStudyExportEntry } from '../lib/export/types'
 import { createAuthMiddleware } from '../middleware/auth'
+import { idListQueryParam } from '../lib/query-params'
+import { keepNullsOnWire } from '../middleware/omit-on-wire'
 
-function parseTagIds(values: string[] | undefined): number[] | undefined {
-  if (!values || values.length === 0) return undefined
-  const ids = values.map((id) => parseInt(id, 10)).filter((id) => !Number.isNaN(id))
-  return ids.length > 0 ? ids : undefined
+/** A POST export that returns JSON rows keeps its nulls, so every row has the same keys. */
+function keepNullsInJsonRows(c: Context, result: object): void {
+  if ('format' in result && result.format === 'json') keepNullsOnWire(c)
 }
 
 function parseTagIdsFromBody(body: unknown): number[] | undefined {
@@ -72,11 +73,21 @@ function handleExportFailure(c: Context, message: string, error: unknown): Respo
   return handleRouteError(new RouteError(500, { error: message, details }), c)
 }
 
+/** Export columns: an array, or a JSON array in a string. Malformed JSON or a non-array throws a `ValidationError`. */
 function parseColumnsParam(raw: unknown): string[] | undefined {
   if (!raw) return undefined
   if (Array.isArray(raw)) return raw.map(String)
-  if (typeof raw === 'string') return JSON.parse(raw) as string[]
-  return undefined
+  if (typeof raw !== 'string') return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new ValidationError(`Invalid columns '${raw}': use a JSON array of column names, such as ["barcode"].`)
+  }
+  if (!Array.isArray(parsed)) {
+    throw new ValidationError(`Invalid columns '${raw}': use a JSON array of column names, such as ["barcode"].`)
+  }
+  return parsed.map(String)
 }
 
 function parseExportFormat(raw: unknown, fallback: ContainerExportFormat = 'json'): ContainerExportFormat {
@@ -86,22 +97,18 @@ function parseExportFormat(raw: unknown, fallback: ContainerExportFormat = 'json
 function buildGetFilters(c: { req: { query: (key: string) => string | undefined; queries: (key: string) => string[] | undefined } }, studyCode: string): ExportFilters {
   const filters: ExportFilters = { study: studyCode }
 
-  const specimenTypeIds = c.req.queries('specimen_type_ids')
-  if (specimenTypeIds?.length) {
-    filters.specimen_type_ids = specimenTypeIds.map((id) => parseInt(id, 10)).filter((id) => !Number.isNaN(id))
-  }
+  const specimenTypeIds = idListQueryParam('specimen_type_ids', c.req.queries('specimen_type_ids'))
+  if (specimenTypeIds) filters.specimen_type_ids = specimenTypeIds
 
   const containerTypes = c.req.queries('container_types')
   if (containerTypes?.length) {
     filters.container_types = containerTypes
   }
 
-  const subjectIds = c.req.queries('subject_ids')
-  if (subjectIds?.length) {
-    filters.subject_ids = subjectIds.map((id) => parseInt(id, 10)).filter((id) => !Number.isNaN(id))
-  }
+  const subjectIds = idListQueryParam('subject_ids', c.req.queries('subject_ids'))
+  if (subjectIds) filters.subject_ids = subjectIds
 
-  const tagIds = parseTagIds(c.req.queries('tag_ids'))
+  const tagIds = idListQueryParam('tag_ids', c.req.queries('tag_ids'))
   if (tagIds) filters.tag_ids = tagIds
 
   if (c.req.query('date_from')) filters.date_from = c.req.query('date_from') as string
@@ -183,9 +190,7 @@ export function createExportRoutes(database: Database): Hono {
       const result = await runSingleStudyContainerExportGet(database, {
         filters: buildGetFilters(c, studyCode),
         format: formatParam,
-        columns: c.req.query('columns')
-          ? parseColumnsParam(JSON.parse(c.req.query('columns') as string))
-          : undefined,
+        columns: parseColumnsParam(c.req.query('columns')),
         csvOptions: parseCSVExportOptions(c.req.query()),
         userId: user?.id,
         countOnly,
@@ -196,6 +201,7 @@ export function createExportRoutes(database: Database): Hono {
       }
 
       if (result.kind === 'json') {
+        keepNullsOnWire(c)
         c.header('Content-Type', 'application/json')
         c.header('Content-Disposition', `attachment; filename="${result.filename}"`)
         return c.json(result.json)
@@ -249,6 +255,7 @@ export function createExportRoutes(database: Database): Hono {
         return c.json(result)
       }
 
+      keepNullsInJsonRows(c, result)
       return c.json(result)
     } catch (error) {
       return handleExportFailure(c, 'Failed to export containers', error)
@@ -327,6 +334,7 @@ export function createExportRoutes(database: Database): Hono {
         dateTolerance: body.date_tolerance || 0,
       })
 
+      keepNullsInJsonRows(c, result)
       return c.json(result)
     } catch (error) {
       return handleExportFailure(c, 'Failed to export containers', error)
@@ -350,6 +358,7 @@ export function createExportRoutes(database: Database): Hono {
         userId: user?.id,
       })
 
+      keepNullsInJsonRows(c, result)
       return c.json(result)
     } catch (error) {
       return handleExportFailure(c, 'Failed to export containers', error)

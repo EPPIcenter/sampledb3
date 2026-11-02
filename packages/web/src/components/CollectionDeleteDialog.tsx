@@ -1,10 +1,19 @@
 import { useState, useCallback } from 'react'
 import axios from 'axios'
 import type { CollectionDeletePreflight } from '@sampledb/contract'
-import { collectionsApi } from '../lib/api/collections'
+import {
+  useCollectionDeletePreflight,
+  useDeleteCollectionWithContents,
+  type DeletableCollectionType,
+} from '../hooks/useCollections'
+import { SectionMessage, getQueryErrorMessage } from '../ui'
 
-type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+type CollectionType = DeletableCollectionType
 type CollectionDeleteBlocker = CollectionDeletePreflight['blockers'][number]
+
+function countLabel(n: number, singular: string, plural: string): string {
+  return `${n} ${n === 1 ? singular : plural}`
+}
 
 type Props = {
   isOpen: boolean
@@ -32,6 +41,8 @@ export default function CollectionDeleteDialog({
   const [deleting, setDeleting] = useState(false)
   const [errorSummary, setErrorSummary] = useState<string | null>(null)
   const [blockers, setBlockers] = useState<CollectionDeleteBlocker[]>([])
+  const preflightQuery = useCollectionDeletePreflight(collectionType, id, isOpen)
+  const deleteMutation = useDeleteCollectionWithContents()
 
   const reset = useCallback(() => {
     setConfirmText('')
@@ -49,6 +60,7 @@ export default function CollectionDeleteDialog({
   }, [deleting, onClose, reset])
 
   const nameMatches = confirmText.trim() === collectionName
+  const preflight = preflightQuery.data
 
   if (!isOpen) return null
 
@@ -58,7 +70,7 @@ export default function CollectionDeleteDialog({
     setErrorSummary(null)
     setBlockers([])
     try {
-      await collectionsApi.deleteWithContents({
+      await deleteMutation.mutateAsync({
         collectionType,
         id,
         removeEmptySubjects,
@@ -100,6 +112,48 @@ export default function CollectionDeleteDialog({
           be undone. If a specimen still has other containers outside this collection, that specimen is kept. Use this when
           fixing a bad import or emptying a plate or box.
         </p>
+        <section aria-label="What will be removed" className="mt-4">
+          {preflightQuery.isPending ? (
+            <SectionMessage message="Counting what this delete removes…" />
+          ) : preflightQuery.isError ? (
+            <SectionMessage
+              variant="error"
+              message={`Could not count what this delete removes: ${getQueryErrorMessage(preflightQuery.error, 'Request failed')}`}
+            />
+          ) : preflight ? (
+            <>
+              <p className="text-sm font-medium">This removes:</p>
+              <ul className="mt-1 list-disc pl-5 text-sm space-y-0.5">
+                <li>{countLabel(preflight.summary.containerCount, 'Container', 'Containers')}</li>
+                <li>{countLabel(preflight.summary.specimenCount, 'Specimen', 'Specimens')}</li>
+                <li>
+                  {removeEmptySubjects
+                    ? countLabel(preflight.summary.emptySubjectCount, 'Subject', 'Subjects')
+                    : `0 Subjects (${countLabel(preflight.summary.emptySubjectCount, 'Subject', 'Subjects')} left with no Specimens)`}
+                </li>
+              </ul>
+              {!preflight.canDelete && (
+                <div
+                  role="alert"
+                  className="mt-3 p-3 rounded text-sm border border-app-trend-down/40 bg-app-trend-down/10"
+                  style={{ color: 'rgb(var(--app-text))' }}
+                >
+                  <p className="font-medium">This collection can't be deleted yet:</p>
+                  <ul className="mt-2 list-disc pl-4 space-y-1">
+                    {preflight.blockers.map((b, i) => (
+                      <li key={i} className="pl-0.5">
+                        {b.message}
+                        <span className="ml-1 text-xs opacity-70 font-mono" title="Support code">
+                          ({b.code})
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          ) : null}
+        </section>
         <label className="mt-4 flex items-start gap-2 text-sm cursor-pointer">
           <input
             type="checkbox"
@@ -154,7 +208,7 @@ export default function CollectionDeleteDialog({
           <button
             type="button"
             onClick={doDelete}
-            disabled={!nameMatches || deleting}
+            disabled={!nameMatches || deleting || !preflight?.canDelete}
             className="px-3 py-1.5 text-sm rounded text-white font-medium"
             style={{ backgroundColor: 'rgb(var(--app-trend-down))' }}
           >

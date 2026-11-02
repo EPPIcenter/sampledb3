@@ -22,15 +22,20 @@ export type ScanMoveContainerInfo = ContainerMoveContainerInfo
 export type PendingDestination = PendingDestinationPlate
 
 export interface ScanMoveValidationError {
+  /** 1-based CSV data row within `filename` (or the file it is listed under); 0 = not row-specific. */
   row: number
   error: string
+  /** CSV file the row belongs to, when the error is reported outside that file's own list. */
+  filename?: string
   /**
    * Structural tag so consumers can act on error provenance instead of
-   * matching message text: the reducer drops stale 'destination' errors on
+   * matching message text: the reducer drops stale kinded errors on
    * re-selection, and plate scan validation surfaces only 'inference' errors
    * (format rules like the full-plate check don't apply there).
+   * - 'relocation' / 'resolution': found by a resolve; replaced by the next one.
+   * - 'lookup': the resolve request itself failed; Next retries it.
    */
-  kind?: 'relocation' | 'destination' | 'inference'
+  kind?: 'relocation' | 'resolution' | 'lookup' | 'destination' | 'inference'
 }
 
 export type ScanMoveIdentifier =
@@ -72,7 +77,8 @@ export interface ScanMoveFile {
 export interface ScanMovePerFileResult {
   filename: string
   destinationName: string
-  moved: number
+  /** Tubes moved from this file; undefined when a partial result can't be split per file. */
+  moved?: number
   errors?: ScanMoveValidationError[]
 }
 
@@ -176,6 +182,8 @@ export interface ScanMoveVariant {
 export interface ScanMoveResolveResponseEntry {
   identifier: unknown
   container: ScanMoveContainerInfo | null
+  /** Set when the identifier matched more than one Container (an ambiguous barcode). */
+  error?: string
 }
 
 /**

@@ -1,8 +1,9 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import type { Database } from '../db/client'
 import { executeMoves, type BatchMoveRequest, type ContainerInfo } from '../lib/container-move'
+import type { BarcodeMatch } from '../lib/identifier-resolution'
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
-import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
 import { deleteCollectionWithContents, preflightCollectionDelete } from '../lib/collection-delete-cascade'
 import { validatePlateScan, inferPlateOrGetReport } from '../lib/plate-scan-validation'
@@ -56,6 +57,21 @@ function mapCreateCollectionError(error: unknown, c: { json: (body: unknown, sta
 }
 
 /**
+ * Respond with a move's result. A move that moved anything returns 200, because those moves
+ * are committed: `success` is false and `errors` lists the rows a best-effort move skipped.
+ * A move that moved nothing returns 400 with the errors.
+ */
+function moveResultResponse(
+  c: Context,
+  result: { success: boolean; moved: number; errors?: Array<{ row: number; error: string }> },
+) {
+  if (result.moved === 0 && !result.success) {
+    return c.json({ error: 'Move operation failed', moved: 0, errors: result.errors }, 400)
+  }
+  return c.json({ success: result.success, moved: result.moved, errors: result.errors })
+}
+
+/**
  * Create collections routes with database injection
  * @param database - Database instance (required)
  */
@@ -63,6 +79,7 @@ export function createCollectionsRoutes(database: Database): Hono {
   const collections = new Hono()
   const authMiddleware = createAuthMiddleware(database)
   const memberMiddleware = createMemberMiddleware(database)
+  const adminMiddleware = createAdminMiddleware(database)
 
   collections.get('/plates/micronix/:id', authMiddleware, async (c) => {
     const id = parseInt(requireParam(c, 'id'))
@@ -226,15 +243,28 @@ export function createCollectionsRoutes(database: Database): Hono {
       const { resolveContainersByIdentifiers } = await import('../lib/container-move')
       const containers = await resolveContainersByIdentifiers(database, data.identifiers)
 
-      const result: Array<{ identifier: unknown; container: ContainerInfo }> = []
-      for (const [key, container] of containers.entries()) {
+      // An ambiguous barcode comes back with no container and the error that lists its candidates.
+      const result: Array<
+        | { identifier: unknown; container: ContainerInfo }
+        | { identifier: unknown; container: null; error: string; candidates: BarcodeMatch[] }
+      > = []
+      for (const [key, resolved] of containers.entries()) {
         const identifier = data.identifiers.find(
           (id) =>
             (id.type === 'barcode' && id.barcode === key) ||
             (id.type === 'position' && `${id.sourceCollectionName}:${id.sourcePosition}` === key) ||
             (id.type === 'container_id' && `container_${id.containerId}` === key),
         )
-        result.push({ identifier: identifier || key, container })
+        if ('container' in resolved) {
+          result.push({ identifier: identifier || key, container: resolved.container })
+        } else {
+          result.push({
+            identifier: identifier || key,
+            container: null,
+            error: resolved.ambiguous.message,
+            candidates: resolved.ambiguous.candidates,
+          })
+        }
       }
 
       return c.json({ containers: result })
@@ -265,13 +295,8 @@ export function createCollectionsRoutes(database: Database): Hono {
   collections.post('/containers/move', memberMiddleware, async (c) => {
     try {
       const data = moveContainersBodySchema.parse(await c.req.json())
-      const result = await executeMoves(database, data as BatchMoveRequest)
-
-      if (!result.success) {
-        return c.json({ error: 'Move operation failed', moved: result.moved, errors: result.errors }, 400)
-      }
-
-      return c.json({ success: true, moved: result.moved })
+      const result = await executeMoves(database, data as BatchMoveRequest, { userId: c.get('user')?.id ?? null })
+      return moveResultResponse(c, result)
     } catch (error) {
       return handleRouteError(error, c)
     }
@@ -298,30 +323,17 @@ export function createCollectionsRoutes(database: Database): Hono {
   collections.post('/move', memberMiddleware, async (c) => {
     try {
       const data = moveCollectionsBodySchema.parse(await c.req.json())
-      const moveResult = await executeCollectionMoves(database, data as CollectionMoveRequest)
-
-      if (!moveResult.success) {
-        return c.json(
-          {
-            error: 'Move operation failed',
-            moved: moveResult.moved,
-            errors: moveResult.errors,
-          },
-          400,
-        )
-      }
-
-      return c.json({
-        success: true,
-        moved: moveResult.moved,
-        errors: moveResult.errors,
+      const moveResult = await executeCollectionMoves(database, data as CollectionMoveRequest, {
+        userId: c.get('user')?.id ?? null,
       })
+      return moveResultResponse(c, moveResult)
     } catch (error: unknown) {
       return handleRouteError(error, c)
     }
   })
 
-  collections.post('/delete-with-contents/preflight', memberMiddleware, async (c) => {
+  // Admin-only: deleting a Collection with its contents is a destructive action (CONTEXT.md, Roles).
+  collections.post('/delete-with-contents/preflight', adminMiddleware, async (c) => {
     try {
       const parsed = deleteWithContentsBodySchema
         .pick({ collectionType: true, id: true })
@@ -336,7 +348,7 @@ export function createCollectionsRoutes(database: Database): Hono {
     }
   })
 
-  collections.post('/delete-with-contents', memberMiddleware, async (c) => {
+  collections.post('/delete-with-contents', adminMiddleware, async (c) => {
     try {
       const parsed = deleteWithContentsBodySchema.parse(await c.req.json())
       const result = await deleteCollectionWithContents(database, {

@@ -4,7 +4,7 @@ import type { Database } from '../../db/client'
 import { micronixTube, specimen, storageContainer, studySubject } from '../../db/schema'
 import { shiftCalendarDate } from '../datetime'
 import { chunkArray, SQL_IN_CHUNK_SIZE } from '../sql-helpers'
-import { dateRangeConditions } from './conditions'
+import { collectionDateConditions } from './conditions'
 import type { SubjectSelectionEntry } from './types'
 
 /**
@@ -97,8 +97,8 @@ function subjectDateCondition(dateFilter: SubjectDateFilter, toleranceDays: numb
     const from = shiftCalendarDate(dateFilter.exact, -toleranceDays)
     const to = shiftCalendarDate(dateFilter.exact, toleranceDays)
     if (!from || !to) return eq(specimen.collectionDate, dateFilter.exact)
-    return and(...dateRangeConditions(specimen.collectionDate, { from, to }))
+    return and(...collectionDateConditions({ from, to }))
   }
-  const range = dateRangeConditions(specimen.collectionDate, dateFilter)
+  const range = collectionDateConditions(dateFilter)
   return range.length > 0 ? and(...range) : undefined
 }

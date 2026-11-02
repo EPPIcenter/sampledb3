@@ -44,7 +44,7 @@ You can clear all filters without re-uploading the CSV.
 
 **XLSX download** marks identifier and code columns as text cells so leading zeros and long barcodes survive in Excel.
 
-**JSON download** is for programmatic import.
+**JSON download** is for programmatic import. Every row has the same keys; a column with no value on that row is `null`.
 
 On this page, the study export modal, and barcode export, you can override CSV delimiter, UTF-8 BOM, and line ending. Defaults (comma, BOM on, CRLF) match [CSV file guidelines](/docs/guides/troubleshooting/csv-guidelines/).
 

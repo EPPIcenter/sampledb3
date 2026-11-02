@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { CONTAINER_TYPES } from '../lib/container-types'
+import { useToast } from '../contexts/ToastContext'
+import { getQueryErrorMessage } from '../ui'
 
 interface ContainerTypeToggleProps {
   specimenTypeId: number
@@ -17,6 +19,7 @@ export default function ContainerTypeToggle({
   usageInfo = {},
 }: ContainerTypeToggleProps) {
   const [loadingTypes, setLoadingTypes] = useState<Set<string>>(new Set())
+  const { error: showError } = useToast()
 
   const handleToggle = async (containerType: string) => {
     if (disabled || loadingTypes.has(containerType)) return
@@ -32,8 +35,9 @@ export default function ContainerTypeToggle({
     try {
       await onToggle(specimenTypeId, containerType, !isSelected)
     } catch (error) {
-      console.error('Failed to toggle container type:', error)
-      // Error handling is done by parent component
+      const label = CONTAINER_TYPES.find((ct) => ct.value === containerType)?.label ?? containerType
+      const action = isSelected ? `remove ${label}` : `add ${label}`
+      showError(`Could not ${action}: ${getQueryErrorMessage(error, 'request failed')}`)
     } finally {
       setLoadingTypes((prev) => {
         const next = new Set(prev)
@@ -66,6 +70,7 @@ export default function ContainerTypeToggle({
             type="button"
             onClick={() => handleToggle(ct.value)}
             disabled={isDisabled}
+            aria-pressed={isSelected}
             className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium transition-colors ${
               isSelected
                 ? isInUse

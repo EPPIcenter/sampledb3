@@ -55,8 +55,9 @@ export const adminApi = {
     api.patch<{ message: string }>(`/auth/users/${id}/password`, { password }),
   getUserSessions: (userId: number) =>
     api.get<{ sessions: UserSession[] }>(`/auth/users/${userId}/sessions`),
-  revokeSession: (sessionId: string) =>
-    api.delete<{ message: string }>(`/auth/sessions/${sessionId}`),
+  /** Revoke a session by its public id (`UserSession.id`). */
+  revokeSession: (publicSessionId: string) =>
+    api.delete<{ message: string }>(`/auth/sessions/${encodeURIComponent(publicSessionId)}`),
   approveUser: (id: number) =>
     api.patch<{ user: User }>(`/auth/users/${id}/approve`),
   getSystemStats: () =>
@@ -68,9 +69,12 @@ export const adminApi = {
   getIntegrityReport: () =>
     api.get<IntegrityReport>('/admin/data-audit/integrity-report'),
 }
+/** Tubes whose barcodes are equal ignoring case and surrounding whitespace. */
 export interface DuplicateBarcodeItem {
   barcode: string
-  containerType: 'micronix_tube'
+  /** Every stored spelling in the group; more than one means case or whitespace variants. */
+  variants: string[]
+  containerTypes: Array<'micronix_tube' | 'cryovial_tube'>
   ids: number[]
 }
 
@@ -87,6 +91,64 @@ export interface ContainerWithNoGridPositionItem {
   collectionId: number
 }
 
+export interface SpecimenWithNonIsoCollectionDateItem {
+  id: number
+  collectionDate: string
+}
+
+export interface ContainerWithInvalidGridPositionItem {
+  id: number
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'static_well'
+  collectionId: number
+  /** The stored position, as stored. */
+  position: string
+}
+
+/** Subject Specimens sharing a Subject, Specimen type and collection date (CONTEXT.md, Specimen identity). */
+export interface DuplicateSpecimenIdentityItem {
+  studyId: number
+  studyShortCode: string
+  subjectId: number
+  subjectName: string
+  specimenTypeId: number
+  specimenTypeName: string
+  /** Absent for undated Specimens. */
+  collectionDate?: string
+  specimenIds: number[]
+}
+
+export interface CaseVariantSubjectNameItem {
+  studyId: number
+  studyShortCode: string
+  subjects: Array<{ id: number; name: string }>
+}
+
+export interface CaseVariantCollectionNameItem {
+  type: CollectionType | 'sheet'
+  /** The box or bag holding the sheets; absent for other Collection types. */
+  parent?: { type: 'box' | 'bag'; id: number }
+  collections: Array<{ id: number; name: string }>
+}
+
+export interface ContainerInDisallowedContainerTypeItem {
+  id: number
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+  specimenId: number
+  specimenTypeId: number
+  specimenTypeName: string
+}
+
+export interface ExhaustedContainerWithRemainingQuantityItem {
+  id: number
+  comment: string
+  remainingQuantity: number
+}
+
+export interface SpecimenCollectionDateItem {
+  id: number
+  collectionDate: string
+}
+
 export interface IntegrityReport {
   emptyCollections: EmptyCollectionItem[]
   collectionsWithMissingLocation: CollectionWithMissingLocationItem[]
@@ -100,6 +162,15 @@ export interface IntegrityReport {
   duplicateBarcodes: DuplicateBarcodeItem[]
   locationPathInconsistencies: LocationPathInconsistencyItem[]
   containersWithNoGridPosition: ContainerWithNoGridPositionItem[]
+  specimensWithNonIsoCollectionDate: SpecimenWithNonIsoCollectionDateItem[]
+  containersWithInvalidGridPosition: ContainerWithInvalidGridPositionItem[]
+  duplicateSpecimenIdentities: DuplicateSpecimenIdentityItem[]
+  caseVariantSubjectNames: CaseVariantSubjectNameItem[]
+  caseVariantCollectionNames: CaseVariantCollectionNameItem[]
+  containersInDisallowedContainerType: ContainerInDisallowedContainerTypeItem[]
+  exhaustedContainersWithRemainingQuantity: ExhaustedContainerWithRemainingQuantityItem[]
+  specimensWithPlaceholderCollectionDate: SpecimenCollectionDateItem[]
+  specimensWithFutureCollectionDate: SpecimenCollectionDateItem[]
 }
 
 export interface CollectionWithMissingLocationItem {

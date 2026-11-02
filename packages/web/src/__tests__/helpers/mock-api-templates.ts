@@ -51,6 +51,7 @@ export function studiesPageMock(): MockApiOverrides {
   return {
     studiesApi: {
       list: vi.fn().mockResolvedValue(emptyStudiesList),
+      getSummaries: vi.fn().mockResolvedValue({ summaries: [] }),
     },
   }
 }
@@ -74,6 +75,7 @@ export function studiesHooksMock(): MockApiOverrides {
       get: vi.fn(),
       getSubjects: vi.fn(),
       getSummary: vi.fn(),
+      getSummaries: vi.fn(),
       getTimeline: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
@@ -125,7 +127,7 @@ export function dashboardPageMock(): MockApiOverrides {
       get: vi.fn().mockImplementation((url: string) => {
         const emptyList = { pagination: { total: 0 }, studies: [], specimens: [], subjects: [], containers: [], locations: [] }
         if (url === '/studies') return Promise.resolve({ studies: [], pagination: { total: 0 } })
-        if (url === '/specimens') return Promise.resolve({ specimens: [], pagination: { total: 0 } })
+        if (url === '/specimens') return Promise.resolve({ specimens: [], pagination: { page: 1, limit: 1, total: 0, totalPages: 0 } })
         if (url === '/subjects') return Promise.resolve({ subjects: [], pagination: { total: 0 } })
         if (url === '/containers') return Promise.resolve({ containers: [], pagination: { total: 0 } })
         if (url === '/locations') return Promise.resolve({ locations: [], pagination: { total: 0 } })
@@ -147,7 +149,7 @@ export function specimensPageMock(): MockApiOverrides {
   return {
     default: { get: vi.fn() },
     specimensApi: {
-      search: vi.fn().mockResolvedValue({ specimens: [] }),
+      search: vi.fn().mockResolvedValue({ specimens: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } }),
     },
     specimenTypesApi: {
       list: vi.fn().mockResolvedValue({ data: [] }),
@@ -440,7 +442,7 @@ export function specimenFormMock(): MockApiOverrides {
     cellLinesApi: { list: vi.fn().mockResolvedValue({ cellLines: [] }) },
     plasmidsApi: { list: vi.fn().mockResolvedValue({ plasmids: [] }) },
     standardsApi: { list: vi.fn().mockResolvedValue({ standards: [] }) },
-    subjectsApi: { create: vi.fn().mockResolvedValue({ subject: { id: 1 } }) },
+    subjectsApi: { create: vi.fn().mockResolvedValue({ subject: { id: 1 } }), createWithSpecimens: vi.fn() },
     settingsApi: {
       getContainerTypeUnits: vi.fn().mockResolvedValue({ units: [] }),
       get: vi.fn().mockResolvedValue({ key: 'container_defaults', value: null }),
@@ -506,11 +508,20 @@ export function bulkImportFlowMock(): MockApiOverrides {
       bulkCombinedValidate: vi.fn().mockResolvedValue({ valid: true, errors: [] }),
     },
     collectionsApi: {
-      check: vi.fn().mockResolvedValue({ results: [] }),
+      // One result per Collection checked, as the API returns; every Collection exists.
+      check: vi.fn((data: { collections: Array<{ identifier: string; type: string }> }) =>
+        Promise.resolve({
+          results: data.collections.map((c) => ({ ...c, exists: true, id: 1 })),
+        }),
+      ),
       listMicronixPlates: vi.fn().mockResolvedValue([]),
       listCryovialBoxes: vi.fn().mockResolvedValue([]),
       listBoxes: vi.fn().mockResolvedValue([]),
       listBags: vi.fn().mockResolvedValue([]),
+      createMicronixPlate: vi.fn(),
+      createCryovialBox: vi.fn(),
+      createBox: vi.fn(),
+      createBag: vi.fn(),
     },
   }
 }

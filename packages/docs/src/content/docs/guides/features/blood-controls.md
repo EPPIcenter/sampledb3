@@ -55,6 +55,10 @@ Optional **density** column: rows are grouped by density and one batch is create
 
 Review previews file, collection, density, definition, and specimen count. Submit uses your chosen definitions. It does not create definitions automatically.
 
+Each batch is named from its definition and the production date, for example `D100 2024-06-01`. When two files have the same density, or a batch already has that name, the next batch gets a number: `D100 2024-06-01 (1)`. All the batches are created together, or none are.
+
+A `quantity` of `0` is kept as 0. A blank `quantity` uses 1. Errors name the row as your spreadsheet numbers it: the header is row 1, and blank rows count.
+
 ### Collection resolution
 
 As you type a collection name, matches appear with location. Selecting one reuses it. For a new name, **Create new collection** plus a location creates it on submit. This applies to both flows so you do not duplicate collections of the same name and type.
@@ -66,6 +70,10 @@ Manual: Batch Info, Specimen Types, CSV Upload, Containers, Review.
 **Add batches from CSV:** start at Upload CSV, then Containers (including sheet name for paper), then Review.
 
 You can add specimens later from the batch detail page with **Add Specimens**, or import with source type **Control** and the batch name.
+
+## Delete a batch
+
+Only administrators can delete a batch. On the batch page, click **Delete Batch** and confirm. SampleDB deletes the batch, its specimens, and their containers. This cannot be undone.
 
 ## Use a control as a specimen source
 

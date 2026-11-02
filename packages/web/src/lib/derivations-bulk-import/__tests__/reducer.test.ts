@@ -45,6 +45,7 @@ describe('derivationsBulkReducer', () => {
       result,
       headers: ['a', 'b'],
       rows: [{ a: '1', b: '2' }],
+      fileRows: [2],
     })
     expect(nextStepAfterValidate(result)).toBe('collections')
     expect(selectMissingCollections(validated)).toEqual([
@@ -65,6 +66,7 @@ describe('derivationsBulkReducer', () => {
       result,
       headers: ['a'],
       rows: [{ a: '1' }],
+      fileRows: [2],
     })
     state = derivationsBulkReducer(state, {
       type: 'COLLECTION_PATCHED',

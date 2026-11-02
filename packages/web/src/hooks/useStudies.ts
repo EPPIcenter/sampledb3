@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   useQuery,
-  useInfiniteQuery,
   useMutation,
   useQueryClient,
   type QueryClient,
+  keepPreviousData,
 } from '@tanstack/react-query'
 import { studiesApi, type Study, type StudySummaryBasic } from '../lib/api/studies'
 import { api } from '../lib/api/client'
@@ -16,7 +16,8 @@ export const studyKeys = {
   lists: () => [...studyKeys.all, 'list'] as const,
   list: (filters?: { search?: string; page?: number; limit?: number }) =>
     [...studyKeys.lists(), filters] as const,
-  infinite: (limit?: number) => [...studyKeys.all, 'infinite', { limit }] as const,
+  /** Every study matching the search, for the Studies page. */
+  browse: (search: string) => [...studyKeys.lists(), 'browse', { search }] as const,
   leadPersons: () => [...studyKeys.all, 'lead-persons'] as const,
   details: () => [...studyKeys.all, 'detail'] as const,
   detail: (id: number) => [...studyKeys.details(), id] as const,
@@ -24,16 +25,17 @@ export const studyKeys = {
   summaryCard: (id: number) => [...studyKeys.all, 'summary-card', id] as const,
 }
 
-const STUDIES_PAGE_LIMIT = 50
-const SUMMARY_CARD_STALE_MS = 5 * 60 * 1000
+/** Page size for loading every study; the API clamps it to its configured maximum. */
+const ALL_STUDIES_PAGE_LIMIT = 1000
 
 function summaryBatchKey(ids: number[]) {
   return [...studyKeys.all, 'summaries-batch', [...ids].sort((a, b) => a - b)] as const
 }
 
+/** A card is resolved once loaded, until a write invalidates it. */
 function isSummaryCardResolved(queryClient: QueryClient, id: number): boolean {
   const state = queryClient.getQueryState(studyKeys.summaryCard(id))
-  return state?.status === 'success' || state?.status === 'error'
+  return (state?.status === 'success' || state?.status === 'error') && !state.isInvalidated
 }
 
 export async function prefetchStudySummaryCards(
@@ -56,7 +58,8 @@ export async function prefetchStudySummaryCards(
         .forEach((id) => queryClient.setQueryData(studyKeys.summaryCard(id), null))
       return summaries
     },
-    staleTime: SUMMARY_CARD_STALE_MS,
+    // Callers pass only unresolved cards, so fetch even when an earlier batch of the same ids is cached.
+    staleTime: 0,
   })
 }
 
@@ -65,21 +68,12 @@ export function useStudySummaryCards() {
   const queryClient = useQueryClient()
   const [cacheTick, setCacheTick] = useState(0)
   const loadingIdsRef = useRef(new Set<number>())
-
-  useEffect(() => {
-    return queryClient.getQueryCache().subscribe((event) => {
-      const key = event.query.queryKey
-      if (
-        key?.[0] === studyKeys.all[0] &&
-        (key[1] === 'summary-card' || key[1] === 'summaries-batch')
-      ) {
-        setCacheTick((n) => n + 1)
-      }
-    })
-  }, [queryClient])
+  /** Cards this page has asked for, so an invalidated one on screen refetches. */
+  const requestedIdsRef = useRef(new Set<number>())
 
   const prefetch = useCallback(
     (studyIds: number[]) => {
+      studyIds.forEach((id) => requestedIdsRef.current.add(id))
       const toFetch = studyIds.filter((id) => !isSummaryCardResolved(queryClient, id))
       if (toFetch.length === 0) return
       toFetch.forEach((id) => loadingIdsRef.current.add(id))
@@ -91,6 +85,39 @@ export function useStudySummaryCards() {
     },
     [queryClient]
   )
+
+  useEffect(() => {
+    let invalidatedIds: number[] = []
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      const key = event.query.queryKey
+      if (
+        key[0] !== studyKeys.all[0] ||
+        (key[1] !== 'summary-card' && key[1] !== 'summaries-batch')
+      ) {
+        return
+      }
+      setCacheTick((n) => n + 1)
+      const id = key[2]
+      if (
+        key[1] === 'summary-card' &&
+        typeof id === 'number' &&
+        requestedIdsRef.current.has(id) &&
+        event.type === 'updated' &&
+        event.action.type === 'invalidate'
+      ) {
+        // An invalidation marks every card in one pass; refetch them in one batch.
+        if (invalidatedIds.length === 0) {
+          queueMicrotask(() => {
+            const ids = invalidatedIds
+            invalidatedIds = []
+            prefetch(ids)
+          })
+        }
+        invalidatedIds.push(id)
+      }
+    })
+    return unsubscribe
+  }, [queryClient, prefetch])
 
   const getCardState = useCallback(
     (studyId: number): { summary?: StudySummaryBasic | null; loading: boolean } => {
@@ -116,26 +143,28 @@ export function useStudies(search?: string, params?: { page?: number; limit?: nu
   })
 }
 
-/** Unfiltered browse with server pagination (infinite scroll). */
-export function useInfiniteStudies(limit = STUDIES_PAGE_LIMIT) {
-  return useInfiniteQuery({
-    queryKey: studyKeys.infinite(limit),
-    queryFn: async ({ pageParam }) => studiesApi.list(undefined, { page: pageParam, limit }),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage, _pages, lastPageParam) => {
-      const pagination = lastPage.pagination
-      if (!pagination || lastPageParam >= pagination.totalPages) return undefined
-      return lastPageParam + 1
-    },
-  })
+/**
+ * Every study matching the search, fetching each page the API reports, so the page can
+ * sort and filter the whole list rather than the pages loaded so far.
+ */
+export async function listAllStudies(search?: string): Promise<{ studies: Study[]; total: number }> {
+  const first = await studiesApi.list(search || undefined, { page: 1, limit: ALL_STUDIES_PAGE_LIMIT })
+  const totalPages = first.pagination?.totalPages ?? 1
+  const rest = await Promise.all(
+    Array.from({ length: Math.max(0, totalPages - 1) }, (_, i) =>
+      studiesApi.list(search || undefined, { page: i + 2, limit: ALL_STUDIES_PAGE_LIMIT })
+    )
+  )
+  const studies = [...first.studies, ...rest.flatMap((page) => page.studies)]
+  return { studies, total: first.pagination?.total ?? studies.length }
 }
 
-/** All studies matching filters (client-side sort/pagination on the list page). */
-export function useStudiesFiltered(search: string, enabled: boolean) {
+/** All studies matching the search (the Studies page sorts and filters them client-side). */
+export function useAllStudies(search: string, options?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: studyKeys.list({ search, page: 1, limit: 10000 }),
-    queryFn: () => studiesApi.list(search || undefined, { page: 1, limit: 10000 }),
-    enabled,
+    queryKey: studyKeys.browse(search),
+    queryFn: () => listAllStudies(search),
+    enabled: options?.enabled ?? true,
   })
 }
 
@@ -143,7 +172,7 @@ export function useStudyLeadPersons() {
   return useQuery({
     queryKey: studyKeys.leadPersons(),
     queryFn: async () => {
-      const res = await studiesApi.list(undefined, { page: 1, limit: 10000 })
+      const res = await listAllStudies()
       const leads = new Set(res.studies.map((s) => s.leadPerson).filter(Boolean))
       return Array.from(leads).sort() as string[]
     },
@@ -161,14 +190,24 @@ export function useStudy(id: number) {
   })
 }
 
-export function useStudySubjects(studyId: number, params?: { page?: number; limit?: number }) {
+/**
+ * One page of a study's subjects. `search` matches a name containing the text or the exact
+ * subject ID, on the server.
+ */
+export function useStudySubjects(
+  studyId: number,
+  params?: { page?: number; limit?: number; search?: string },
+  /** `keepPreviousResults`: while new params load, keep showing the last results (a search box). */
+  options?: { enabled?: boolean; keepPreviousResults?: boolean },
+) {
   return useQuery({
     queryKey: [...studyKeys.detail(studyId), 'subjects', params],
     queryFn: async () => {
       const res = await studiesApi.getSubjects(studyId, params)
       return res
     },
-    enabled: !!studyId,
+    enabled: !!studyId && (options?.enabled ?? true),
+    ...(options?.keepPreviousResults ? { placeholderData: keepPreviousData } : {}),
   })
 }
 
@@ -219,7 +258,7 @@ export function useCreateStudy(options?: { silent?: boolean }) {
       showError(message || 'Failed to create study')
     },
     onSuccess: () => {
-      // Every studies query (lists, infinite pages, lead persons, summaries) can change.
+      // Every studies query (lists, lead persons, summaries) can change.
       void queryClient.invalidateQueries({ queryKey: studyKeys.all })
       void queryClient.invalidateQueries({ queryKey: dashboardKeys.all })
       success('Study created successfully')

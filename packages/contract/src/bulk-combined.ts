@@ -182,6 +182,8 @@ export const collectionDeletePreflightSchema = z.object({
   summary: z.object({
     containerCount: z.number().int(),
     specimenCount: z.number().int(),
+    /** Subjects left with no Specimens after the delete; removed only when `removeEmptySubjects` is set. */
+    emptySubjectCount: z.number().int(),
   }),
 })
 

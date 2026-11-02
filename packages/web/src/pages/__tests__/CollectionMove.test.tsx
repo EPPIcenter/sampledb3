@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { render, screen, waitFor } from '../../__tests__/helpers/render'
+import { QueryClient } from '@tanstack/react-query'
+import { render, screen, waitFor, within } from '../../__tests__/helpers/render'
 import { collectionsApi } from '../../lib/api/collections'
 import { locationsApi } from '../../lib/api/locations'
 
@@ -109,7 +110,7 @@ describe('CollectionMove', () => {
 
     const { default: CollectionMove } = await import('../CollectionMove')
     const user = userEvent.setup()
-    render(<CollectionMove />)
+    await render(<CollectionMove />)
 
     await waitFor(() => {
       expect(screen.queryByText(/loading collections/i)).not.toBeInTheDocument()
@@ -163,7 +164,7 @@ describe('CollectionMove', () => {
 
     const { default: CollectionMove } = await import('../CollectionMove')
     const user = userEvent.setup()
-    render(<CollectionMove />)
+    await render(<CollectionMove />)
 
     await waitFor(() => {
       expect(screen.queryByText(/loading collections/i)).not.toBeInTheDocument()
@@ -185,12 +186,10 @@ describe('CollectionMove', () => {
       expect(collectionsApi.moveCollections).toHaveBeenCalled()
     })
 
-    expect(collectionsApi.moveCollections).toHaveBeenCalledWith(
-      expect.objectContaining({
-        collectionType: 'micronix_plate',
-        atomicMode: 'all_or_nothing',
-      })
-    )
+    expect(collectionsApi.moveCollections).toHaveBeenCalledWith({
+      atomicMode: 'all_or_nothing',
+      moves: [{ collectionType: 'micronix_plate', identifier: { type: 'id', id: 11 }, targetLocationId: 2 }],
+    })
   })
 
   it('sends best_effort when selected in collection move controls', async () => {
@@ -207,7 +206,7 @@ describe('CollectionMove', () => {
 
     const { default: CollectionMove } = await import('../CollectionMove')
     const user = userEvent.setup()
-    render(<CollectionMove />)
+    await render(<CollectionMove />)
 
     await waitFor(() => {
       expect(screen.queryByText(/loading collections/i)).not.toBeInTheDocument()
@@ -231,10 +230,101 @@ describe('CollectionMove', () => {
     })
 
     expect(collectionsApi.moveCollections).toHaveBeenCalledWith(
-      expect.objectContaining({
-        collectionType: 'micronix_plate',
-        atomicMode: 'best_effort',
-      })
+      expect.objectContaining({ atomicMode: 'best_effort' })
     )
+  })
+
+  describe('move results', () => {
+    const locations = [
+      { id: 1, name: 'F1', path: 'F1', parentId: null, canContainCollections: true, description: undefined, storageTypeId: null, effectiveStorageTypeName: '-80°C', created: '', lastUpdated: '' },
+      { id: 2, name: 'F2', path: 'F2', parentId: null, canContainCollections: true, description: undefined, storageTypeId: null, effectiveStorageTypeName: '-80°C', created: '', lastUpdated: '' },
+    ]
+    const collections = [
+      { id: 5, name: 'Plate P', type: 'micronix_plate' as const, itemCount: 0, locationId: 1, location: { id: 1, path: 'F1' }, barcode: null },
+      { id: 7, name: 'Box B', type: 'cryovial_box' as const, itemCount: 0, locationId: 1, location: { id: 1, path: 'F1' }, barcode: null },
+    ]
+
+    /** Select both Collections, pick F2, choose the atomicity mode and confirm. */
+    async function moveBoth(atomicLabel: RegExp) {
+      vi.mocked(locationsApi.list).mockResolvedValue({ locations })
+      vi.mocked(collectionsApi.listAllCollections).mockResolvedValue({ collections })
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+      const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+      const { default: CollectionMove } = await import('../CollectionMove')
+      const user = userEvent.setup()
+      await render(<CollectionMove />, { queryClient })
+
+      await user.click(await screen.findByRole('button', { name: /expand\s+f1/i }))
+      for (const checkbox of screen.getAllByRole('checkbox').slice(0, 2)) await user.click(checkbox)
+      await user.click(screen.getByRole('button', { name: /continue with 2 collections/i }))
+      await user.click(screen.getByRole('button', { name: /select locations/i }))
+      const selectButtons = await screen.findAllByRole('button', { name: /select/i })
+      await user.click(selectButtons[2])
+      await user.click(screen.getByRole('radio', { name: atomicLabel }))
+      invalidate.mockClear()
+      await user.click(screen.getByRole('button', { name: /confirm & move/i }))
+      return { invalidate }
+    }
+
+    it('sends plates and boxes in one request so all-or-nothing covers both types', async () => {
+      vi.mocked(collectionsApi.moveCollections).mockResolvedValue({ success: true, moved: 2 })
+
+      await moveBoth(/all-or-nothing/i)
+
+      expect(await screen.findByRole('heading', { name: /move completed successfully/i })).toBeInTheDocument()
+      expect(collectionsApi.moveCollections).toHaveBeenCalledTimes(1)
+      const request = vi.mocked(collectionsApi.moveCollections).mock.calls[0][0]
+      expect(request.atomicMode).toBe('all_or_nothing')
+      expect(request.moves).toEqual(
+        expect.arrayContaining([
+          { collectionType: 'micronix_plate', identifier: { type: 'id', id: 5 }, targetLocationId: 2 },
+          { collectionType: 'cryovial_box', identifier: { type: 'id', id: 7 }, targetLocationId: 2 },
+        ]),
+      )
+      expect(request.moves).toHaveLength(2)
+    })
+
+    it('shows the moved count and the failing row from a partial best-effort move, and refreshes pages', async () => {
+      vi.mocked(collectionsApi.moveCollections).mockImplementation(async (data) => {
+        const boxRow = data.moves.findIndex((m) => m.collectionType === 'cryovial_box') + 1
+        return { success: false, moved: 1, errors: [{ row: boxRow, error: 'Collection is already at location 2' }] }
+      })
+
+      const { invalidate } = await moveBoth(/best effort/i)
+
+      expect(await screen.findByRole('heading', { name: /move partly completed/i })).toBeInTheDocument()
+      expect(screen.getByText(/moved 1 collection to f2/i)).toBeInTheDocument()
+      const errors = screen.getByRole('list')
+      expect(within(errors).getByText(/\(box b, cryovial boxes\): collection is already at location 2/i)).toBeInTheDocument()
+      expect(invalidate).toHaveBeenCalled()
+    })
+
+    it('shows the errors of a move the API rejected and does not refresh pages', async () => {
+      vi.mocked(collectionsApi.moveCollections).mockImplementation(async (data) => {
+        const boxRow = data.moves.findIndex((m) => m.collectionType === 'cryovial_box') + 1
+        throw Object.assign(new Error('Request failed with status code 400'), {
+          response: {
+            status: 400,
+            data: { error: 'Move operation failed', moved: 0, errors: [{ row: boxRow, error: 'Collection not found: ID 7.' }] },
+          },
+        })
+      })
+
+      const { invalidate } = await moveBoth(/all-or-nothing/i)
+
+      expect(await screen.findByRole('heading', { name: /move failed/i })).toBeInTheDocument()
+      expect(screen.getByText(/no collections were moved/i)).toBeInTheDocument()
+      expect(screen.getByText(/\(box b, cryovial boxes\): collection not found: id 7\./i)).toBeInTheDocument()
+      expect(invalidate).not.toHaveBeenCalled()
+    })
+
+    it('reports a network failure as a request-level error', async () => {
+      vi.mocked(collectionsApi.moveCollections).mockRejectedValue(new Error('Network Error'))
+
+      await moveBoth(/all-or-nothing/i)
+
+      expect(await screen.findByRole('heading', { name: /move failed/i })).toBeInTheDocument()
+      expect(screen.getByText(/request: network error/i)).toBeInTheDocument()
+    })
   })
 })

@@ -3,7 +3,7 @@ title: Subjects and specimens
 description: Create subjects and register specimens one at a time
 ---
 
-A **subject** is a participant or sample source in a study. The name must be unique within that study. A **specimen** is the registered biological sample from one collection event. One subject can have many specimens. Each specimen belongs to one source, usually a subject.
+A **subject** is a participant or sample source in a study. The name must be unique within that study, ignoring case, so a study can't have both `ABC-1` and `abc-1`. A **specimen** is the registered biological sample from one collection event. One subject can have many specimens. Each specimen belongs to one source, usually a subject.
 
 This page covers one-at-a-time entry. For many rows, see [Bulk import](/docs/guides/bulk-operations/import/).
 
@@ -29,7 +29,7 @@ Open the form from any of these places:
 ### Specimen fields
 
 1. Select a source type. **Subject** is the usual choice. The other options are **Control**, **Reagent**, **Cell Line**, **Plasmid**, and **Standard**.
-2. If the source is **Subject**, select the study or enter its short code, then select the subject. To create the subject in the same step, select the **Create New Subject** checkbox and enter the name.
+2. If the source is **Subject**, select the study or enter its short code, then select the subject. To create the subject in the same step, select the **Create New Subject** checkbox and enter the name. The subject and specimen are saved together: if the specimen can't be saved, for example because a barcode is already in use, the subject isn't created either, and the error says why. If the study already has a subject with that name, nothing is saved and the error says so: clear the checkbox and select that subject instead.
 3. Select a **Specimen Type** from Reference Data.
 4. Optional: enter **Collection Date** as YYYY-MM-DD. If you leave it blank, the specimen is saved without a date. SampleDB does not default to today.
 

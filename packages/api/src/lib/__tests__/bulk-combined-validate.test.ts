@@ -9,8 +9,9 @@ import {
   createTestUnit,
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
-import { validateBulkCombinedPayload } from '../bulk-combined-import'
-import { specimenTypeContainerType, containerTypeUnit } from '../../db/schema'
+import { runBulkCombinedImport, validateBulkCombinedPayload } from '../bulk-combined-import'
+import { ValidationError } from '../error-handler'
+import { specimenTypeContainerType, containerTypeUnit, storageContainer } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { utcNow } from '../datetime'
 describe('bulk-combined-validate', () => {
@@ -347,6 +348,80 @@ describe('bulk-combined-validate', () => {
       expect(result.errors).toHaveLength(1)
       expect(result.errors[0]).toMatchObject({ subjectIndex: 2, rowIndex: 3 })
       expect(result.errors[0]!.message.toLowerCase()).toContain('study')
+    })
+  })
+
+  describe('container quantity bounds', () => {
+    async function seedMicronixSetup() {
+      const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      const now = utcNow()
+      await testDb.insert(specimenTypeContainerType).values({ specimenTypeId: specimenType.id, containerType: 'micronix_tube', created: now })
+      const defaults = { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' }
+      await setContainerDefaults(testDb, { micronix_tube: defaults, cryovial_tube: defaults, paper: defaults, static_well: defaults })
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id), canContainCollections: true })
+      const plate = await createTestMicronixPlate(testDb, { name: 'PL1', locationId: location.id })
+      return { study, plate }
+    }
+
+    function specimenRow(plateId: number, row: number, quantities: { totalQuantity?: number; remainingQuantity?: number }) {
+      return {
+        specimenTypeName: 'DNA',
+        collectionDate: '2024-01-15',
+        rowIndex: row,
+        container: {
+          containerType: 'micronix_tube' as const,
+          barcode: `MT-${row}`,
+          collection: { type: 'micronix_plate' as const, id: plateId, position: `A0${row}` },
+          ...quantities,
+        },
+      }
+    }
+
+    it('rejects negative quantities and remaining greater than total, with row numbers', async () => {
+      const { study, plate } = await seedMicronixSetup()
+
+      const result = await validateBulkCombinedPayload(testDb, {
+        atomicMode: 'full_file',
+        studyShortCode: study.shortCode,
+        subjects: [
+          {
+            subjectName: 'Subj1',
+            specimens: [
+              specimenRow(plate.id, 1, { totalQuantity: 5, remainingQuantity: 5 }),
+              specimenRow(plate.id, 2, { totalQuantity: -1 }),
+              specimenRow(plate.id, 3, { totalQuantity: 5, remainingQuantity: -2 }),
+              specimenRow(plate.id, 4, { totalQuantity: 5, remainingQuantity: 6 }),
+            ],
+          },
+        ],
+      })
+
+      expect(result.valid).toBe(false)
+      expect(result.errors.map((e) => [e.rowIndex, e.message])).toEqual([
+        [2, expect.stringContaining('Total quantity must be 0 or more (got -1).')],
+        [3, expect.stringContaining('Remaining quantity must be 0 or more (got -2).')],
+        [4, expect.stringContaining('Remaining quantity (6) cannot exceed total quantity (5).')],
+      ])
+    })
+
+    it('rejects the import with the row number and creates nothing', async () => {
+      const { study, plate } = await seedMicronixSetup()
+
+      const error = await runBulkCombinedImport(testDb, {
+        atomicMode: 'full_file',
+        studyShortCode: study.shortCode,
+        subjects: [{ subjectName: 'Subj1', specimens: [specimenRow(plate.id, 7, { totalQuantity: 2, remainingQuantity: 3 })] }],
+      }).catch((e: unknown) => e)
+
+      expect(error).toBeInstanceOf(ValidationError)
+      expect((error as ValidationError).details.errors).toEqual([
+        expect.objectContaining({ rowIndex: 7, message: expect.stringContaining('Remaining quantity (3) cannot exceed total quantity (2).') }),
+      ])
+      expect(await testDb.select().from(storageContainer)).toHaveLength(0)
     })
   })
 })

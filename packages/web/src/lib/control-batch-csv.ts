@@ -1,4 +1,4 @@
-import { parseCsv } from '@sampledb/contract'
+import { containerQuantityBoundsError, parseCsv } from '@sampledb/contract'
 import { buildCsv } from './csv'
 
 export interface CSVContainerRow {
@@ -12,6 +12,8 @@ export interface CSVContainerRow {
   density?: number
   /** For paper (DBS): sheet name for this row. Multiple rows can share a sheet; sheets go into the file's collection (box/bag). */
   sheet_name?: string
+  /** The row's line in the file as a spreadsheet numbers it (header is line 1, blank lines count). */
+  line?: number
 }
 
 /**
@@ -152,6 +154,7 @@ export function parseContainerCSV(csvText: string, filename: string): ParsedCSVF
 
     const parsedRow: CSVContainerRow = {
       specimen_type_name: specimenTypeName,
+      line: i + 1,
     }
 
     if (positionIdx >= 0 && row[positionIdx]) {
@@ -224,7 +227,9 @@ export function validateCSVRows(
   const specimenTypeNames = new Set(availableSpecimenTypes.map(t => t.name))
 
   rows.forEach((row, index) => {
-    const rowNum = index + 2 // +2 because row 1 is header, and we're 0-indexed
+    // Rows from parseContainerCSV carry their spreadsheet line; skipped blank or invalid rows
+    // make the index drift from it. Fall back to the index for rows built elsewhere.
+    const rowNum = row.line ?? index + 2
 
     // Validate specimen type exists
     if (!specimenTypeNames.has(row.specimen_type_name)) {
@@ -249,12 +254,13 @@ export function validateCSVRows(
     // For paper (DBS), each row must have sheet_name OR the file can have a single sheet name (validated in wizard).
     // We don't require sheet_name here so one-sheet-per-file (wizard field) still works.
 
-    // Validate quantity if provided
-    if (row.quantity !== undefined && (isNaN(row.quantity) || row.quantity < 0)) {
+    // Validate quantity if provided, with the bounds every Container write path shares (0 is allowed)
+    const quantityError = row.quantity === undefined ? null : containerQuantityBoundsError({ totalQuantity: row.quantity })
+    if (quantityError) {
       errors.push({
         row: rowNum,
         field: 'quantity',
-        error: 'Quantity must be a positive number',
+        error: quantityError,
       })
     }
   })

@@ -37,25 +37,43 @@ export interface CollectionIdentifier {
 }
 
 export interface CollectionMoveOperation {
+  /** Type of the Collection to move; falls back to the request's `collectionType`. */
+  collectionType?: MoveableCollectionType
   identifier: CollectionIdentifier
   targetLocationId: number
 }
 
+/**
+ * One move request, run as one transaction. Each move may name its own Collection type, so
+ * plates, boxes and bags move together and `all_or_nothing` holds across types.
+ */
 export interface CollectionMoveRequest {
-  collectionType: MoveableCollectionType
+  /** Default type for moves that do not name one. */
+  collectionType?: MoveableCollectionType
   moves: CollectionMoveOperation[]
   atomicMode?: 'all_or_nothing' | 'best_effort'
 }
 
+/** `row` is the 1-based position of the move in the request; row 0 is a request-level error. */
 export interface ValidationError {
   row: number
   error: string
 }
 
+/**
+ * Outcome of a Collection move. `success` is true only when every move ran. A best-effort
+ * move can move some Collections (`moved > 0`) and report `errors` for the rest; those moves
+ * are committed.
+ */
 export interface CollectionMoveResult {
   success: boolean
   moved: number
   errors?: ValidationError[]
+}
+
+/** Who is moving: recorded as each moved Collection's `updated_by`. */
+export interface CollectionMoveActor {
+  userId: number | null
 }
 
 /**
@@ -458,110 +476,101 @@ async function validateCollectionMove(
   return { valid: true }
 }
 
+function describeIdentifier(identifier: CollectionIdentifier): string {
+  const what =
+    identifier.type === 'id'
+      ? `ID ${identifier.id}`
+      : identifier.type === 'name'
+        ? `name "${identifier.name}"`
+        : `barcode "${identifier.barcode}"`
+  const where = identifier.locationId
+    ? ` at location ${identifier.locationId}`
+    : identifier.locationPath
+      ? ` at ${identifier.locationPath}`
+      : ''
+  const hint =
+    identifier.type === 'name' || identifier.type === 'barcode'
+      ? ' If multiple collections match, provide locationId or locationPath for disambiguation.'
+      : ''
+  return `Collection not found: ${what}${where}.${hint}`
+}
+
 /**
- * Execute collection moves
+ * Execute collection moves in one transaction. `all_or_nothing` commits nothing if any move
+ * fails validation; `best_effort` commits the valid moves and returns errors for the rest.
  */
 export async function executeCollectionMoves(
   database: Database,
-  request: CollectionMoveRequest
+  request: CollectionMoveRequest,
+  actor: CollectionMoveActor = { userId: null },
 ): Promise<CollectionMoveResult> {
-  try {
-    const { moves, collectionType, atomicMode = 'all_or_nothing' } = request
-    const errors: ValidationError[] = []
-    const validMoves: Array<{ collectionInfo: CollectionInfo; targetLocationId: number }> = []
+  const { moves, atomicMode = 'all_or_nothing' } = request
+  const errors: ValidationError[] = []
+  const validMoves: Array<{ collectionInfo: CollectionInfo; targetLocationId: number }> = []
+  const seen = new Set<string>()
 
-    // Resolve all collections
-    for (let i = 0; i < moves.length; i++) {
-      const move = moves[i]
-      const collectionInfo = await resolveCollectionByIdentifier(database, move.identifier, collectionType)
+  for (const [index, move] of moves.entries()) {
+    const row = index + 1
+    const collectionType = move.collectionType ?? request.collectionType
+    if (!collectionType) {
+      errors.push({ row, error: 'collectionType is required' })
+      continue
+    }
+    const collectionInfo = await resolveCollectionByIdentifier(database, move.identifier, collectionType)
+    if (!collectionInfo) {
+      errors.push({ row, error: describeIdentifier(move.identifier) })
+      continue
+    }
 
-      if (!collectionInfo) {
-        errors.push({
-          row: i,
-          error: `Collection not found: ${move.identifier.type === 'id' ? `ID ${move.identifier.id}` : move.identifier.type === 'name' ? `name "${move.identifier.name}"` : `barcode "${move.identifier.barcode}"`}${move.identifier.locationId ? ` at location ${move.identifier.locationId}` : move.identifier.locationPath ? ` at ${move.identifier.locationPath}` : ''}. ${move.identifier.type === 'name' || move.identifier.type === 'barcode' ? 'If multiple collections match, provide locationId or locationPath for disambiguation.' : ''}`,
-        })
-        continue
+    const key = `${collectionInfo.collectionType}:${collectionInfo.collectionId}`
+    if (seen.has(key)) {
+      errors.push({ row, error: `Collection "${collectionInfo.name}" appears more than once in this move` })
+      continue
+    }
+    seen.add(key)
+
+    const validation = await validateCollectionMove(database, collectionInfo, move.targetLocationId)
+    if (!validation.valid) {
+      errors.push({ row, error: validation.error || 'Invalid move' })
+      continue
+    }
+
+    validMoves.push({ collectionInfo, targetLocationId: move.targetLocationId })
+  }
+
+  if (validMoves.length === 0) {
+    return { success: false, moved: 0, errors: errors.length > 0 ? errors : [{ row: 0, error: 'No moves provided' }] }
+  }
+  if (atomicMode === 'all_or_nothing' && errors.length > 0) {
+    return { success: false, moved: 0, errors }
+  }
+
+  database.transaction((tx) => {
+    // A move changes where the Collection is stored, so record when and by whom.
+    const audit = { lastUpdated: utcNow(), updatedBy: actor.userId }
+
+    for (const { collectionInfo, targetLocationId } of validMoves) {
+      const set = { locationId: targetLocationId, ...audit }
+      switch (collectionInfo.collectionType) {
+        case 'micronix_plate':
+          tx.update(micronixPlate).set(set).where(eq(micronixPlate.id, collectionInfo.collectionId)).run()
+          break
+        case 'cryovial_box':
+          tx.update(cryovialBox).set(set).where(eq(cryovialBox.id, collectionInfo.collectionId)).run()
+          break
+        case 'box':
+          tx.update(box).set(set).where(eq(box.id, collectionInfo.collectionId)).run()
+          break
+        case 'bag':
+          tx.update(bag).set(set).where(eq(bag.id, collectionInfo.collectionId)).run()
+          break
       }
-
-      // Validate move
-      const validation = await validateCollectionMove(database, collectionInfo, move.targetLocationId)
-      if (!validation.valid) {
-        errors.push({
-          row: i,
-          error: validation.error || 'Invalid move',
-        })
-        continue
-      }
-
-      validMoves.push({
-        collectionInfo,
-        targetLocationId: move.targetLocationId,
-      })
     }
+  })
 
-    if (validMoves.length === 0) {
-      return { success: false, moved: 0, errors }
-    }
-    if (atomicMode === 'all_or_nothing' && errors.length > 0) {
-      return { success: false, moved: 0, errors }
-    }
-
-    // Execute moves in transaction
-    database.transaction((tx) => {
-      const now = utcNow()
-
-      for (const { collectionInfo, targetLocationId } of validMoves) {
-        switch (collectionInfo.collectionType) {
-          case 'micronix_plate':
-            tx.update(micronixPlate)
-              .set({
-                locationId: targetLocationId,
-                lastUpdated: now,
-              })
-              .where(eq(micronixPlate.id, collectionInfo.collectionId))
-              .run()
-            break
-
-          case 'cryovial_box':
-            tx.update(cryovialBox)
-              .set({
-                locationId: targetLocationId,
-                lastUpdated: now,
-              })
-              .where(eq(cryovialBox.id, collectionInfo.collectionId))
-              .run()
-            break
-
-          case 'box':
-            tx.update(box)
-              .set({
-                locationId: targetLocationId,
-                lastUpdated: now,
-              })
-              .where(eq(box.id, collectionInfo.collectionId))
-              .run()
-            break
-
-          case 'bag':
-            tx.update(bag)
-              .set({
-                locationId: targetLocationId,
-                lastUpdated: now,
-              })
-              .where(eq(bag.id, collectionInfo.collectionId))
-              .run()
-            break
-        }
-      }
-    })
-
-    return {
-      success: errors.length === 0,
-      moved: validMoves.length,
-      errors: errors.length > 0 ? errors : undefined,
-    }
-  } catch (error) {
-    throw error
+  return {
+    success: errors.length === 0,
+    moved: validMoves.length,
+    errors: errors.length > 0 ? errors : undefined,
   }
 }
-

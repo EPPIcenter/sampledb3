@@ -4,8 +4,11 @@ import { useNavigate } from 'react-router-dom'
 import StudyPicker from '../StudyPicker'
 import ContainerRegistration, { type ContainerData } from '../ContainerRegistration'
 import { useModifierHotkey } from '../../hooks/useHotkey'
-import { useCreateSpecimen, type CreateSpecimenInput } from '../../hooks/useSpecimens'
-import { useCreateSubject } from '../../hooks/useSubjects'
+import {
+  useCreateSpecimen,
+  useCreateSpecimenWithNewSubject,
+  type CreateSpecimenInput,
+} from '../../hooks/useSpecimens'
 import {
   useSpecimenFormCatalogs,
   type SpecimenFormSourceType,
@@ -50,8 +53,8 @@ export default function SpecimenForm({
 }: SpecimenFormProps) {
   const navigate = useNavigate()
   const createSpecimen = useCreateSpecimen({ silent: true })
-  const createSubject = useCreateSubject()
-  const loading = createSpecimen.isPending || createSubject.isPending
+  const createSpecimenWithNewSubject = useCreateSpecimenWithNewSubject({ silent: true })
+  const loading = createSpecimen.isPending || createSpecimenWithNewSubject.isPending
   const [error, setError] = useState<string | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const [formData, setFormData] = useState({
@@ -162,24 +165,40 @@ export default function SpecimenForm({
         return
       }
 
-      // If creating new subject, create it first
-      let sourceId = formData.sourceId
+      const navigateToCreated = (created: Specimen) => {
+        if (onSuccess) {
+          onSuccess()
+        } else if (created.id) {
+          navigate(`/specimens/${created.id}`)
+        } else {
+          navigate('/statistics')
+        }
+      }
+
+      // A new subject is created with its specimen in one request, so a specimen that fails
+      // (e.g. a duplicate barcode) leaves no subject behind and a retry starts clean.
       if (formData.sourceType === 'subject' && formData.createNewSubject) {
-        if (!formData.studyId || !formData.subjectName.trim()) {
+        const studyShortCode =
+          formData.studyShortCode || studies.find((s) => s.id === formData.studyId)?.shortCode || ''
+        if (!formData.studyId || !studyShortCode || !formData.subjectName.trim()) {
           setError('Please select a study and enter a subject name')
           return
         }
-
-        try {
-          const subject = await createSubject.mutateAsync({
-            studyId: formData.studyId,
-            name: formData.subjectName.trim(),
-          })
-          sourceId = subject.id
-        } catch (err: unknown) {
-          setError(getApiErrorMessage(err, 'Failed to create subject'))
+        const specimenTypeName =
+          formData.specimenTypeName || specimenTypes.find((t) => t.id === formData.specimenTypeId)?.name
+        if (!specimenTypeName) {
+          setError('Please select a specimen type')
           return
         }
+        const created = await createSpecimenWithNewSubject.mutateAsync({
+          studyShortCode,
+          subjectName: formData.subjectName.trim(),
+          specimenTypeName,
+          ...(formData.collectionDate ? { collectionDate: formData.collectionDate } : {}),
+          ...(containerData ? { container: containerData } : {}),
+        })
+        navigateToCreated(created)
+        return
       }
 
       const data: CreateSpecimenInput = {
@@ -191,8 +210,6 @@ export default function SpecimenForm({
       if (formData.sourceType === 'subject') {
         if (subjectId) {
           data.sourceId = subjectId
-        } else if (formData.createNewSubject) {
-          data.sourceId = sourceId
         } else if (formData.sourceId) {
           data.sourceId = formData.sourceId
         } else if (formData.studyShortCode && formData.subjectName) {
@@ -229,13 +246,7 @@ export default function SpecimenForm({
       }
 
       const created = await createSpecimen.mutateAsync(data)
-      if (onSuccess) {
-        onSuccess()
-      } else if (created.id) {
-        navigate(`/specimens/${created.id}`)
-      } else {
-        navigate('/statistics')
-      }
+      navigateToCreated(created)
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'Failed to save specimen'))
     }
@@ -265,7 +276,7 @@ export default function SpecimenForm({
       )}
 
       {error && (
-        <div className="bg-app-trend-down/10 border border-app-trend-down text-app-trend-down px-4 py-3 rounded">
+        <div role="alert" className="bg-app-trend-down/10 border border-app-trend-down text-app-trend-down px-4 py-3 rounded">
           {error}
         </div>
       )}
