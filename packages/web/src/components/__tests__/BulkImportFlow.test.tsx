@@ -227,7 +227,7 @@ describe('BulkImportFlow', () => {
       })
     })
 
-    it('creates one plate named after a barcode-shaped plate_name', async () => {
+    it('passes a barcode-shaped plate_name and locationId to the import without pre-creating the plate', async () => {
       const user = await validateCsv(
         'subject_name,specimen_type_name,plate_name,barcode,position\n' +
           'S1,Serum,PLATE-001,MT1,A01\n' +
@@ -241,25 +241,20 @@ describe('BulkImportFlow', () => {
       expect(screen.queryByText(/named after its barcode/i)).not.toBeInTheDocument()
 
       await user.click(screen.getByRole('button', { name: 'Select location 10' }))
-      await user.click(screen.getByRole('button', { name: /create collections & continue/i }))
+      await user.click(screen.getByRole('button', { name: /continue to import/i }))
 
       await waitFor(() => expect(importsApi.bulkCombined).toHaveBeenCalled())
-      expect(collectionsApi.createMicronixPlate).toHaveBeenCalledTimes(1)
-      expect(collectionsApi.createMicronixPlate).toHaveBeenCalledWith({
-        name: 'PLATE-001',
-        locationId: 10,
-        barcode: undefined,
-      })
+      expect(collectionsApi.createMicronixPlate).not.toHaveBeenCalled()
       const request = vi.mocked(importsApi.bulkCombined).mock.calls[0]![0]
       const collections = request.subjects.flatMap((s) => s.specimens.map((sp) => sp.container?.collection))
       expect(collections).toEqual([
-        expect.objectContaining({ type: 'micronix_plate', name: 'PLATE-001' }),
-        expect.objectContaining({ type: 'micronix_plate', name: 'PLATE-001' }),
+        expect.objectContaining({ type: 'micronix_plate', name: 'PLATE-001', locationId: 10 }),
+        expect.objectContaining({ type: 'micronix_plate', name: 'PLATE-001', locationId: 10 }),
       ])
       for (const collection of collections) expect(collection).not.toHaveProperty('barcode')
     })
 
-    it('creates one plate with the name from plate_name and the barcode from collection_barcode', async () => {
+    it('passes plate_name, collection_barcode, and locationId to the import without pre-creating the plate', async () => {
       const user = await validateCsv(
         'subject_name,specimen_type_name,plate_name,collection_barcode,barcode,position\n' +
           'S1,Serum,My Plate,PB-778899,MT1,A01\n' +
@@ -270,18 +265,19 @@ describe('BulkImportFlow', () => {
       expect(screen.getByText('Barcode: PB-778899')).toBeInTheDocument()
 
       await user.click(screen.getByRole('button', { name: 'Select location 10' }))
-      await user.click(screen.getByRole('button', { name: /create collections & continue/i }))
+      await user.click(screen.getByRole('button', { name: /continue to import/i }))
 
       await waitFor(() => expect(importsApi.bulkCombined).toHaveBeenCalled())
-      expect(collectionsApi.createMicronixPlate).toHaveBeenCalledTimes(1)
-      expect(collectionsApi.createMicronixPlate).toHaveBeenCalledWith({
-        name: 'My Plate',
-        locationId: 10,
-        barcode: 'PB-778899',
-      })
+      expect(collectionsApi.createMicronixPlate).not.toHaveBeenCalled()
+      const request = vi.mocked(importsApi.bulkCombined).mock.calls[0]![0]
+      const collections = request.subjects.flatMap((s) => s.specimens.map((sp) => sp.container?.collection))
+      expect(collections).toEqual([
+        expect.objectContaining({ type: 'micronix_plate', name: 'My Plate', barcode: 'PB-778899', locationId: 10 }),
+        expect.objectContaining({ type: 'micronix_plate', name: 'My Plate', barcode: 'PB-778899', locationId: 10 }),
+      ])
     })
 
-    it('names a plate given only by collection_barcode after its barcode', async () => {
+    it('passes collection_barcode and locationId when the CSV gives no plate_name, without pre-creating the plate', async () => {
       const user = await validateCsv(
         'subject_name,specimen_type_name,collection_barcode,barcode,position\n' +
           'S1,Serum,plate 7,MT1,A01',
@@ -291,15 +287,16 @@ describe('BulkImportFlow', () => {
       expect(screen.getByText(/named after its barcode/i)).toBeInTheDocument()
 
       await user.click(screen.getByRole('button', { name: 'Select location 10' }))
-      await user.click(screen.getByRole('button', { name: /create collections & continue/i }))
+      await user.click(screen.getByRole('button', { name: /continue to import/i }))
 
       await waitFor(() => expect(importsApi.bulkCombined).toHaveBeenCalled())
-      expect(collectionsApi.createMicronixPlate).toHaveBeenCalledTimes(1)
-      expect(collectionsApi.createMicronixPlate).toHaveBeenCalledWith({
-        name: 'plate 7',
-        locationId: 10,
-        barcode: 'plate 7',
-      })
+      expect(collectionsApi.createMicronixPlate).not.toHaveBeenCalled()
+      const request = vi.mocked(importsApi.bulkCombined).mock.calls[0]![0]
+      const collections = request.subjects.flatMap((s) => s.specimens.map((sp) => sp.container?.collection))
+      expect(collections).toEqual([
+        expect.objectContaining({ type: 'micronix_plate', barcode: 'plate 7', locationId: 10 }),
+      ])
+      expect(collections[0]).not.toHaveProperty('name')
     })
   })
 
@@ -404,6 +401,148 @@ describe('BulkImportFlow', () => {
       await validateCsv(combinedCsv, { importType: 'combined', containerType: 'micronix_tube', perSubject: true })
 
       expect(await screen.findByText("Rows 2, 5: Subject 'S1': Position A03 is taken")).toBeInTheDocument()
+    })
+  })
+
+  describe('issue #93: validation failures never hang or leave empty Collections', () => {
+    async function uploadAndSubmit(
+      text: string,
+      opts: { importType: 'specimens' | 'combined'; containerType: string; perSubject?: boolean }
+    ) {
+      const user = userEvent.setup()
+      await render(<BulkImportFlow fixedStudyShortCode="ST" />, { initialEntries: ['/import?step=upload'] })
+      await user.selectOptions(screen.getByLabelText(/import type/i), opts.importType)
+      await user.selectOptions(screen.getByLabelText(/container type/i), opts.containerType)
+      if (opts.perSubject) await user.click(screen.getByRole('radio', { name: /per subject/i }))
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      await user.upload(fileInput, new File([text], 'i.csv', { type: 'text/csv' }))
+      await act(async () => {
+        fireEvent.submit(fileInput.closest('form')!)
+      })
+      return user
+    }
+
+    const fileProto = File.prototype as { text?: () => Promise<string> }
+    const originalText = fileProto.text
+    beforeAll(() => {
+      fileProto.text = function (this: File) {
+        return new Promise<string>((resolve) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.readAsText(this)
+        })
+      }
+    })
+    afterAll(() => {
+      if (originalText) fileProto.text = originalText
+      else delete fileProto.text
+    })
+
+    beforeEach(() => {
+      vi.mocked(collectionsApi.check).mockImplementation(({ collections }) =>
+        Promise.resolve({ results: collections.map((c) => ({ ...c, exists: false, id: null })) })
+      )
+      vi.mocked(specimensApi.validateBulk).mockResolvedValue({ valid: true, errors: [] })
+      vi.mocked(specimensApi.createBulk).mockResolvedValue({ created: 1, containersCreated: 1, specimens: [] })
+      vi.mocked(importsApi.bulkCombinedValidate).mockResolvedValue({ valid: true, errors: [] })
+    })
+
+    it('reports an empty required barcode naming the file row before checking or creating Collections', async () => {
+      const csv =
+        'subject_name,specimen_type_name,plate_name,barcode,position\n' +
+        'S1,Serum,NEW-PLATE,MT1,A01\n' +
+        ',,,,\n' +
+        'S2,Serum,NEW-PLATE,,A02\n'
+
+      await uploadAndSubmit(csv, { importType: 'specimens', containerType: 'micronix_tube' })
+
+      expect(await screen.findByText('Row 4: Missing required value: barcode')).toBeInTheDocument()
+      expect(collectionsApi.check).not.toHaveBeenCalled()
+      expect(collectionsApi.createMicronixPlate).not.toHaveBeenCalled()
+      expect(specimensApi.validateBulk).not.toHaveBeenCalled()
+      expect(specimensApi.createBulk).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: /validate & continue/i })).toBeEnabled()
+    })
+
+    it('does not hang or create a plate when specimens server validation rejects with a 400 on the collections step', async () => {
+      vi.mocked(specimensApi.validateBulk).mockRejectedValueOnce(
+        Object.assign(new Error('Request failed with status code 400'), {
+          response: {
+            status: 400,
+            data: {
+              error: 'Validation error',
+              details: [{ path: ['specimens', 0, 'container', 'barcode'], message: 'Too small: expected >=1 chars' }],
+            },
+          },
+        })
+      )
+
+      const user = await uploadAndSubmit(
+        'subject_name,specimen_type_name,plate_name,barcode,position\nS1,Serum,NEW-PLATE,MT1,A01',
+        { importType: 'specimens', containerType: 'micronix_tube' }
+      )
+
+      expect(await screen.findByRole('heading', { name: 'NEW-PLATE' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Select location 10' }))
+      const continueBtn = screen.getByRole('button', { name: /continue to import/i })
+      await user.click(continueBtn)
+
+      expect(await screen.findByText(/Row 2: container\.barcode: Too small: expected >=1 chars/i)).toBeInTheDocument()
+      expect(collectionsApi.createMicronixPlate).not.toHaveBeenCalled()
+      expect(specimensApi.createBulk).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: /continue to import/i })).toBeEnabled()
+    })
+
+    it('does not hang or create a plate when combined full_file server validation rejects on the collections step', async () => {
+      vi.mocked(importsApi.bulkCombinedValidate).mockRejectedValueOnce(
+        Object.assign(new Error('Request failed with status code 500'), {
+          response: { status: 500, data: { error: 'Server validation unavailable' } },
+        })
+      )
+
+      const user = await uploadAndSubmit(
+        'subject_name,specimen_type_name,plate_name,barcode,position\nS1,Serum,NEW-PLATE,MT1,A01',
+        { importType: 'combined', containerType: 'micronix_tube' }
+      )
+
+      expect(await screen.findByRole('heading', { name: 'NEW-PLATE' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Select location 10' }))
+      await user.click(screen.getByRole('button', { name: /continue to import/i }))
+
+      expect(await screen.findByText('Server validation unavailable')).toBeInTheDocument()
+      expect(collectionsApi.createMicronixPlate).not.toHaveBeenCalled()
+      expect(importsApi.bulkCombined).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: /continue to import/i })).toBeEnabled()
+    })
+
+    it('sends missing Collection locationId in specimens import without pre-creating the plate', async () => {
+      const user = await uploadAndSubmit(
+        'subject_name,specimen_type_name,plate_name,barcode,position\nS1,Serum,NEW-PLATE,MT1,A01',
+        { importType: 'specimens', containerType: 'micronix_tube' }
+      )
+
+      expect(await screen.findByRole('heading', { name: 'NEW-PLATE' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Select location 10' }))
+      await user.click(screen.getByRole('button', { name: /continue to import/i }))
+
+      await waitFor(() => expect(specimensApi.createBulk).toHaveBeenCalled())
+      expect(collectionsApi.createMicronixPlate).not.toHaveBeenCalled()
+      expect(specimensApi.createBulk).toHaveBeenCalledWith({
+        specimens: [
+          expect.objectContaining({
+            container: expect.objectContaining({
+              containerType: 'micronix_tube',
+              barcode: 'MT1',
+              collection: expect.objectContaining({
+                type: 'micronix_plate',
+                name: 'NEW-PLATE',
+                position: 'A01',
+                locationId: 10,
+              }),
+            }),
+          }),
+        ],
+      })
     })
   })
 })

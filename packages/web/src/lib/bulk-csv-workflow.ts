@@ -8,6 +8,7 @@ import { importsApi } from './api/imports'
 import type { BulkCombinedAtomicMode } from './api/imports'
 import {
   buildBulkCombinedRequestPayload,
+  buildCollectionBarcodeMap,
   buildCollectionLocationMap,
   buildSpecimensWithLocationIds,
   toBulkCombinedImportRequest,
@@ -15,6 +16,7 @@ import {
 import type { MissingCollectionForPayload } from './bulk-import-payload'
 import type { ContainerType } from './container-types'
 import type { BulkImportValidationError, ImportType } from './bulk-import-validation'
+import { getQueryErrorMessage } from '../ui'
 
 export type BulkCsvValidationError = BulkImportValidationError
 
@@ -104,6 +106,70 @@ export function bulkCsvImportErrorsToFileRows(
   })
 }
 
+type ZodIssueLike = { path?: Array<string | number>; message?: string }
+
+function isZodIssueLike(value: unknown): value is ZodIssueLike {
+  return typeof value === 'object' && value != null && typeof (value as ZodIssueLike).message === 'string'
+}
+
+/**
+ * Convert a rejected validate/import request error into row-numbered errors when the response
+ * carries Zod `details` or per-row `errors`, falling back to the response or Error message.
+ */
+export function formatBulkCsvRequestError(
+  error: unknown,
+  data: Record<string, unknown>[],
+  ctx: BulkCsvWorkflowContext,
+  fallback: string,
+): BulkCsvValidationError[] {
+  const errData =
+    error && typeof error === 'object' && 'response' in error
+      ? (error as { response?: { data?: { error?: string; errors?: unknown; details?: unknown } } }).response?.data
+      : undefined
+
+  if (Array.isArray(errData?.errors) && errData.errors.length > 0) {
+    const mapped = bulkCsvImportErrorsToFileRows(errData.errors, data, ctx)
+    if (mapped.length > 0) return mapped
+  }
+
+  if (Array.isArray(errData?.details)) {
+    const issues = errData.details.filter(isZodIssueLike)
+    if (issues.length > 0) {
+      const payload = ctx.importType === 'combined' && data.length > 0 ? combinedPayload(data, ctx) : null
+      return issues.map((issue) => {
+        const path = Array.isArray(issue.path) ? issue.path : []
+        const message = issue.message!
+        if (ctx.importType === 'specimens' && path[0] === 'specimens' && typeof path[1] === 'number') {
+          const field = path.slice(2).join('.')
+          return { fileRows: [fileRowOf(ctx, path[1])], error: field ? `${field}: ${message}` : message }
+        }
+        if (ctx.importType === 'subjects' && path[0] === 'subjects' && typeof path[1] === 'number') {
+          const field = path.slice(2).join('.')
+          return { fileRows: [fileRowOf(ctx, path[1])], error: field ? `${field}: ${message}` : message }
+        }
+        if (payload && path[0] === 'subjects' && typeof path[1] === 'number') {
+          if (path[2] === 'specimens' && typeof path[3] === 'number') {
+            const field = path.slice(4).join('.')
+            return {
+              fileRows: combinedErrorFileRows(payload, { subjectIndex: path[1], specimenIndex: path[3], message }),
+              error: field ? `${field}: ${message}` : message,
+            }
+          }
+          const field = path.slice(2).join('.')
+          return {
+            fileRows: subjectFileRows(payload, path[1]).slice(0, 1),
+            error: field ? `${field}: ${message}` : message,
+          }
+        }
+        const field = path.join('.')
+        return { fileRows: [], error: field ? `${field}: ${message}` : message }
+      })
+    }
+  }
+
+  return [{ fileRows: [], error: getQueryErrorMessage(error, fallback) }]
+}
+
 export async function runBulkCsvServerValidation(
   data: Record<string, unknown>[],
   ctx: BulkCsvWorkflowContext
@@ -118,7 +184,8 @@ export async function runBulkCsvServerValidation(
 
   if (ctx.importType === 'specimens') {
     const map = buildCollectionLocationMap(ctx.missingCollections)
-    const specimensWithLocations = buildSpecimensWithLocationIds(data, map)
+    const barcodeMap = buildCollectionBarcodeMap(ctx.missingCollections)
+    const specimensWithLocations = buildSpecimensWithLocationIds(data, map, barcodeMap)
     type SpecimenBulkItem = Parameters<typeof specimensApi.createBulk>[0]['specimens'][number]
     const validateRes = await specimensApi.validateBulk({
       specimens: specimensWithLocations as SpecimenBulkItem[],
@@ -158,7 +225,8 @@ export async function runBulkCsvImport(
 
   if (ctx.importType === 'specimens') {
     const collectionLocationMap = buildCollectionLocationMap(ctx.missingCollections)
-    const specimensWithLocations = buildSpecimensWithLocationIds(data, collectionLocationMap)
+    const collectionBarcodeMap = buildCollectionBarcodeMap(ctx.missingCollections)
+    const specimensWithLocations = buildSpecimensWithLocationIds(data, collectionLocationMap, collectionBarcodeMap)
     type SpecimenBulkItem = Parameters<typeof specimensApi.createBulk>[0]['specimens'][number]
     const response = await specimensApi.createBulk({
       specimens: specimensWithLocations as SpecimenBulkItem[],

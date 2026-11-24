@@ -46,6 +46,19 @@ export function buildCollectionLocationMap(
   return collectionLocationMap
 }
 
+export function buildCollectionBarcodeMap(
+  missingCollections: MissingCollectionForPayload[]
+): Map<string, string> {
+  const collectionBarcodeMap = new Map<string, string>()
+  for (const coll of missingCollections) {
+    const wizardBarcode = coll.collectionBarcode?.trim()
+    if (wizardBarcode && coll.name) {
+      collectionBarcodeMap.set(coll.name, wizardBarcode)
+    }
+  }
+  return collectionBarcodeMap
+}
+
 function resolveCollectionLocationId(
   flat: FlatBulkImportContainer,
   collectionLocationMap: Map<string, number>
@@ -64,29 +77,41 @@ function resolveCollectionLocationId(
   return undefined
 }
 
+function resolveCollectionBarcode(
+  flat: FlatBulkImportContainer,
+  collectionBarcodeMap?: Map<string, string>
+): string | undefined {
+  if (flat.collectionBarcode) return flat.collectionBarcode
+  if (flat.collectionName) return collectionBarcodeMap?.get(flat.collectionName)
+  return undefined
+}
+
 /** Map flat wizard/CSV container fields to unified bulk-combined write shape. */
 export function flatBulkContainerToWriteInput(
   flat: FlatBulkImportContainer,
-  collectionLocationMap: Map<string, number>
+  collectionLocationMap: Map<string, number>,
+  collectionBarcodeMap?: Map<string, string>
 ): BulkCombinedContainer {
   const locationId = resolveCollectionLocationId(flat, collectionLocationMap)
+  const collectionBarcode = resolveCollectionBarcode(flat, collectionBarcodeMap)
   const comment = flat.comment
   const locationField = locationId != null ? { locationId } : {}
 
   if (flat.containerType === 'micronix_tube') {
-    const write: ContainerWriteInput = {
-      containerType: 'micronix_tube',
-      barcode: flat.barcode ?? '',
+    const barcode = flat.barcode?.trim() || undefined
+    const write = {
+      containerType: 'micronix_tube' as const,
+      ...(barcode ? { barcode } : {}),
       ...(comment ? { comment } : {}),
       collection: {
-        type: 'micronix_plate',
+        type: 'micronix_plate' as const,
         ...(flat.collectionName ? { name: flat.collectionName } : {}),
-        ...(flat.collectionBarcode ? { barcode: flat.collectionBarcode } : {}),
+        ...(collectionBarcode ? { barcode: collectionBarcode } : {}),
         ...(flat.position ? { position: flat.position } : {}),
         ...locationField,
       },
     }
-    return write
+    return write as ContainerWriteInput
   }
 
   if (flat.containerType === 'cryovial_tube') {
@@ -97,7 +122,7 @@ export function flatBulkContainerToWriteInput(
       collection: {
         type: 'cryovial_box',
         ...(flat.collectionName ? { name: flat.collectionName } : {}),
-        ...(flat.collectionBarcode ? { barcode: flat.collectionBarcode } : {}),
+        ...(collectionBarcode ? { barcode: collectionBarcode } : {}),
         ...(flat.position ? { position: flat.position } : {}),
         ...locationField,
       },
@@ -112,7 +137,7 @@ export function flatBulkContainerToWriteInput(
       collection: {
         type: 'micronix_plate',
         ...(flat.collectionName ? { name: flat.collectionName } : {}),
-        ...(flat.collectionBarcode ? { barcode: flat.collectionBarcode } : {}),
+        ...(collectionBarcode ? { barcode: collectionBarcode } : {}),
         ...(flat.position ? { position: flat.position } : {}),
         ...locationField,
       },
@@ -144,13 +169,15 @@ export function flatBulkContainerToWriteInput(
 /** Map flat CSV/wizard rows to POST /specimens/bulk nested container write shape. */
 export function buildSpecimensWithLocationIds(
   data: Record<string, unknown>[],
-  collectionLocationMap: Map<string, number>
+  collectionLocationMap: Map<string, number>,
+  collectionBarcodeMap?: Map<string, string>
 ): Record<string, unknown>[] {
   return data.map((spec) => {
     if (!spec.container) return spec
     const container = flatBulkContainerToWriteInput(
       spec.container as FlatBulkImportContainer,
-      collectionLocationMap
+      collectionLocationMap,
+      collectionBarcodeMap
     )
     return { ...spec, container }
   })
@@ -190,6 +217,7 @@ export function buildBulkCombinedRequestPayload(
 ): BulkCombinedValidateRequest {
   const { fixedStudyShortCode, missingCollections } = opts
   const collectionLocationMap = buildCollectionLocationMap(missingCollections)
+  const collectionBarcodeMap = buildCollectionBarcodeMap(missingCollections)
 
   // Group by (study, subject): the same subject name in two studies is two subjects.
   const subjectMap = new Map<string, BulkCombinedValidateRequest['subjects'][number]>()
@@ -208,7 +236,7 @@ export function buildBulkCombinedRequestPayload(
     const rawContainer = spec.container as FlatBulkImportContainer | undefined
     const containerData =
       rawContainer != null
-        ? flatBulkContainerToWriteInput(rawContainer, collectionLocationMap)
+        ? flatBulkContainerToWriteInput(rawContainer, collectionLocationMap, collectionBarcodeMap)
         : undefined
 
     subject.specimens.push({

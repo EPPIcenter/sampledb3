@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { collectionsApi } from '../lib/api/collections';
 import type { BulkCombinedAtomicMode } from '../lib/api/imports';
 import {
   fetchBulkImportMissingCollections,
@@ -15,6 +14,7 @@ import {
   getBulkImportRequiredFields,
   getBulkImportOptionalFields,
   parseBulkImportCsvFileRows,
+  validateBulkImportRequiredCells,
   mapBulkImportRowsToPayload,
   formatBulkImportError,
   getBulkImportRowCollectionRef,
@@ -22,7 +22,6 @@ import {
   type BulkImportValidationError,
   type ImportType as LibImportType,
 } from '../lib/bulk-import-validation'
-import { getCollectionNameColumn } from '../lib/container-columns'
 import { type ContainerType } from './ContainerRegistration'
 import {
   formatBulkImportSuccessMessage,
@@ -30,7 +29,7 @@ import {
 } from '../lib/bulk-import-success-message'
 import LocationPicker from './LocationPicker'
 import '../styles/storage.css'
-import { newCollectionName, parseCsv } from '@sampledb/contract'
+import { parseCsv } from '@sampledb/contract'
 
 export type ImportType = LibImportType
 type Step = 'upload' | 'collections' | 'import'
@@ -228,17 +227,12 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         errors: result.errors,
       })
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { error?: string; errors?: unknown } }; message?: string }
-      const errData = err.response?.data
-      const summaryError = errData?.error || (err as Error).message || 'Import failed'
-      setValidationErrors([{ fileRows: [], error: summaryError }])
-      const rowErrors = Array.isArray(errData?.errors)
-        ? bulkCsvWorkflow.importErrorsToFileRows(errData.errors, data, fileRows)
-        : []
+      const requestErrors = bulkCsvWorkflow.formatRequestError(error, data, fileRows, 'Import failed')
+      setValidationErrors(requestErrors)
       setImportResult({
         success: false,
         created: 0,
-        errors: rowErrors.length > 0 ? rowErrors : [{ fileRows: [], error: summaryError }],
+        errors: requestErrors,
       })
     } finally {
       setWorkflowLoading(false)
@@ -251,14 +245,27 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     setWorkflowLoading(true)
     setValidationErrors([])
 
+    let parsedData: Record<string, unknown>[] = []
+    let parsedFileRows: number[] = []
+
     try {
       const text = await file.text()
       const { rows, fileRows } = parseBulkImportCsvFileRows(text)
+      parsedFileRows = fileRows
       setValidatedFileRows(fileRows)
 
       if (rows.length === 0) {
         setValidationErrors([{ fileRows: [], error: 'CSV file is empty or has no data rows' }])
-        setWorkflowLoading(false)
+        return
+      }
+
+      const requiredCellErrors = validateBulkImportRequiredCells(rows, fileRows, {
+        importType,
+        containerType,
+        fixedStudyShortCode,
+      })
+      if (requiredCellErrors.length > 0) {
+        setValidationErrors(requiredCellErrors)
         return
       }
 
@@ -267,6 +274,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         containerType,
         fixedStudyShortCode,
       })
+      parsedData = data
       setValidatedData(data)
 
       if (importType !== 'subjects' && containerType !== 'none') {
@@ -281,7 +289,6 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
             if (missing.length > 0) {
               setCurrentStep('collections')
-              setWorkflowLoading(false)
               return
             }
           } catch (err: unknown) {
@@ -291,7 +298,6 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                 error: getQueryErrorMessage(err, 'Failed to check collections'),
               },
             ])
-            setWorkflowLoading(false)
             return
           }
         }
@@ -300,90 +306,34 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       const preErrors = await runPreReviewServerValidation(data, fileRows)
       if (preErrors.length > 0) {
         setValidationErrors(preErrors)
-        setWorkflowLoading(false)
         return
       }
 
       await handleImport(data, fileRows, { alreadyValidated: true })
     } catch (error: unknown) {
-      const message = getQueryErrorMessage(error, 'Validation failed')
-      setValidationErrors([{ fileRows: [], error: message }])
+      setValidationErrors(
+        bulkCsvWorkflow.formatRequestError(error, parsedData, parsedFileRows, 'Validation failed')
+      )
     } finally {
       setWorkflowLoading(false)
     }
   }
 
-  const handleCreateCollections = async () => {
+  const handleContinueFromCollections = async () => {
     setWorkflowLoading(true)
-    const defaultCollectionType = getCollectionType()
-    if (!defaultCollectionType && containerType !== 'paper') {
-      setWorkflowLoading(false)
-      return
-    }
-
-    const updated = [...missingCollections]
-    let allSuccess = true
-
-    for (let i = 0; i < updated.length; i++) {
-      const collection = updated[i]
-      if (collection.status === 'success' || collection.locationId == null) continue
-
-      updated[i].status = 'creating'
-      setMissingCollections([...updated])
-
-      try {
-        const barcode = collection.barcode || collection.collectionBarcode || undefined
-        // Every missing Collection has a name or a barcode.
-        const name = newCollectionName(collection) ?? ''
-        const itemCollectionType = collection.collectionType ?? defaultCollectionType
-
-        if (itemCollectionType === 'micronix_plate') {
-          await collectionsApi.createMicronixPlate({
-            name,
-            locationId: collection.locationId,
-            barcode,
-          })
-        } else if (itemCollectionType === 'cryovial_box') {
-          await collectionsApi.createCryovialBox({
-            name,
-            locationId: collection.locationId,
-            barcode,
-          })
-        } else if (itemCollectionType === 'box') {
-          await collectionsApi.createBox({
-            name,
-            locationId: collection.locationId,
-          })
-        } else if (itemCollectionType === 'bag') {
-          await collectionsApi.createBag({
-            name,
-            locationId: collection.locationId,
-          })
-        } else {
-          throw new Error(`Unsupported collection type: ${String(itemCollectionType)}`)
-        }
-
-        updated[i].status = 'success'
-        updated[i].name = name
-      } catch (error: unknown) {
-        const err = error as { response?: { data?: { error?: string } } }
-        updated[i].status = 'error'
-        updated[i].error = err.response?.data?.error ?? 'Failed to create collection'
-        allSuccess = false
-      }
-    }
-
-    setMissingCollections(updated)
-
-    if (allSuccess && updated.every(c => c.status === 'success' || c.status === 'pending')) {
+    setValidationErrors([])
+    try {
       const preErrors = await runPreReviewServerValidation(validatedData, validatedFileRows)
       if (preErrors.length > 0) {
         setValidationErrors(preErrors)
-        setWorkflowLoading(false)
         return
       }
       await handleImport(validatedData, validatedFileRows, { alreadyValidated: true })
-    } else {
+    } catch (error: unknown) {
+      setValidationErrors(
+        bulkCsvWorkflow.formatRequestError(error, validatedData, validatedFileRows, 'Validation failed')
+      )
+    } finally {
       setWorkflowLoading(false)
     }
   }
@@ -805,41 +755,14 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                 >
                   Back
                 </button>
-                {importType === 'combined' && atomicMode === 'full_file' ? (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setWorkflowLoading(true)
-                      setValidationErrors([])
-                      try {
-                        const preErrors = await runPreReviewServerValidation(
-                          validatedData,
-                          validatedFileRows
-                        )
-                        if (preErrors.length > 0) {
-                          setValidationErrors(preErrors)
-                          return
-                        }
-                        await handleImport(validatedData, validatedFileRows, { alreadyValidated: true })
-                      } finally {
-                        setWorkflowLoading(false)
-                      }
-                    }}
-                    disabled={workflowLoading || missingCollections.some((c) => c.locationId == null)}
-                    className="storage-btn-primary py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                  >
-                    {workflowLoading ? 'Validating...' : 'Continue to Import'}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleCreateCollections}
-                    disabled={workflowLoading || missingCollections.some((c) => c.locationId == null && c.status !== 'success')}
-                    className="storage-btn-primary flex-1 py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                  >
-                    {workflowLoading ? 'Creating Collections...' : 'Create Collections & Continue'}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => void handleContinueFromCollections()}
+                  disabled={workflowLoading || missingCollections.some((c) => c.locationId == null)}
+                  className="storage-btn-primary py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                >
+                  {workflowLoading ? 'Validating...' : 'Continue to Import'}
+                </button>
               </div>
             </div>
           )}

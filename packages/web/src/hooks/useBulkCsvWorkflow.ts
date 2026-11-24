@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { invalidateAfterBulkWrite } from '../lib/query-client'
 import {
   bulkCsvImportErrorsToFileRows,
+  formatBulkCsvRequestError,
   runBulkCsvServerValidation,
   runBulkCsvImport,
   type BulkCsvWorkflowContext,
@@ -23,6 +24,8 @@ export function useBulkCsvWorkflow(ctx: Omit<BulkCsvWorkflowContext, 'fileRows'>
       runBulkCsvImport(data, { ...ctx, fileRows }, options).finally(() => void invalidateAfterBulkWrite(queryClient)),
     importErrorsToFileRows: (errors: unknown[], data: Record<string, unknown>[], fileRows: number[]) =>
       bulkCsvImportErrorsToFileRows(errors, data, { ...ctx, fileRows }),
+    formatRequestError: (error: unknown, data: Record<string, unknown>[], fileRows: number[], fallback: string) =>
+      formatBulkCsvRequestError(error, data, { ...ctx, fileRows }, fallback),
   }
 }
 

@@ -241,4 +241,61 @@ describe('bulk-import-payload', () => {
     expect(validatePayload.subjects[0]!.specimens[0]!.rowIndex).toBe(1)
     expect(importPayload).not.toHaveProperty('createCollections')
   })
+
+  it('omits barcode on micronix_tube when blank instead of sending an empty string', () => {
+    const write = flatBulkContainerToWriteInput(
+      {
+        containerType: 'micronix_tube',
+        collectionName: 'Pl1',
+        barcode: undefined,
+        position: 'A01',
+      },
+      new Map([['Pl1', 5]])
+    )
+    expect(write).not.toHaveProperty('barcode')
+    expect(write).toEqual({
+      containerType: 'micronix_tube',
+      collection: {
+        type: 'micronix_plate',
+        name: 'Pl1',
+        position: 'A01',
+        locationId: 5,
+      },
+    })
+  })
+
+  it('includes a wizard-entered collectionBarcode in collection.barcode for new Collections', () => {
+    const p = buildBulkCombinedRequestPayload(
+      [
+        {
+          studyShortCode: 'S',
+          subjectName: 'Sub1',
+          specimenTypeName: 'T',
+          container: {
+            containerType: 'micronix_tube',
+            collectionName: 'Pl1',
+            barcode: 'BC-1',
+            position: 'A01',
+          },
+        },
+      ],
+      {
+        containerType: 'micronix_tube',
+        fixedStudyShortCode: 'S',
+        missingCollections: [{ name: 'Pl1', locationId: 10, collectionBarcode: '  PB-99  ' }],
+        atomicMode: 'per_subject',
+      }
+    )
+    expect(p.subjects[0]!.specimens[0]!.container).toEqual({
+      containerType: 'micronix_tube',
+      barcode: 'BC-1',
+      collection: {
+        type: 'micronix_plate',
+        name: 'Pl1',
+        barcode: 'PB-99',
+        position: 'A01',
+        locationId: 10,
+      },
+    })
+  })
 })

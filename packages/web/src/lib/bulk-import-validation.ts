@@ -193,6 +193,70 @@ function getRowCollectionName(
   return getBulkImportRowCollectionName(row, containerType)
 }
 
+/**
+ * Check that every row has non-blank values for the required cells of this import type.
+ * Runs before collection lookup or server validation so empty required cells report their
+ * spreadsheet row immediately instead of triggering a 400 schema rejection.
+ */
+export function validateBulkImportRequiredCells(
+  rows: CSVRow[],
+  fileRows: number[],
+  opts: {
+    importType: ImportType
+    containerType: ContainerType | 'none' | ''
+    fixedStudyShortCode?: string
+  }
+): BulkImportValidationError[] {
+  const { importType, containerType, fixedStudyShortCode } = opts
+  const errors: BulkImportValidationError[] = []
+
+  rows.forEach((row, index) => {
+    const fileRow = fileRows[index] ?? index + 2
+    const add = (error: string) => errors.push({ fileRows: [fileRow], error })
+
+    if (!fixedStudyShortCode && !trimCell(row.study_short_code)) {
+      add('Missing required value: study_short_code')
+    }
+    if (!trimCell(row.subject_name)) {
+      add('Missing required value: subject_name')
+    }
+
+    if (importType === 'subjects') return
+
+    if (!trimCell(row.specimen_type_name)) {
+      add('Missing required value: specimen_type_name')
+    }
+
+    if (!containerType || containerType === 'none') return
+
+    if (containerType === 'paper') {
+      const parent = resolveBulkImportPaperParent(row)
+      if (!parent) {
+        add('Missing required value: box_name or bag_name')
+      } else if ('error' in parent) {
+        add(parent.error)
+      }
+      if (!trimCell(row.sheet_name)) {
+        add('Missing required value: sheet_name')
+      }
+      return
+    }
+
+    const nameCol = getCollectionNameColumn(containerType) ?? 'plate_name'
+    if (!trimCell(row[nameCol]) && !trimCell(row.collection_barcode)) {
+      add(`Missing required value: ${nameCol} (or collection_barcode)`)
+    }
+    if (containerType === 'micronix_tube' && !trimCell(row.barcode)) {
+      add('Missing required value: barcode')
+    }
+    if (!trimCell(row.position)) {
+      add('Missing required value: position')
+    }
+  })
+
+  return errors
+}
+
 /** Map parsed CSV rows to API payloads (no business-rule validation). */
 export function mapBulkImportRowsToPayload(
   rows: CSVRow[],
