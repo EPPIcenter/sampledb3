@@ -98,6 +98,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
       logInternalError(cause, c)
       logError(database, 'backend', 'error', error.message, cause, errorContext).catch(logPersistFailure)
     } else {
+      logInternalError(error, c)
       logBackendError(database, error, errorContext).catch(logPersistFailure)
     }
     return c.json(error.body, error.status as ContentfulStatusCode)

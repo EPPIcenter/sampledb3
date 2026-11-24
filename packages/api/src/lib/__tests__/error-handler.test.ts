@@ -373,6 +373,20 @@ describe('error-handler', () => {
       expect(rows[0].stack).toContain(sqlMessage)
     })
 
+    it('logs a 5xx RouteError without a cause to both stdout and error_logs once each', async () => {
+      const app = createAppWithError(new RouteError(503, { error: 'Upstream storage unavailable' }))
+      const res = await app.request('http://localhost/test')
+
+      expect(res.status).toBe(503)
+      expect(await getJson(res)).toEqual({ error: 'Upstream storage unavailable' })
+      expect(stderrLines).toHaveLength(1)
+      expect(stderrLines[0]).toContain('Upstream storage unavailable')
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const rows = await testDb.select().from(errorLogs).where(eq(errorLogs.message, 'Upstream storage unavailable'))
+      expect(rows).toHaveLength(1)
+      expect(rows[0].level).toBe('error')
+    })
+
     it('keeps the raw SQLite text out of a constraint-conflict 409', async () => {
       const error = Object.assign(new Error('UNIQUE constraint failed: study.title'), { code: 'SQLITE_CONSTRAINT_UNIQUE' })
       const res = await createAppWithError(error).request('http://localhost/test')
