@@ -19,7 +19,7 @@ import { subjectNameKey, validateSubjectName, validateStudyShortCode, validateSp
 import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } from '../lib/defaults'
 import { resolveCollection, resolveCollectionByName } from '../lib/collections/collection-resolve'
 import { findExistingStudySpecimen } from '../lib/specimen-helpers'
-import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
+import { ExpectedNotFoundError, handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import {
@@ -141,7 +141,7 @@ subjects.post('/', memberMiddleware, async (c) => {
     } else if (data.studyShortCode) {
       const resolved = await resolveStudyByShortCode(dbInstance, data.studyShortCode)
       if (!resolved) {
-        throw new NotFoundError(`Study with short code '${data.studyShortCode}'`)
+        throw new ExpectedNotFoundError(`Study with short code '${data.studyShortCode}' not found`)
       }
       studyId = resolved
     } else {

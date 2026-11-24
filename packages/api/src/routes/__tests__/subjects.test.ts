@@ -6,7 +6,8 @@ import {
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createSubjectsRoutes } from '../subjects'
 import { createTestStudy, createTestStudySubject } from '../../__tests__/helpers/factories'
-import { studySubject } from '../../db/schema'
+import { errorLogs, studySubject } from '../../db/schema'
+import { eq } from 'drizzle-orm'
 
 describe('Subjects API', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -101,6 +102,29 @@ describe('Subjects API', () => {
       expect(data.subject).toBeDefined()
       expect(data.subject.name).toBe('Subject 1')
       expect(data.subject.studyId).toBe(studyRecord.id)
+    })
+
+    it('returns 404 without writing to error_logs when studyShortCode matches no Study', async () => {
+      const previous = process.env.ERROR_LOG_LEVEL
+      process.env.ERROR_LOG_LEVEL = 'warning'
+      try {
+        const res = await ctx.request('/api/subjects', {
+          method: 'POST',
+          json: { studyShortCode: 'NO-SUCH-STUDY', name: 'Subject 1' },
+        })
+        expect(res.status).toBe(404)
+        expect(((await res.json()) as { error: string }).error).toContain("Study with short code 'NO-SUCH-STUDY'")
+
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        const logged = await ctx.db
+          .select()
+          .from(errorLogs)
+          .where(eq(errorLogs.message, "Study with short code 'NO-SUCH-STUDY' not found"))
+        expect(logged).toHaveLength(0)
+      } finally {
+        if (previous !== undefined) process.env.ERROR_LOG_LEVEL = previous
+        else delete process.env.ERROR_LOG_LEVEL
+      }
     })
 
     it('returns 401 when not authenticated', async () => {
