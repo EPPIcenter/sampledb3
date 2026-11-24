@@ -80,7 +80,7 @@ import { exportApi } from './lib/api/export'
 function AppContent() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { canWrite, isAdmin, canManageReferenceData, refreshUser } = useUser()
+  const { canWrite, isAdmin, canCreateLocations, refreshUser } = useUser()
   const { theme, setTheme } = useTheme()
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   const themeMenuRef = useRef<HTMLDivElement>(null)
@@ -196,7 +196,7 @@ function AppContent() {
     search: location.search,
     canWrite,
     isAdmin,
-    canManageReferenceData,
+    canCreateLocations,
     theme,
     setTheme,
     toggleHelpModal,

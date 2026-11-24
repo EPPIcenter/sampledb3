@@ -9,7 +9,7 @@ function mockDeps(overrides: Partial<CommandDependencies> = {}): CommandDependen
     search: '',
     canWrite: true,
     isAdmin: false,
-    canManageReferenceData: false,
+    canCreateLocations: false,
     theme: 'light',
     setTheme: vi.fn(),
     toggleHelpModal: vi.fn(),
@@ -33,8 +33,28 @@ describe('command registry', () => {
     expect(cmds.some((c) => c.id === 'nav-admin-dashboard')).toBe(true)
   })
 
-  it('includes create location when canManageReferenceData', () => {
-    const cmds = buildAllCommands(mockDeps({ isAdmin: true, canManageReferenceData: true }))
+  it('includes Create Location for a member, without the admin commands', () => {
+    const cmds = buildAllCommands(mockDeps({ canCreateLocations: true }))
     expect(cmds.some((c) => c.id === 'create-location')).toBe(true)
+    expect(cmds.some((c) => c.category === 'Admin')).toBe(false)
+  })
+
+  it('includes Create Location for an admin', () => {
+    const cmds = buildAllCommands(mockDeps({ isAdmin: true, canCreateLocations: true }))
+    expect(cmds.filter((c) => c.id === 'create-location')).toHaveLength(1)
+  })
+
+  it('omits Create Location for a viewer', () => {
+    const cmds = buildAllCommands(mockDeps({ canWrite: false }))
+    expect(cmds.some((c) => c.id === 'create-location')).toBe(false)
+  })
+
+  it('opens the create form on the Locations page from Create Location', () => {
+    const navigate = vi.fn()
+    const cmds = buildAllCommands(
+      mockDeps({ canCreateLocations: true, navigate: navigate as CommandDependencies['navigate'] }),
+    )
+    cmds.find((c) => c.id === 'create-location')?.action()
+    expect(navigate).toHaveBeenCalledWith('/locations?createLocation=true')
   })
 })

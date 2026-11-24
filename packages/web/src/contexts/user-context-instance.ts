@@ -10,7 +10,14 @@ export interface UserContextType {
   switchUser: (userId: number, password: string) => Promise<void>
   setUser: (user: User | null) => void
   canWrite: boolean
+  /** Admin only: every write to Reference data and Locations that the three flags below don't cover. */
   canManageReferenceData: boolean
+  /** Members and admins create a Location (#141). */
+  canCreateLocations: boolean
+  /** Members and admins delete a Location; the API refuses one that isn't empty (#141). */
+  canDeleteLocations: boolean
+  /** Members and admins create a Tag; renaming and deleting one stay with canManageReferenceData (#141). */
+  canCreateTags: boolean
   isAdmin: boolean
   isMember: boolean
   isViewer: boolean

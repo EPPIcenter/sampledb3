@@ -61,17 +61,5 @@ export function buildAdminCommands(d: CommandDependencies): Command[] {
       keywords: ['integrity report', 'data integrity report'],
       action: () => d.navigate('/admin/data-integrity/report'),
     },
-    ...(d.canManageReferenceData
-      ? [
-          {
-            id: 'create-location',
-            label: 'Create Location',
-            category: 'Create' as const,
-            keywords: ['create location', 'add location', 'new location'],
-            description: 'Open the create location form',
-            action: () => d.navigate('/locations?createLocation=true'),
-          },
-        ]
-      : []),
   ]
 }
