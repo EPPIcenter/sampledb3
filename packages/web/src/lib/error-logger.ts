@@ -10,7 +10,96 @@ export interface FrontendError {
 }
 
 /** Context entries a report keeps when its context is over the API's size cap. */
-const REPORT_CONTEXT_KEYS_KEPT_WHEN_TRUNCATED = ['requestId', 'userAgent', 'url', 'timestamp'] as const
+const REPORT_CONTEXT_KEYS_KEPT_WHEN_TRUNCATED = [
+  'requestId',
+  'userAgent',
+  'url',
+  'timestamp',
+  'requestMethod',
+  'requestPath',
+  'responseError',
+] as const
+
+const MAX_RESPONSE_ERROR_LENGTH = 1_000
+const MAX_RESPONSE_DETAILS_JSON_LENGTH = 4_000
+const TRUNCATION_MARK = '…[truncated]'
+
+function extractRequestPath(baseURL?: string, url?: string): string | undefined {
+  if (!url && !baseURL) return undefined
+  const rawUrl = url ?? ''
+  const rawBase = baseURL ?? ''
+  let combined: string
+  if (/^https?:\/\//i.test(rawUrl)) {
+    combined = rawUrl
+  } else if (rawBase) {
+    const base = rawBase.replace(/\/+$/, '')
+    const rel = rawUrl.replace(/^\/+/, '')
+    combined = rel ? `${base}/${rel}` : base
+  } else {
+    combined = rawUrl
+  }
+  try {
+    return new URL(combined, 'http://localhost').pathname
+  } catch {
+    return combined.split(/[?#]/, 1)[0] || undefined
+  }
+}
+
+function capResponseDetails(details: unknown): unknown {
+  try {
+    const serialized = JSON.stringify(details) as string | undefined
+    if (serialized === undefined) return undefined
+    if (serialized.length <= MAX_RESPONSE_DETAILS_JSON_LENGTH) return details
+    return serialized.slice(0, MAX_RESPONSE_DETAILS_JSON_LENGTH - TRUNCATION_MARK.length) + TRUNCATION_MARK
+  } catch {
+    return String(details).slice(0, MAX_RESPONSE_ERROR_LENGTH)
+  }
+}
+
+/**
+ * Pull safe HTTP failure metadata off an Axios-like error: method, URL path (no query/hash),
+ * response status, and response `error` / `details`. Never reads request bodies, headers, or cookies.
+ */
+export function extractFailedRequestContext(error: unknown): Record<string, unknown> | undefined {
+  if (!error || typeof error !== 'object') return undefined
+  const err = error as {
+    isAxiosError?: unknown
+    config?: { method?: unknown; baseURL?: unknown; url?: unknown }
+    response?: { status?: unknown; data?: unknown }
+  }
+  if (!err.isAxiosError && !err.response && !err.config) return undefined
+
+  const info: Record<string, unknown> = {}
+  if (typeof err.config?.method === 'string' && err.config.method.trim()) {
+    info.requestMethod = err.config.method.trim().toUpperCase()
+  }
+  const requestPath = extractRequestPath(
+    typeof err.config?.baseURL === 'string' ? err.config.baseURL : undefined,
+    typeof err.config?.url === 'string' ? err.config.url : undefined,
+  )
+  if (requestPath) {
+    info.requestPath = requestPath
+  }
+  if (typeof err.response?.status === 'number' && Number.isFinite(err.response.status)) {
+    info.responseStatus = err.response.status
+  }
+  const data = err.response?.data
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const body = data as Record<string, unknown>
+    if (body.error !== undefined) {
+      const errorText = typeof body.error === 'string' ? body.error : String(body.error)
+      info.responseError =
+        errorText.length <= MAX_RESPONSE_ERROR_LENGTH
+          ? errorText
+          : errorText.slice(0, MAX_RESPONSE_ERROR_LENGTH - TRUNCATION_MARK.length) + TRUNCATION_MARK
+    }
+    if (body.details !== undefined) {
+      const capped = capResponseDetails(body.details)
+      if (capped !== undefined) info.responseDetails = capped
+    }
+  }
+  return Object.keys(info).length > 0 ? info : undefined
+}
 
 // Error queue to batch errors and avoid overwhelming the server
 const errorQueue: FrontendError[] = []
@@ -127,12 +216,13 @@ export function logErrorFromException(
   level: 'error' | 'warning' | 'info' = 'error',
   context?: Record<string, unknown>,
 ): void {
+  const httpContext = extractFailedRequestContext(error)
   logError({
     message: error.message,
     stack: error.stack,
     errorCode: error.name,
     level,
-    context,
+    context: httpContext ? { ...httpContext, ...context } : context,
   })
 }
 

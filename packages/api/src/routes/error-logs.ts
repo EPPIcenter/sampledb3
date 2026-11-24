@@ -15,7 +15,7 @@ import { likeContains } from '../lib/sql-like'
 import { MAX_PAGE } from '../lib/query-params'
 
 /** Header values copied into an error log row are cut to these lengths. */
-const MAX_LOGGED_URL_LENGTH = 2_000
+const MAX_LOGGED_URL_LENGTH = ERROR_REPORT_LIMITS.url
 const MAX_LOGGED_USER_AGENT_LENGTH = 500
 
 // Schema for error log query parameters
@@ -78,7 +78,8 @@ export function createErrorLogsRoutes(database: Database): Hono {
       // Extract context from request
       // User may be undefined if not authenticated (e.g., session expired)
       const user = c.get('user')
-      const url = (c.req.header('referer') || c.req.url).slice(0, MAX_LOGGED_URL_LENGTH)
+      const clientUrl = typeof errorData.context?.url === 'string' ? errorData.context.url : undefined
+      const url = (clientUrl || c.req.header('referer') || c.req.url).slice(0, MAX_LOGGED_URL_LENGTH)
       const userAgent = c.req.header('user-agent')?.slice(0, MAX_LOGGED_USER_AGENT_LENGTH)
       
       const errorContext: ErrorLogContext = {

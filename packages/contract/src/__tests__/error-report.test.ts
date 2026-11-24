@@ -16,6 +16,26 @@ describe('errorReportSchema', () => {
       errorReportSchema.safeParse({ message: 'x', context: { pad: 'c'.repeat(ERROR_REPORT_LIMITS.contextJson) } }).success
     ).toBe(false)
   })
+
+  it('validates and length-caps context.url when present', () => {
+    const base = 'https://sampledb.example.org/'
+    expect(errorReportSchema.safeParse({ message: 'x', context: { url: `${base}import?step=collections` } }).success).toBe(true)
+    expect(
+      errorReportSchema.safeParse({
+        message: 'x',
+        context: { url: base + 'a'.repeat(ERROR_REPORT_LIMITS.url - base.length) },
+      }).success,
+    ).toBe(true)
+    expect(
+      errorReportSchema.safeParse({
+        message: 'x',
+        context: { url: base + 'a'.repeat(ERROR_REPORT_LIMITS.url - base.length + 1) },
+      }).success,
+    ).toBe(false)
+    expect(errorReportSchema.safeParse({ message: 'x', context: { url: 'javascript:alert(1)' } }).success).toBe(false)
+    expect(errorReportSchema.safeParse({ message: 'x', context: { url: 'not a url' } }).success).toBe(false)
+    expect(errorReportSchema.safeParse({ message: 'x', context: { url: 123 } }).success).toBe(false)
+  })
 })
 
 describe('fitErrorReportToLimits', () => {

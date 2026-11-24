@@ -26,6 +26,7 @@ import {
   runOneSubjectWithSpecimens,
   formatOneSubjectWithSpecimensResponse,
 } from '../lib/bulk-combined-import'
+import { mapIndexedZodRowIssues } from '../lib/bulk-validate-zod'
 import { withSpecimensRequestSchema } from '../lib/schemas'
 import { mergeSubjects } from '../lib/subjects/merge'
 import {
@@ -302,7 +303,15 @@ subjects.post('/bulk/validate', memberMiddleware, async (c) => {
         name: z.string().min(1),
       })),
     })
-    const data = schema.parse(body)
+    const parsed = schema.safeParse(body)
+    if (!parsed.success) {
+      const rowErrors = mapIndexedZodRowIssues(parsed.error, 'subjects')
+      if (rowErrors) {
+        return c.json({ valid: false, errors: rowErrors })
+      }
+      throw parsed.error
+    }
+    const data = parsed.data
     if (data.subjects.length === 0) {
       return c.json({ error: 'No subjects provided' }, 400)
     }

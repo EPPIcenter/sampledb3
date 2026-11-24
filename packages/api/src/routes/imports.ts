@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { Database } from '../db/client'
 import { importDerivationsFromCsv, validateDerivationsCsv, type BulkDerivationSettings } from '../lib/derivations-csv'
 import { runBulkCombinedImport, validateBulkCombinedPayload } from '../lib/bulk-combined-import'
+import { mapBulkCombinedZodRowIssues } from '../lib/bulk-validate-zod'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
 import { toSpecimenSummaryWire } from '../lib/container-wire-mapper'
@@ -116,7 +117,15 @@ imports.post('/bulk-combined', memberMiddleware, async (c) => {
 imports.post('/bulk-combined/validate', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
-    const data = bulkCombinedValidateRequestSchema.parse(body)
+    const parsed = bulkCombinedValidateRequestSchema.safeParse(body)
+    if (!parsed.success) {
+      const rowErrors = mapBulkCombinedZodRowIssues(parsed.error, body)
+      if (rowErrors) {
+        return c.json({ valid: false, errors: rowErrors })
+      }
+      throw parsed.error
+    }
+    const data = parsed.data
     if (data.subjects.length === 0) {
       return c.json({ error: 'No subjects provided' }, 400)
     }

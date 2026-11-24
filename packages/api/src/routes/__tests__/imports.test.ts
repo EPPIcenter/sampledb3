@@ -668,5 +668,53 @@ describe('Imports API', () => {
       expect(data.valid).toBe(false)
       expect(data.errors.some((e) => e.message.toLowerCase().includes('date') || e.message.toLowerCase().includes('future'))).toBe(true)
     })
+
+    it('maps row-level Zod schema failures to bulk-combined row errors with rowIndex (#93)', async () => {
+      const res = await ctx.request('/api/imports/bulk-combined/validate', {
+        method: 'POST',
+        json: {
+          studyShortCode: 'VAL',
+          atomicMode: 'full_file',
+          subjects: [
+            {
+              subjectName: 'S1',
+              specimens: [
+                {
+                  rowIndex: 4,
+                  specimenTypeName: 'Blood',
+                  container: {
+                    containerType: 'micronix_tube',
+                    barcode: '',
+                    collection: { type: 'micronix_plate', name: 'P1', position: 'A01' },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        valid: boolean
+        errors: Array<{ subjectIndex: number; specimenIndex?: number; rowIndex?: number; message: string }>
+      }
+      expect(data.valid).toBe(false)
+      expect(data.errors).toContainEqual(
+        expect.objectContaining({
+          subjectIndex: 0,
+          specimenIndex: 0,
+          rowIndex: 4,
+          message: expect.stringContaining('container.barcode'),
+        }),
+      )
+    })
+
+    it('keeps a 400 when bulk-combined/validate fails outside row paths', async () => {
+      const res = await ctx.request('/api/imports/bulk-combined/validate', {
+        method: 'POST',
+        json: { atomicMode: 'invalid_mode', subjects: [] },
+      })
+      expect(res.status).toBe(400)
+    })
   })
 })

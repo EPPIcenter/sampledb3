@@ -10,6 +10,7 @@ export const ERROR_REPORT_LIMITS = {
   message: 2_000,
   stack: 16_000,
   errorCode: 200,
+  url: 2_000,
   /** `context` serialized as JSON, in characters. */
   contextJson: 16_000,
 } as const
@@ -20,6 +21,12 @@ function jsonLength(value: unknown): number {
   return JSON.stringify(value)?.length ?? 0
 }
 
+const HTTP_URL_PATTERN = /^https?:\/\/[^/\s?#]+(?:[/?#][^\s]*)?$/i
+
+function isValidReportUrl(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= ERROR_REPORT_LIMITS.url && HTTP_URL_PATTERN.test(value)
+}
+
 export const errorReportSchema = z.object({
   message: z.string().max(ERROR_REPORT_LIMITS.message),
   stack: z.string().max(ERROR_REPORT_LIMITS.stack).optional(),
@@ -27,6 +34,9 @@ export const errorReportSchema = z.object({
   level: z.enum(ERROR_REPORT_LEVELS).default('error'),
   context: z
     .record(z.string(), z.unknown())
+    .refine((context) => context.url === undefined || isValidReportUrl(context.url), {
+      message: `context.url must be an http(s) URL of at most ${ERROR_REPORT_LIMITS.url} characters`,
+    })
     .refine((context) => jsonLength(context) <= ERROR_REPORT_LIMITS.contextJson, {
       message: `context must serialize to at most ${ERROR_REPORT_LIMITS.contextJson} characters of JSON`,
     })
@@ -48,6 +58,9 @@ function truncate(value: string, max: number): string {
  */
 export function fitErrorReportToLimits(report: ErrorReport, keepContextKeys: readonly string[] = []): ErrorReport {
   let context = report.context
+  if (context && typeof context.url === 'string' && context.url.length > ERROR_REPORT_LIMITS.url) {
+    context = { ...context, url: context.url.slice(0, ERROR_REPORT_LIMITS.url) }
+  }
   if (context && jsonLength(context) > ERROR_REPORT_LIMITS.contextJson) {
     const kept: Record<string, unknown> = { contextTruncated: true }
     for (const key of keepContextKeys) {

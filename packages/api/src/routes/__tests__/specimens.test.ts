@@ -604,6 +604,41 @@ describe('Specimens API', () => {
       expect(data.valid).toBe(false)
       expect(data.errors.length).toBeGreaterThan(0)
     })
+
+    it('maps row-level Zod schema failures to { valid: false, errors: [{ index, message }] } (#93)', async () => {
+      const res = await ctx.request('/api/specimens/bulk/validate', {
+        method: 'POST',
+        json: {
+          specimens: [
+            {
+              sourceType: 'subject',
+              studyShortCode: 'VBLK',
+              subjectName: 'V-SUBJ',
+              specimenTypeName: 'Serum',
+              container: {
+                containerType: 'micronix_tube',
+                barcode: '',
+                collection: { type: 'micronix_plate', name: 'P1', position: 'A01' },
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { valid: boolean; errors: Array<{ index: number; message: string }> }
+      expect(data.valid).toBe(false)
+      expect(data.errors).toContainEqual(
+        expect.objectContaining({ index: 0, message: expect.stringContaining('container.barcode') }),
+      )
+    })
+
+    it('keeps a 400 when the request body fails outside row paths', async () => {
+      const res = await ctx.request('/api/specimens/bulk/validate', {
+        method: 'POST',
+        json: { notSpecimens: [] },
+      })
+      expect(res.status).toBe(400)
+    })
   })
 
   describe('POST /api/specimens/:id/containers', () => {

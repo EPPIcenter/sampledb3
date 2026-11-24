@@ -346,5 +346,31 @@ describe('Subjects API', () => {
       expect(data.valid).toBe(false)
       expect(data.errors.some((e) => e.message.toLowerCase().includes('duplicate'))).toBe(true)
     })
+
+    it('maps row-level Zod schema failures to { valid: false, errors: [{ index, message }] } (#93)', async () => {
+      const res = await ctx.request('/api/subjects/bulk/validate', {
+        method: 'POST',
+        json: {
+          subjects: [
+            { studyShortCode: 'VS', name: 'Valid' },
+            { studyShortCode: 'VS', name: '' },
+          ],
+        },
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { valid: boolean; errors: Array<{ index: number; message: string }> }
+      expect(data.valid).toBe(false)
+      expect(data.errors).toContainEqual(
+        expect.objectContaining({ index: 1, message: expect.stringContaining('name') }),
+      )
+    })
+
+    it('keeps a 400 when the request body fails outside row paths', async () => {
+      const res = await ctx.request('/api/subjects/bulk/validate', {
+        method: 'POST',
+        json: { wrong: true },
+      })
+      expect(res.status).toBe(400)
+    })
   })
 })

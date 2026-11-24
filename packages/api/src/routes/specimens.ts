@@ -13,6 +13,7 @@ import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { validateBulkSpecimenRows, createBulkSpecimenRows } from '../lib/registration-orchestrator'
+import { mapIndexedZodRowIssues } from '../lib/bulk-validate-zod'
 import { insertedRow } from '../lib/inserted-row'
 
 /**
@@ -277,7 +278,15 @@ specimens.post('/bulk/validate', memberMiddleware, async (c) => {
         container: containerSchemaWithLocation,
       })),
     })
-    const data = schema.parse(body)
+    const parsed = schema.safeParse(body)
+    if (!parsed.success) {
+      const rowErrors = mapIndexedZodRowIssues(parsed.error, 'specimens')
+      if (rowErrors) {
+        return c.json({ valid: false, errors: rowErrors })
+      }
+      throw parsed.error
+    }
+    const data = parsed.data
     if (data.specimens.length === 0) {
       return c.json({ error: 'No specimens provided' }, 400)
     }

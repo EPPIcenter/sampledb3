@@ -116,6 +116,52 @@ describe('Error Logs API', () => {
       expect(res.status).toBe(201)
     })
 
+    it('prefers validated client context.url over Referer and request URL (#93)', async () => {
+      const app = ctx.createRequestApp()
+      const pageUrl = 'https://sampledb.example.org/import?step=collections'
+      const res = await app.request('/api/error-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'Client page URL test',
+          level: 'error',
+          context: { url: pageUrl },
+        }),
+      })
+      expect(res.status).toBe(201)
+
+      const rows = ctx.db.select().from(errorLogs).all()
+      const log = rows.find((r) => r.message === 'Client page URL test')
+      expect(log).toBeDefined()
+      expect(log!.url).toBe(pageUrl)
+      expect((log!.context as Record<string, unknown>)?.pageUrl).toBe(pageUrl)
+    })
+
+    it('rejects an invalid or over-cap context.url with 400', async () => {
+      const app = ctx.createRequestApp()
+      const badScheme = await app.request('/api/error-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'Bad URL',
+          level: 'error',
+          context: { url: 'javascript:alert(1)' },
+        }),
+      })
+      expect(badScheme.status).toBe(400)
+
+      const overCap = await app.request('/api/error-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'Long URL',
+          level: 'error',
+          context: { url: 'https://example.org/' + 'x'.repeat(ERROR_REPORT_LIMITS.url) },
+        }),
+      })
+      expect(overCap.status).toBe(400)
+    })
+
     describe('size caps', () => {
       const post = (body: string, headers: Record<string, string> = {}) =>
         ctx.createRequestApp().request('/api/error-logs', {
