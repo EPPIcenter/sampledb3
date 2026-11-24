@@ -462,7 +462,7 @@ describe('Controls API', () => {
       expect(res.status).toBe(400)
     })
 
-    it('returns 400 when provided name is already used by another definition', async () => {
+    it('returns 409 when provided name is already used by another definition', async () => {
       const strain = await createTestStrain(ctx.db, { name: 'Strain Dup' })
       const unit = await createTestUnit(ctx.db, {
         symbol: 'p/ul',
@@ -487,10 +487,10 @@ describe('Controls API', () => {
           names: ['Taken Name', 'Other Name'],
         },
       })
-      expect(res.status).toBe(400)
-      const body = (await res.json()) as { error?: string }
-      expect(body.error).toBeDefined()
-      expect(String(body.error).toLowerCase()).toMatch(/name|unique|taken|duplicate/)
+      expect(res.status).toBe(409)
+      const body = (await res.json()) as { error?: string; errorCode?: string }
+      expect(body.errorCode).toBe('CONFLICT')
+      expect(body.error).toBe('Control definition name "Taken Name" is already in use')
     })
   })
 

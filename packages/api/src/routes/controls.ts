@@ -411,7 +411,7 @@ controls.post('/definitions/bulk', memberMiddleware, async (c) => {
       const customName = providedNames[i]?.trim()
       if (customName) {
         if (await isControlDefinitionNameTaken(dbInstance, customName)) {
-          return c.json({ error: `Control definition name "${customName}" is already in use` }, 400)
+          throw new ConflictError(`Control definition name "${customName}" is already in use`)
         }
         finalName = customName
       } else {
