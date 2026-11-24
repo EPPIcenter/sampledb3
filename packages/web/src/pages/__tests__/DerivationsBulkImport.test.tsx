@@ -255,4 +255,35 @@ describe('DerivationsBulkImport', () => {
     expect(await screen.findByText('Server rejected import')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /create derivations/i })).toBeEnabled()
   })
+
+  it('sends the wizard-chosen Location instead of a location_id column from the CSV', async () => {
+    const user = userEvent.setup()
+    vi.mocked(derivationsApi.validateCsv).mockResolvedValue({
+      rows: [{ index: 0, valid: true, collectionStatus: 'will_be_created' }],
+      collections: [{ name: 'NEW-P', status: 'will_be_created', containerType: 'micronix_tube' }],
+      summary: { total: 1, valid: 1, invalid: 0, warnings: 0 },
+    })
+    vi.mocked(derivationsApi.importCsv).mockResolvedValue({
+      rows: [{ index: 0, success: true }],
+    })
+
+    const { container } = await render(<DerivationsBulkImport />)
+    const fileInput = container.querySelector<HTMLInputElement>('#derivation-csv-file')!
+    await waitFor(() => expect(fileInput).toBeEnabled())
+    const csv = 'parent_container_id,plate_name,position,container_barcode,location_id\n1,NEW-P,A01,C1,3\n'
+    await user.upload(fileInput, new File([csv], 'derivations.csv', { type: 'text/csv' }))
+    await user.click(screen.getByRole('button', { name: /validate & continue/i }))
+
+    expect(await screen.findByRole('heading', { name: /assign locations for new collections/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /select location/i }))
+    await user.click(await screen.findByRole('button', { name: /^select$/i }))
+    await user.click(screen.getByRole('button', { name: /continue to review/i }))
+
+    await user.click(await screen.findByRole('button', { name: /create derivations/i }))
+
+    await waitFor(() => expect(derivationsApi.importCsv).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(derivationsApi.importCsv).mock.calls[0]![0]).toBe(
+      'parent_container_id,plate_name,position,container_barcode,location_id\n1,NEW-P,A01,C1,7',
+    )
+  })
 })

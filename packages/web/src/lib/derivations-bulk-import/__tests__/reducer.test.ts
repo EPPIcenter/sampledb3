@@ -106,4 +106,35 @@ describe('derivationsBulkReducer', () => {
         '2,cryovial_tube,,,BC-BOX,A01,9',
     )
   })
+
+  it('sends the Location chosen in the wizard instead of a CSV location_id or collection_location_id for missing Collections', () => {
+    const result = validation([
+      { name: 'NEW-P', status: 'will_be_created', containerType: 'micronix_tube' },
+      { name: 'EXISTING-P', status: 'existing', containerType: 'micronix_tube' },
+    ])
+    let state = derivationsBulkReducer(initialDerivationsBulkState(), {
+      type: 'FILE_LOADED',
+      csvContent:
+        'parent_container_id,container_type,plate_name,position,location_id,collection_location_id\n' +
+        '1,micronix_tube,NEW-P,A01,3,4\n' +
+        '2,micronix_tube,EXISTING-P,A02,5,5',
+    })
+    state = derivationsBulkReducer(state, {
+      type: 'VALIDATED',
+      result,
+      headers: ['parent_container_id', 'container_type', 'plate_name', 'position', 'location_id', 'collection_location_id'],
+      rows: [
+        { parent_container_id: '1', container_type: 'micronix_tube', plate_name: 'NEW-P', position: 'A01', location_id: '3', collection_location_id: '4' },
+        { parent_container_id: '2', container_type: 'micronix_tube', plate_name: 'EXISTING-P', position: 'A02', location_id: '5', collection_location_id: '5' },
+      ],
+      fileRows: [2, 3],
+    })
+    state = derivationsBulkReducer(state, { type: 'COLLECTION_PATCHED', index: 0, patch: { locationId: 7 } })
+
+    expect(selectCsvForImport(state)).toBe(
+      'parent_container_id,container_type,plate_name,position,location_id,collection_location_id\n' +
+        '1,micronix_tube,NEW-P,A01,7,7\n' +
+        '2,micronix_tube,EXISTING-P,A02,5,5',
+    )
+  })
 })

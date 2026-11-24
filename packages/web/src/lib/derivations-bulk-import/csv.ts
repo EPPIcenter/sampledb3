@@ -51,23 +51,29 @@ export function csvForImport(
     if (!hasAssignedLocation) {
       return serializeToCsv(reviewHeaders, reviewRows)
     }
-    const existingLocationHeader = reviewHeaders.find((h) => {
+    const existingLocationHeaders = reviewHeaders.filter((h) => {
       const lower = h.trim().toLowerCase()
       return lower === 'collection_location_id' || lower === 'location_id'
     })
-    const locationHeader = existingLocationHeader ?? 'collection_location_id'
-    const headers = existingLocationHeader ? reviewHeaders : [...reviewHeaders, locationHeader]
+    const targetHeaders =
+      existingLocationHeaders.length > 0 ? existingLocationHeaders : ['collection_location_id']
+    const headers =
+      existingLocationHeaders.length > 0
+        ? reviewHeaders
+        : [...reviewHeaders, 'collection_location_id']
     const rows = reviewRows.map((row) => {
-      if (existingLocationHeader && (row[existingLocationHeader] ?? '').trim() !== '') {
-        return row
-      }
       const locationId = findMissingCollectionLocationId(
         row,
         reviewHeaders,
         missingCollections,
         defaultContainerType,
       )
-      return locationId != null ? { ...row, [locationHeader]: String(locationId) } : row
+      if (locationId == null) return row
+      const next = { ...row }
+      for (const header of targetHeaders) {
+        next[header] = String(locationId)
+      }
+      return next
     })
     return serializeToCsv(headers, rows)
   }
