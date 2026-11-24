@@ -389,6 +389,39 @@ describe('selectContainers', () => {
       expect(ids(result.containers)).toEqual([bloodVial.id])
     })
 
+    it('returns the same rows under a Container-level filter as without one, for Specimens with a matching Container', async () => {
+      const study = await createTestStudy(db, { title: 'Study', shortCode: 'S1' })
+      const dated = await seedSubject(study.id, 'P1')
+      const undated = await seedSubject(study.id, 'P2')
+      const twoVials = await seedSpecimen({ studySubjectId: dated.id }, { collectionDate: '2024-03-01' })
+      const firstVial = await seedContainer(twoVials.id, { kind: 'cryovial_tube' })
+      await seedContainer(twoVials.id, { kind: 'micronix_tube' })
+      const secondVial = await seedContainer(twoVials.id, { kind: 'cryovial_tube' })
+      const tubeOnly = await seedSpecimen({ studySubjectId: undated.id })
+      await seedContainer(tubeOnly.id, { kind: 'micronix_tube' })
+      const oneVial = await seedSpecimen({ studySubjectId: undated.id })
+      const thirdVial = await seedContainer(oneVial.id, { kind: 'cryovial_tube' })
+      await seedSpecimen({ studySubjectId: undated.id })
+      const selection = {
+        kind: 'subjects',
+        subjects: [
+          { studyId: study.id, subjectId: dated.id, dates: [{ exact: '2024-03-01' }] },
+          { studyId: study.id, subjectId: undated.id },
+        ],
+      } satisfies ContainerSelection
+
+      const everything = await selectContainers(db, selection)
+      const vials = await selectContainers(db, { ...selection, filters: { containerTypes: ['cryovial_tube'] } })
+
+      const vialIds = [firstVial.id, secondVial.id, thirdVial.id]
+      const vialSpecimenIds = [twoVials.id, oneVial.id]
+      expect(everything.specimens).toHaveLength(4)
+      expect(ids(vials.specimens)).toEqual(vialSpecimenIds)
+      expect(vials.specimens).toEqual(everything.specimens.filter((row) => vialSpecimenIds.includes(row.id)))
+      expect(ids(vials.containers)).toEqual(vialIds)
+      expect(vials.containers).toEqual(everything.containers.filter((row) => vialIds.includes(row.id)))
+    })
+
     it('widens exact per-Subject dates by the tolerance, but not date ranges', async () => {
       const study = await createTestStudy(db, { title: 'Study', shortCode: 'S1' })
       const exact = await seedSubject(study.id, 'P1')
