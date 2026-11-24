@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useUser } from '../contexts/UserContext'
@@ -11,10 +11,7 @@ import {
   type ReferenceDataType,
 } from '../config/reference-data-config'
 import { invalidateAfterReferenceDataWrite } from '../hooks/useReferenceData'
-import {
-  useReferenceDataTab,
-  useSpecimenTypeContainerTypes,
-} from '../hooks/useReferenceDataPage'
+import { useReferenceDataTab, useSpecimenTypeContainerTypes } from '../hooks/useReferenceDataPage'
 import { specimenTypesApi } from '../lib/api/reference-data'
 import type { SpecimenType } from '../lib/api/types'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
@@ -59,15 +56,7 @@ function ReferenceDataContent({
   const queryClient = useQueryClient()
   const [editingItem, setEditingItem] = useState<any>(null)
 
-  // Client-side pagination state (for locations)
-  const [page, setPage] = useState(1)
-  const pageSize = 50
-
-  // Search state (for locations)
-  const [search, setSearch] = useState('')
-  const [searchDebounced, setSearchDebounced] = useState('')
-
-  const tabQuery = useReferenceDataTab(activeTab, searchDebounced)
+  const tabQuery = useReferenceDataTab(activeTab)
   const tabStatus = fromQuery(tabQuery)
   const data = (tabQuery.data ?? []) as unknown[]
 
@@ -82,30 +71,14 @@ function ReferenceDataContent({
   const containerTypeRelationships = containerTypesQuery.relationships
   const containerTypeUsageInfo = containerTypesQuery.usageInfo
 
-  // Debounce search input
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setSearchDebounced(search)
-    }, 300)
-    return () => clearTimeout(timeoutId)
-  }, [search])
-
-  // Reset pagination/search/editing when tab or search changes (adjust during render)
+  // Close the form when the tab changes (adjust during render)
   const prevTabRef = useRef(activeTab)
-  const prevSearchRef = useRef(search)
   const searchInputRef = useRef<HTMLInputElement>(null)
   useFocusSearchOnSlash(searchInputRef)
-   
+
   if (prevTabRef.current !== activeTab) {
     prevTabRef.current = activeTab
-    prevSearchRef.current = ''
-    setPage(1)
-    setSearch('')
     setEditingItem(null)
-  }
-  if (config.requiresSearch && prevSearchRef.current !== search) {
-    prevSearchRef.current = search
-    setPage(1)
   }
 
   const handleToggleContainerType = async (specimenTypeId: number, containerType: string, isAdding: boolean) => {
@@ -125,12 +98,6 @@ function ReferenceDataContent({
       void invalidateAfterReferenceDataWrite(queryClient)
     }
   }
-
-  useEffect(() => {
-    if (tabQuery.isSuccess) {
-      setPage(1)
-    }
-  }, [activeTab, searchDebounced, tabQuery.isSuccess])
 
   const handleSave = async (saveData: any) => {
     try {
@@ -262,17 +229,8 @@ function ReferenceDataContent({
             onDelete={handleDelete}
             searchPlaceholder={`Search ${config.label}...`}
             emptyMessage={`No ${config.label} found`}
-            search={config.requiresSearch ? search : undefined}
-            onSearchChange={config.requiresSearch ? setSearch : undefined}
-            disableClientFilter={config.requiresSearch}
-            loading={tabQuery.isPending && config.requiresSearch}
+            loading={tabQuery.isPending}
             readOnly={!canManageReferenceData}
-            pagination={config.requiresPagination ? {
-              page,
-              pageSize,
-              onPageChange: setPage,
-              showPagination: true,
-            } : undefined}
             searchInputRef={searchInputRef}
           />
           </div>

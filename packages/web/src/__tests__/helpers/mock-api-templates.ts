@@ -312,21 +312,6 @@ export function adminErrorLogsMock(): MockApiOverrides {
   }
 }
 
-export function referenceDataLocationsMock(): MockApiOverrides {
-  return {
-    locationsApi: {
-      list: vi.fn().mockResolvedValue({
-        locations: [],
-        pagination: { total: 0, page: 1, limit: 50, totalPages: 0 },
-      }),
-      get: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-    },
-  }
-}
-
 export function subjectDetailPageMock(): MockApiOverrides {
   return {
     subjectsApi: {

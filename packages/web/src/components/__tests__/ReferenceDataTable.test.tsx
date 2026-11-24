@@ -115,6 +115,7 @@ describe('ReferenceDataTable', () => {
   })
 
   it('should filter data when search is provided', async () => {
+    const user = userEvent.setup()
     const onEdit = vi.fn()
     const onDelete = vi.fn()
 
@@ -124,9 +125,11 @@ describe('ReferenceDataTable', () => {
         columns={columns}
         onEdit={onEdit}
         onDelete={onDelete}
-        search="Item 1"
+        searchPlaceholder="Search items..."
       />
     )
+
+    await user.type(screen.getByPlaceholderText('Search items...'), 'Item 1')
 
     expect(screen.getByText('Item 1')).toBeInTheDocument()
     expect(screen.queryByText('Item 2')).not.toBeInTheDocument()
@@ -194,28 +197,5 @@ describe('ReferenceDataTable', () => {
     expect(screen.getByText('$10')).toBeInTheDocument()
     expect(screen.getByText('$20')).toBeInTheDocument()
   })
-
-  it('should disable client filter when disableClientFilter is true', async () => {
-    const onEdit = vi.fn()
-    const onDelete = vi.fn()
-
-    await render(
-      <ReferenceDataTable
-        data={testData}
-        columns={columns}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        search="Item 1"
-        disableClientFilter
-      />
-    )
-
-    // All items should be visible when client filter is disabled
-    expect(screen.getByText('Item 1')).toBeInTheDocument()
-    expect(screen.getByText('Item 2')).toBeInTheDocument()
-    expect(screen.getByText('Item 3')).toBeInTheDocument()
-  })
 })
-
-
 

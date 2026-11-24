@@ -128,6 +128,26 @@ describe('ReferenceDataForm', () => {
     }, { timeout: 3000 })
   })
 
+  it('submits the fields the form shows and nothing else', async () => {
+    const user = userEvent.setup()
+    const onSave = vi.fn().mockResolvedValue(undefined)
+
+    await render(
+      <ReferenceDataForm<TestItem>
+        item={null}
+        fields={[{ key: 'name', label: 'Name', required: true }]}
+        onSave={onSave}
+        onCancel={vi.fn()}
+        title="Add Tags"
+      />
+    )
+
+    await user.type(screen.getByLabelText(/^Name/), 'Needs QC')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith({ name: 'Needs QC' }))
+  })
+
   it('should call onCancel when cancel button is clicked', async () => {
     const user = userEvent.setup()
     const onSave = vi.fn().mockResolvedValue(undefined)

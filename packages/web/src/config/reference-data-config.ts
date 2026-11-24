@@ -29,7 +29,6 @@ export interface ReferenceDataConfig {
   getItemKey: () => string
   // Table configuration
   getColumns: (dependencies?: {
-    locations?: Location[]
     containerTypeRelationships?: Record<number, string[]>
     containerTypeUsageInfo?: Record<number, Record<string, boolean>>
     onToggleContainerType?: (specimenTypeId: number, containerType: string, isAdding: boolean) => Promise<void>
@@ -51,10 +50,6 @@ export interface ReferenceDataConfig {
     loadOptions?: () => Promise<Array<{ value: any; label: string }>>
     render?: (value: any, formData: any, onChange: (value: any) => void) => React.ReactNode
   }>
-  // Special handling
-  requiresPagination?: boolean
-  requiresSearch?: boolean
-  readOnly?: boolean // Mark as read-only for legacy data viewing
 }
 
 export const referenceDataConfigs: ReferenceDataConfig[] = [

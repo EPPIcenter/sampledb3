@@ -112,6 +112,29 @@ describe('ReferenceData Page', () => {
       expect(await screen.findByRole('heading', { name: 'Reference Data Management' })).toBeInTheDocument()
     })
 
+    it('shows a skeleton, not the empty message, while the tab loads', async () => {
+      let resolveList: (value: { data: (typeof plasma)[] }) => void = () => {}
+      vi.mocked(specimenTypesApi.list).mockReturnValue(new Promise((resolve) => { resolveList = resolve }))
+
+      const { container } = await renderPage('specimen-types')
+
+      expect(container.querySelector('.animate-pulse')).toBeInTheDocument()
+      expect(screen.queryByText('No Specimen Types found')).not.toBeInTheDocument()
+
+      resolveList({ data: [plasma] })
+
+      expect(await screen.findByRole('cell', { name: 'Plasma' })).toBeInTheDocument()
+      expect(container.querySelector('.animate-pulse')).not.toBeInTheDocument()
+    })
+
+    it('says so when the tab has no items', async () => {
+      vi.mocked(specimenTypesApi.list).mockResolvedValue({ data: [] })
+
+      await renderPage('specimen-types')
+
+      expect(await screen.findByText('No Specimen Types found')).toBeInTheDocument()
+    })
+
     it('shows PageError with retry when tab load fails', async () => {
       vi.mocked(specimenTypesApi.list).mockRejectedValue(new Error('fail'))
 
@@ -212,9 +235,7 @@ describe('ReferenceData Page', () => {
       await user.type(within(dialog).getByLabelText(/^Name/), 'Serum')
       await user.click(within(dialog).getByRole('button', { name: 'Add' }))
 
-      await waitFor(() =>
-        expect(specimenTypesApi.create).toHaveBeenCalledWith(expect.objectContaining({ name: 'Serum' })),
-      )
+      await waitFor(() => expect(specimenTypesApi.create).toHaveBeenCalledWith({ name: 'Serum' }))
       await waitFor(() => expect(keysNotInvalidated(queryClient, otherPages)).toEqual([]))
     })
 
