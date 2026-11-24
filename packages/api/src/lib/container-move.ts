@@ -328,11 +328,20 @@ export async function executeMoves(
       targetCollectionId?: number
     }> = []
 
+    // A Container moves to one place per request. A later row naming it again, by any
+    // identifier, is rejected, as executeCollectionMoves rejects a repeated Collection.
+    const seenContainerIds = new Set<number>()
     for (const resolved of resolvedMoves) {
       if (!resolved.info) {
         errors.push({ row: resolved.row, error: resolved.error })
         continue
       }
+      if (seenContainerIds.has(resolved.info.containerId)) {
+        const name = resolved.info.barcode ? `"${resolved.info.barcode}"` : `ID ${resolved.info.containerId}`
+        errors.push({ row: resolved.row, error: `Container ${name} appears more than once in this move` })
+        continue
+      }
+      seenContainerIds.add(resolved.info.containerId)
       validResolvedMoves.push({
         row: resolved.row,
         move: resolved.move,
@@ -465,7 +474,7 @@ export async function executeMoves(
           })
         }
       } else {
-        const moveRec = executableMoves.find(m => m.info.containerId === containers[0].containerId)
+        const moveRec = executableMoves.find(m => m.row === containers[0].row)
         if (moveRec?.targetCollectionId) singleTargetMoves.push(moveRec)
       }
     }

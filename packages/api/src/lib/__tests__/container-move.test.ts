@@ -579,6 +579,74 @@ describe('container-move', () => {
       expect(result.moved).toBe(0)
     })
 
+    it('rejects the same Container listed twice and moves nothing', async () => {
+      const { plate, addTube } = await setupPlate()
+      await addTube('MT-TWICE', 'B01')
+
+      const result = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: plate.name, toCollectionName: plate.name }],
+        moves: [
+          { identifier: { type: 'barcode', barcode: 'MT-TWICE' }, targetPosition: 'A02' },
+          { identifier: { type: 'barcode', barcode: 'MT-TWICE' }, targetPosition: 'B02' },
+        ],
+      })
+
+      expect(result).toEqual({
+        success: false,
+        moved: 0,
+        errors: [{ row: 2, error: 'Container "MT-TWICE" appears more than once in this move' }],
+      })
+      const tubes = await testDb.select().from(micronixTube).all()
+      expect(tubes.map((t) => [t.barcode, t.position])).toEqual([['MT-TWICE', 'B01']])
+    })
+
+    it('rejects a Container named a second time by another identifier', async () => {
+      const { plate, addTube, addWell } = await setupPlate()
+      const tubeId = await addTube('MT-TWICE', 'B01')
+      const wellId = await addWell('C01')
+
+      const result = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: plate.name, toCollectionName: plate.name }],
+        moves: [
+          { identifier: { type: 'barcode', barcode: 'MT-TWICE' }, targetPosition: 'A02' },
+          { identifier: { type: 'container_id', containerId: wellId }, targetPosition: 'D01' },
+          { identifier: { type: 'position', sourceCollectionName: plate.name, sourcePosition: 'b1' }, targetPosition: 'B02' },
+          { identifier: { type: 'container_id', containerId: tubeId }, targetPosition: 'B03' },
+          { identifier: { type: 'position', sourceCollectionName: plate.name, sourcePosition: 'C01' }, targetPosition: 'D02' },
+        ],
+      })
+
+      expect(result.moved).toBe(0)
+      expect(result.errors).toEqual([
+        { row: 3, error: 'Container "MT-TWICE" appears more than once in this move' },
+        { row: 4, error: 'Container "MT-TWICE" appears more than once in this move' },
+        { row: 5, error: `Container ID ${wellId} appears more than once in this move` },
+      ])
+    })
+
+    it('best_effort moves a Container listed twice once, to its first target, even when the second target is occupied', async () => {
+      const { plate, addTube } = await setupPlate()
+      await addTube('MT-TWICE', 'B01')
+      await addTube('MT-STAYS', 'B02')
+
+      const result = await executeMoves(testDb, {
+        atomicMode: 'best_effort',
+        mappings: [{ fromCollectionName: plate.name, toCollectionName: plate.name }],
+        moves: [
+          { identifier: { type: 'barcode', barcode: 'MT-TWICE' }, targetPosition: 'A02' },
+          { identifier: { type: 'barcode', barcode: 'MT-TWICE' }, targetPosition: 'B02' },
+        ],
+      })
+
+      expect(result).toEqual({
+        success: false,
+        moved: 1,
+        errors: [{ row: 2, error: 'Container "MT-TWICE" appears more than once in this move' }],
+      })
+      const tubes = await testDb.select().from(micronixTube).all()
+      expect(tubes.map((t) => [t.barcode, t.position])).toEqual([['MT-TWICE', 'A02'], ['MT-STAYS', 'B02']])
+    })
+
     it('best_effort does not move a container into the cell of one whose move failed', async () => {
       const { plate, addTube, addWell } = await setupPlate()
       await addWell('A01')

@@ -290,6 +290,70 @@ describe('Collections API', () => {
       expect(tube?.position).toBe('A01')
     })
 
+    /** Plate P96 with tube B1 at B01 and tube X at B02. */
+    async function seedTubeAndNeighbour() {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const loc = await createTestLocation(ctx.db, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'P96', locationId: loc.id })
+      const b1 = await createTestStorageContainer(ctx.db)
+      await createTestMicronixTube(ctx.db, { containerId: b1.id, collectionId: plate.id, barcode: 'B1', position: 'B01' })
+      const x = await createTestStorageContainer(ctx.db, { specimenId: b1.specimenId, unitId: b1.unitId })
+      await createTestMicronixTube(ctx.db, { containerId: x.id, collectionId: plate.id, barcode: 'X', position: 'B02' })
+      return { b1, x }
+    }
+
+    function positionOf(containerId: number): string | null | undefined {
+      return ctx.db.select().from(micronixTube).where(eq(micronixTube.id, containerId)).get()?.position
+    }
+
+    it('returns 400 naming the row when a Container is listed twice, and writes nothing', async () => {
+      const { b1 } = await seedTubeAndNeighbour()
+
+      const res = await ctx.request('/api/collections/containers/move', {
+        method: 'POST',
+        json: {
+          mappings: [{ fromCollectionName: 'P96', toCollectionName: 'P96' }],
+          moves: [
+            { identifier: { type: 'barcode', barcode: 'B1' }, targetPosition: 'A02' },
+            { identifier: { type: 'barcode', barcode: 'B1' }, targetPosition: 'C02' },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({
+        error: 'Move operation failed',
+        moved: 0,
+        errors: [{ row: 2, error: 'Container "B1" appears more than once in this move' }],
+      })
+      expect(positionOf(b1.id)).toBe('B01')
+    })
+
+    it('returns 200, not a conflict, when a best-effort move lists a Container twice and its second target is occupied', async () => {
+      const { b1, x } = await seedTubeAndNeighbour()
+
+      const res = await ctx.request('/api/collections/containers/move', {
+        method: 'POST',
+        json: {
+          atomicMode: 'best_effort',
+          mappings: [{ fromCollectionName: 'P96', toCollectionName: 'P96' }],
+          moves: [
+            { identifier: { type: 'barcode', barcode: 'B1' }, targetPosition: 'A02' },
+            { identifier: { type: 'barcode', barcode: 'B1' }, targetPosition: 'B02' },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({
+        success: false,
+        moved: 1,
+        errors: [{ row: 2, error: 'Container "B1" appears more than once in this move' }],
+      })
+      expect(positionOf(b1.id)).toBe('A02')
+      expect(positionOf(x.id)).toBe('B02')
+    })
+
     it('returns 200 with moved and errors when a best-effort move moves some Containers', async () => {
       const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
       const loc = await createTestLocation(ctx.db, { name: 'Loc', storageTypeId: String(storageType.id) })
