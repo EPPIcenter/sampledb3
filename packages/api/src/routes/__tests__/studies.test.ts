@@ -5,7 +5,8 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createStudiesRoutes } from '../studies'
-import { createTestStudy, createTestSpecimenType, createTestUnit } from '../../__tests__/helpers/factories'
+import { createTestStudy, createTestStudySubject, createTestSpecimenType, createTestUnit } from '../../__tests__/helpers/factories'
+import { specimen } from '../../db/schema'
 
 describe('Studies API (list, get, create, update)', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -150,6 +151,23 @@ describe('Studies API (list, get, create, update)', () => {
   })
 
   describe('GET /api/studies/:id/summary', () => {
+    it('counts study duration in calendar days, as the study page does', async () => {
+      const studyRecord = await createTestStudy(ctx.db, { title: 'Dated Study', shortCode: 'DAT01' })
+      const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })
+      const subject = await createTestStudySubject(ctx.db, { studyId: studyRecord.id, name: 'S1' })
+      // A time of day must not round the duration up to a second day.
+      await ctx.db.insert(specimen).values([
+        { studySubjectId: subject.id, specimenTypeId: type.id, collectionDate: '2024-11-03' },
+        { studySubjectId: subject.id, specimenTypeId: type.id, collectionDate: '2024-11-04 18:00:00' },
+      ])
+
+      const res = await ctx.request(`/api/studies/${studyRecord.id}/summary`)
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { summary: { studyDurationDays: number | null } }
+      expect(data.summary.studyDurationDays).toBe(1)
+    })
+
     it('handles studies with more specimens than SQLite allows as bound parameters', async () => {
       const studyRecord = await createTestStudy(ctx.db, { title: 'Big Study', shortCode: 'BIG01' })
       const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })

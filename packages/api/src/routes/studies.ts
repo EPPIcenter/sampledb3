@@ -20,7 +20,7 @@ import { validatePage, validateLimit } from '../lib/constants'
 import { handleRouteError, NotFoundError, ConflictError, ValidationError } from '../lib/error-handler'
 import { getStudySummaries, listStudies } from '../lib/studies/study-read'
 import { createAuthMiddleware, createMemberMiddleware, createAdminMiddleware } from '../middleware/auth'
-import { utcNow } from '../lib/datetime'
+import { calendarDaysBetween, utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { withWriteTransaction } from '../db/write-transaction'
 import { assertNotUsedInQpcr } from '../lib/qpcr-usage'
@@ -391,11 +391,7 @@ studies.get('/:id/summary', authMiddleware, async (c) => {
 
     // Study duration in days
     const studyDurationDays = collectionDateRange
-      ? Math.ceil(
-          (new Date(collectionDateRange.latest).getTime() -
-            new Date(collectionDateRange.earliest).getTime()) /
-            (1000 * 60 * 60 * 24)
-        )
+      ? calendarDaysBetween(collectionDateRange.earliest, collectionDateRange.latest)
       : null
 
     // Collection timeline (daily counts)
