@@ -22,7 +22,7 @@ export interface CreateTestUserOptions {
  * 
  * Role permissions:
  * - 'admin': Full access (create, read, update, delete everything)
- * - 'member': Can create/edit/delete data (subjects, specimens, etc.) but NOT reference data
+ * - 'member': Can create/edit/delete data (subjects, specimens, etc.), create Locations and Tags, and delete empty Locations; no other reference data
  * - 'viewer': Read-only access to everything
  */
 export async function createTestUser(
