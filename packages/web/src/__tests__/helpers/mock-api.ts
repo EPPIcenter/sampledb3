@@ -1,5 +1,5 @@
 import { vi } from 'vitest'
-import type { AxiosInstance } from 'axios'
+import type { ApiClient } from '../../lib/api/client'
 import { moduleApiKeys, type ApiModuleId } from './mock-api-domains'
 
 const defaultUser = {
@@ -21,9 +21,12 @@ function syncThenable<T>(value: T) {
   }
 }
 
-/** Overrides for domain mocks. Each `*Api` key replaces the whole export object. `default` stubs axios client. */
+/**
+ * Overrides for domain mocks. Each `*Api` key replaces the whole export object.
+ * For `'client'`, `default` replaces methods on the unwrapped `api` client (not raw `axiosApi`).
+ */
 export type MockApiOverrides = {
-  default?: Partial<Pick<AxiosInstance, 'get' | 'post' | 'put' | 'patch' | 'delete'>>
+  default?: Partial<ApiClient>
 } & Record<string, unknown>
 
 function applyAuthDefaults(
@@ -50,20 +53,28 @@ export async function createMockedDomainModule(
   moduleId: ApiModuleId,
   overrides: MockApiOverrides = {}
 ): Promise<Record<string, unknown>> {
+  const validKeys = moduleApiKeys(moduleId)
+  const ignoredKeys = Object.keys(overrides).filter((key) => !validKeys.includes(key))
+  if (ignoredKeys.length > 0) {
+    throw new Error(
+      `Invalid override key(s) for domain '${moduleId}': ${ignoredKeys.join(', ')}. Valid keys: ${validKeys.join(', ')}.`
+    )
+  }
+
   const actual = await vi.importActual<Record<string, unknown>>(`${API_ROOT}/${moduleId}`)
   const out: Record<string, unknown> = { ...actual }
 
-  for (const key of moduleApiKeys(moduleId)) {
-    if (key in overrides) {
-      out[key] = overrides[key]
-    }
-  }
-
   if (moduleId === 'client') {
-    const clientApi = actual.api as AxiosInstance
+    const clientApi = actual.api as ApiClient
     out.api = overrides.default
-      ? ({ ...clientApi, ...overrides.default } as AxiosInstance)
+      ? ({ ...clientApi, ...overrides.default } as ApiClient)
       : clientApi
+  } else {
+    for (const key of validKeys) {
+      if (key in overrides) {
+        out[key] = overrides[key]
+      }
+    }
   }
 
   if (moduleId === 'auth') return applyAuthDefaults(out, overrides)

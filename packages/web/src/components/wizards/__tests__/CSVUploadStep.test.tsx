@@ -23,9 +23,6 @@ vi.mock('../../../lib/api/reference-data', async () => {
     specimenTypesApi: {
       getByContainerType: vi.fn(),
     },
-    settingsApi: {
-      get: vi.fn().mockResolvedValue({ key: 'container_defaults', value: null }),
-    },
   })
 })
 

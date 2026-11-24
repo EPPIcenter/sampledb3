@@ -62,19 +62,22 @@ vi.mock('../../lib/api/auth', async () => {
 vi.mock('../../lib/api/collections', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { micronixMovePageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('collections', micronixMovePageMock())
+  const { collectionsApi } = micronixMovePageMock()
+  return createMockedDomainModule('collections', { collectionsApi })
 })
 
 vi.mock('../../lib/api/locations', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { micronixMovePageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('locations', micronixMovePageMock())
+  const { locationsApi } = micronixMovePageMock()
+  return createMockedDomainModule('locations', { locationsApi })
 })
 
 vi.mock('../../lib/api/settings', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { micronixMovePageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('settings', micronixMovePageMock())
+  const { settingsApi } = micronixMovePageMock()
+  return createMockedDomainModule('settings', { settingsApi })
 })
 
 vi.mock('../../components/LocationPicker', () => ({

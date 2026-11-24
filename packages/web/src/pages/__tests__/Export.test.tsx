@@ -9,19 +9,22 @@ import { specimenTypesApi, tagsApi } from '../../lib/api/reference-data'
 vi.mock('../../lib/api/export', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { exportPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('export', exportPageMock())
+  const { exportApi } = exportPageMock()
+  return createMockedDomainModule('export', { exportApi })
 })
 
 vi.mock('../../lib/api/settings', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { exportPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('settings', exportPageMock())
+  const { settingsApi } = exportPageMock()
+  return createMockedDomainModule('settings', { settingsApi })
 })
 
 vi.mock('../../lib/api/reference-data', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { exportPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('reference-data', exportPageMock())
+  const { specimenTypesApi, tagsApi } = exportPageMock()
+  return createMockedDomainModule('reference-data', { specimenTypesApi, tagsApi })
 })
 
 describe('Export', () => {

@@ -35,11 +35,6 @@ vi.mock('../../../lib/api/collections', async () => {
     collectionsApi: {
       listCollectionsByType: vi.fn().mockResolvedValue({ collections: [] }),
     },
-    settingsApi: {
-      getContainerTypeUnits: vi.fn((ct: string) =>
-        Promise.resolve({ units: mockUnitsByType[ct] ?? [] })
-      ),
-    },
   })
 })
 

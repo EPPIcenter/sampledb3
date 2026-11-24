@@ -23,7 +23,9 @@ const sharedMocks = vi.hoisted(() => ({
 
 vi.mock('../../lib/api/reference-data', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
-  return createMockedDomainModule('reference-data', sharedMocks)
+  return createMockedDomainModule('reference-data', {
+    specimenTypesApi: sharedMocks.specimenTypesApi,
+  })
 })
 
 vi.mock('../../lib/api/collections', async () => {

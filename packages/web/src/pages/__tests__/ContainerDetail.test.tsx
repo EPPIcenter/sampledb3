@@ -13,13 +13,15 @@ vi.mock('react-router-dom', async () => {
 vi.mock('../../lib/api/client', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { containerDetailPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('client', containerDetailPageMock())
+  const { default: clientDefault } = containerDetailPageMock()
+  return createMockedDomainModule('client', { default: clientDefault })
 })
 
 vi.mock('../../lib/api/derivations', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { containerDetailPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('derivations', containerDetailPageMock())
+  const { derivationsApi } = containerDetailPageMock()
+  return createMockedDomainModule('derivations', { derivationsApi })
 })
 
 vi.mock('../../contexts/UserContext', async () => {

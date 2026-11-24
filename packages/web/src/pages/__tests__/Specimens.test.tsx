@@ -53,13 +53,15 @@ vi.mock('../../contexts/UserContext', async () => {
 vi.mock('../../lib/api/client', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { specimensPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('client', specimensPageMock())
+  const { default: clientDefault } = specimensPageMock()
+  return createMockedDomainModule('client', { default: clientDefault })
 })
 
 vi.mock('../../lib/api/reference-data', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { specimensPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('reference-data', specimensPageMock())
+  const { specimenTypesApi } = specimensPageMock()
+  return createMockedDomainModule('reference-data', { specimenTypesApi })
 })
 
 vi.mock('../../lib/api/studies', async () => {

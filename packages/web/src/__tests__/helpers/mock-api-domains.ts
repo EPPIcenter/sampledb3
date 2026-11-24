@@ -116,7 +116,7 @@ const MODULE_API_KEYS: Record<ApiModuleId, string[]> = {
   admin: ['adminApi'],
   qpcr: ['qpcrExperimentsApi'],
   'error-logs': ['errorLogsApi'],
-  client: ['api'],
+  client: ['default'],
 }
 
 export function modulesForOverrides(overrides: MockApiOverrides): ApiModuleId[] {

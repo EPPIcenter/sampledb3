@@ -53,36 +53,22 @@ vi.mock('react-router-dom', async (importOriginal) => {
 vi.mock('../../lib/api/locations', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('locations', {
-    authApi: {
-        getCurrentUser: vi.fn().mockResolvedValue({ user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } }),
-    },
-    collectionsApi: {
-        resolveContainers: vi.fn(),
-        listCollectionsByType: vi.fn(),
-        moveContainers: vi.fn()
-    },
     locationsApi: {
-        list: vi.fn()
-    }
-})
+      list: vi.fn(),
+    },
+  })
 })
 
 vi.mock('../../lib/api/collections', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('collections', {
-    authApi: {
-        getCurrentUser: vi.fn().mockResolvedValue({ user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } }),
-    },
     collectionsApi: {
-        resolveContainers: vi.fn(),
-        listCollectionsByType: vi.fn(),
-        moveContainers: vi.fn(),
-        createCryovialBox: vi.fn()
+      resolveContainers: vi.fn(),
+      listCollectionsByType: vi.fn(),
+      moveContainers: vi.fn(),
+      createCryovialBox: vi.fn(),
     },
-    locationsApi: {
-        list: vi.fn()
-    }
-})
+  })
 })
 
 vi.mock('../../components/LocationPicker', () => ({
@@ -105,15 +91,7 @@ vi.mock('../../lib/api/auth', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('auth', {
     authApi: {
-        getCurrentUser: vi.fn().mockResolvedValue({ user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } }),
-    },
-    collectionsApi: {
-        resolveContainers: vi.fn(),
-        listCollectionsByType: vi.fn(),
-        moveContainers: vi.fn()
-    },
-    locationsApi: {
-        list: vi.fn()
+      getCurrentUser: vi.fn().mockResolvedValue({ user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } }),
     },
   })
 })

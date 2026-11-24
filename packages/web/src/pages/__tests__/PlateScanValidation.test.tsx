@@ -10,26 +10,19 @@ import { mockSettingsApiGetValue, scannerConfigurationsValue } from '../../__tes
 vi.mock('../../lib/api/collections', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('collections', {
-  collectionsApi: {
-    listCollectionsByType: vi.fn(),
-    validatePlateScan: vi.fn(),
-  },
-  settingsApi: {
-    getValue: vi.fn(),
-  },
-})
+    collectionsApi: {
+      listCollectionsByType: vi.fn(),
+      validatePlateScan: vi.fn(),
+    },
+  })
 })
 
 vi.mock('../../lib/api/settings', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('settings', {
-  collectionsApi: {
-    listCollectionsByType: vi.fn(),
-    validatePlateScan: vi.fn(),
-  },
-  settingsApi: {
-    getValue: vi.fn(),
-  },
+    settingsApi: {
+      getValue: vi.fn(),
+    },
   })
 })
 

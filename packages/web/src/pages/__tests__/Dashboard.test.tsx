@@ -11,7 +11,8 @@ import { locationsApi } from '../../lib/api/locations'
 vi.mock('../../lib/api/studies', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { dashboardPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('studies', dashboardPageMock())
+  const { studiesApi } = dashboardPageMock()
+  return createMockedDomainModule('studies', { studiesApi })
 })
 
 vi.mock('../../lib/api/specimens', async () => {
@@ -37,25 +38,29 @@ vi.mock('../../lib/api/locations', async () => {
 vi.mock('../../lib/api/search', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { dashboardPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('search', dashboardPageMock())
+  const { activityApi } = dashboardPageMock()
+  return createMockedDomainModule('search', { activityApi })
 })
 
 vi.mock('../../lib/api/statistics', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { dashboardPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('statistics', dashboardPageMock())
+  const { statisticsApi } = dashboardPageMock()
+  return createMockedDomainModule('statistics', { statisticsApi })
 })
 
 vi.mock('../../lib/api/controls', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { dashboardPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('controls', dashboardPageMock())
+  const { controlsApi } = dashboardPageMock()
+  return createMockedDomainModule('controls', { controlsApi })
 })
 
 vi.mock('../../lib/api/qpcr', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { dashboardPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('qpcr', dashboardPageMock())
+  const { qpcrExperimentsApi } = dashboardPageMock()
+  return createMockedDomainModule('qpcr', { qpcrExperimentsApi })
 })
 
 vi.mock('../../contexts/UserContext', async () => {

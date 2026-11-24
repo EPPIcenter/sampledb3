@@ -23,7 +23,7 @@ it('handles a click', async () => {
 
 ## Mocking the API
 
-`createMockedDomainModule(domain, overrides)` in `helpers/mock-api.ts` loads the real module with `vi.importActual` and replaces the exports that `overrides` names, but only those that `MODULE_API_KEYS` in `helpers/mock-api-domains.ts` lists for that domain. It ignores any other name in `overrides` without an error, so a new export needs an entry in `MODULE_API_KEYS` before the helper will replace it. For `'auth'` without an `authApi` override, the helper also replaces `authApi.getCurrentUser` with a mock that resolves to a default admin user. What to pass is under Web tests in `CODING_STANDARDS.md`:
+`createMockedDomainModule(domain, overrides)` in `helpers/mock-api.ts` loads the real module with `vi.importActual` and replaces the exports that `overrides` names, as listed in `MODULE_API_KEYS` (`helpers/mock-api-domains.ts`) for that domain. Passing any other key throws an error naming the invalid key and the valid keys for that domain, so a new export needs an entry in `MODULE_API_KEYS` before the helper will replace it. For `'auth'` without an `authApi` override, the helper also replaces `authApi.getCurrentUser` with a mock that resolves to a default admin user. What to pass is under Web tests in `CODING_STANDARDS.md`:
 
 ```typescript
 import { studiesApi } from '../../lib/api/studies'
@@ -43,7 +43,7 @@ vi.mocked(studiesApi.list).mockResolvedValue({
 
 Import `createMockedDomainModule` with a dynamic `import()` inside the factory. Vitest hoists `vi.mock` above the file's imports, so a top-level import hits a TDZ error when the file also imports `helpers/render`.
 
-To mock `api`, the client whose methods resolve to the response body, mock `lib/api/client` with `createMockedDomainModule('client', { default: { get: vi.fn() } })`. For `'client'`, `default` is the only override that takes effect. The helper copies the real `api` object and swaps in the methods you pass, so make each mock resolve to a response body. Methods you leave out stay real.
+To mock `api`, the client whose methods resolve to the response body, mock `lib/api/client` with `createMockedDomainModule('client', { default: { get: vi.fn() } })`. For `'client'`, `default` is the only valid override key; passing any other key (including `api`) throws. The helper copies the real `api` object and swaps in the methods you pass, so make each mock resolve to a response body. Methods you leave out stay real.
 
 The helper leaves `axiosApi`, the raw axios instance, as the real one. To test code that calls `axiosApi` directly, either replace `axiosApi.defaults.adapter` in the test and restore it afterwards, as `lib/api/__tests__/client.test.ts` does, or mock `lib/api/client` with a hand-written factory, as `lib/__tests__/error-logger.test.ts` does.
 

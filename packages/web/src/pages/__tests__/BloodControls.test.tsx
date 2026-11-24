@@ -5,13 +5,15 @@ import BloodControls from '../BloodControls'
 vi.mock('../../lib/api/controls', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { bloodControlsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('controls', bloodControlsPageMock())
+  const { controlsApi } = bloodControlsPageMock()
+  return createMockedDomainModule('controls', { controlsApi })
 })
 
 vi.mock('../../lib/api/reference-data', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { bloodControlsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('reference-data', bloodControlsPageMock())
+  const { strainsApi } = bloodControlsPageMock()
+  return createMockedDomainModule('reference-data', { strainsApi })
 })
 
 vi.mock('../../contexts/UserContext', async () => {

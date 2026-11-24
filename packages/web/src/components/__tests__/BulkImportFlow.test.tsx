@@ -18,31 +18,36 @@ vi.mock('../LocationPicker', () => ({
 vi.mock('../../lib/api/reference-data', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { bulkImportFlowMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('reference-data', bulkImportFlowMock())
+  const { specimenTypesApi } = bulkImportFlowMock()
+  return createMockedDomainModule('reference-data', { specimenTypesApi })
 })
 
 vi.mock('../../lib/api/subjects', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { bulkImportFlowMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('subjects', bulkImportFlowMock())
+  const { subjectsApi } = bulkImportFlowMock()
+  return createMockedDomainModule('subjects', { subjectsApi })
 })
 
 vi.mock('../../lib/api/specimens', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { bulkImportFlowMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('specimens', bulkImportFlowMock())
+  const { specimensApi } = bulkImportFlowMock()
+  return createMockedDomainModule('specimens', { specimensApi })
 })
 
 vi.mock('../../lib/api/imports', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { bulkImportFlowMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('imports', bulkImportFlowMock())
+  const { importsApi } = bulkImportFlowMock()
+  return createMockedDomainModule('imports', { importsApi })
 })
 
 vi.mock('../../lib/api/collections', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { bulkImportFlowMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('collections', bulkImportFlowMock())
+  const { collectionsApi } = bulkImportFlowMock()
+  return createMockedDomainModule('collections', { collectionsApi })
 })
 
 describe('BulkImportFlow', () => {

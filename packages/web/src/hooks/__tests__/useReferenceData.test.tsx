@@ -38,9 +38,6 @@ vi.mock('../../lib/api/reference-data', async () => {
     update: vi.fn(),
     delete: vi.fn(),
   },
-  statesApi: {
-    list: vi.fn(),
-  },
   storageTypesApi: {
     list: vi.fn(),
   },

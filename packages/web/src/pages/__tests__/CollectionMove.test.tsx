@@ -8,48 +8,28 @@ import { locationsApi } from '../../lib/api/locations'
 vi.mock('../../lib/api/locations', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('locations', {
-  authApi: {
-    getCurrentUser: vi.fn().mockResolvedValue({
-      data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
-    }),
-  },
-  locationsApi: { list: vi.fn().mockResolvedValue({ locations: [] }) },
-  collectionsApi: {
-    listAllCollections: vi.fn().mockResolvedValue({ collections: [] }),
-    moveCollections: vi.fn().mockResolvedValue({ success: true, moved: 0 }),
-  },
-})
+    locationsApi: { list: vi.fn().mockResolvedValue({ locations: [] }) },
+  })
 })
 
 vi.mock('../../lib/api/collections', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('collections', {
-  authApi: {
-    getCurrentUser: vi.fn().mockResolvedValue({
-      data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
-    }),
-  },
-  locationsApi: { list: vi.fn().mockResolvedValue({ locations: [] }) },
-  collectionsApi: {
-    listAllCollections: vi.fn().mockResolvedValue({ collections: [] }),
-    moveCollections: vi.fn().mockResolvedValue({ success: true, moved: 0 }),
-  },
-})
+    collectionsApi: {
+      listAllCollections: vi.fn().mockResolvedValue({ collections: [] }),
+      moveCollections: vi.fn().mockResolvedValue({ success: true, moved: 0 }),
+    },
+  })
 })
 
 vi.mock('../../lib/api/auth', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('auth', {
-  authApi: {
-    getCurrentUser: vi.fn().mockResolvedValue({
-      data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
-    }),
-  },
-  locationsApi: { list: vi.fn().mockResolvedValue({ locations: [] }) },
-  collectionsApi: {
-    listAllCollections: vi.fn().mockResolvedValue({ collections: [] }),
-    moveCollections: vi.fn().mockResolvedValue({ success: true, moved: 0 }),
-  }
+    authApi: {
+      getCurrentUser: vi.fn().mockResolvedValue({
+        data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
+      }),
+    },
   })
 })
 

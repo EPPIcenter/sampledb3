@@ -6,13 +6,15 @@ import Locations from '../Locations'
 vi.mock('../../lib/api/locations', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { locationsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('locations', locationsPageMock())
+  const { locationsApi } = locationsPageMock()
+  return createMockedDomainModule('locations', { locationsApi })
 })
 
 vi.mock('../../lib/api/search', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { locationsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('search', locationsPageMock())
+  const { searchApi } = locationsPageMock()
+  return createMockedDomainModule('search', { searchApi })
 })
 
 vi.mock('../../contexts/UserContext', async () => {

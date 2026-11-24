@@ -46,7 +46,8 @@ vi.mock('../../lib/api/export', async () => {
 vi.mock('../../lib/api/settings', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { exportPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('settings', exportPageMock())
+  const { settingsApi } = exportPageMock()
+  return createMockedDomainModule('settings', { settingsApi })
 })
 
 describe('ExportModal', () => {

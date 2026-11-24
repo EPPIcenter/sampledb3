@@ -8,49 +8,57 @@ import { specimensApi } from '../../../lib/api/specimens'
 vi.mock('../../../lib/api/studies', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   const { specimenFormMock } = await import('../../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('studies', specimenFormMock())
+  const { studiesApi } = specimenFormMock()
+  return createMockedDomainModule('studies', { studiesApi })
 })
 
 vi.mock('../../../lib/api/subjects', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   const { specimenFormMock } = await import('../../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('subjects', specimenFormMock())
+  const { subjectsApi } = specimenFormMock()
+  return createMockedDomainModule('subjects', { subjectsApi })
 })
 
 vi.mock('../../../lib/api/specimens', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   const { specimenFormMock } = await import('../../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('specimens', specimenFormMock())
+  const { specimensApi } = specimenFormMock()
+  return createMockedDomainModule('specimens', { specimensApi })
 })
 
 vi.mock('../../../lib/api/reference-data', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   const { specimenFormMock } = await import('../../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('reference-data', specimenFormMock())
+  const { specimenTypesApi, cellLinesApi, plasmidsApi, standardsApi, unitsApi } = specimenFormMock()
+  return createMockedDomainModule('reference-data', { specimenTypesApi, cellLinesApi, plasmidsApi, standardsApi, unitsApi })
 })
 
 vi.mock('../../../lib/api/controls', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   const { specimenFormMock } = await import('../../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('controls', specimenFormMock())
+  const { controlsApi } = specimenFormMock()
+  return createMockedDomainModule('controls', { controlsApi })
 })
 
 vi.mock('../../../lib/api/reagents', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   const { specimenFormMock } = await import('../../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('reagents', specimenFormMock())
+  const { reagentsApi } = specimenFormMock()
+  return createMockedDomainModule('reagents', { reagentsApi })
 })
 
 vi.mock('../../../lib/api/collections', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   const { specimenFormMock } = await import('../../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('collections', specimenFormMock())
+  const { collectionsApi } = specimenFormMock()
+  return createMockedDomainModule('collections', { collectionsApi })
 })
 
 vi.mock('../../../lib/api/settings', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   const { specimenFormMock } = await import('../../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('settings', specimenFormMock())
+  const { settingsApi } = specimenFormMock()
+  return createMockedDomainModule('settings', { settingsApi })
 })
 
 vi.mock('react-router-dom', async () => {

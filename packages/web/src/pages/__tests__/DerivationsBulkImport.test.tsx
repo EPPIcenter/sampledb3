@@ -8,19 +8,22 @@ import { derivationsApi } from '../../lib/api/derivations'
 vi.mock('../../lib/api/reference-data', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { derivationsBulkImportPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('reference-data', derivationsBulkImportPageMock())
+  const { specimenTypesApi, unitsApi } = derivationsBulkImportPageMock()
+  return createMockedDomainModule('reference-data', { specimenTypesApi, unitsApi })
 })
 
 vi.mock('../../lib/api/collections', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { derivationsBulkImportPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('collections', derivationsBulkImportPageMock())
+  const { collectionsApi } = derivationsBulkImportPageMock()
+  return createMockedDomainModule('collections', { collectionsApi })
 })
 
 vi.mock('../../lib/api/derivations', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { derivationsBulkImportPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('derivations', derivationsBulkImportPageMock())
+  const { derivationsApi } = derivationsBulkImportPageMock()
+  return createMockedDomainModule('derivations', { derivationsApi })
 })
 
 vi.mock('../../contexts/UserContext', async () => {
