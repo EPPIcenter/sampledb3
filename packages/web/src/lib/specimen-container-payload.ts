@@ -22,37 +22,48 @@ export function isFlatContainerRegistration(
   )
 }
 
+function trimOptional(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : undefined
+}
+
 function micronixCollection(flat: ContainerData) {
-  if (flat.collectionBarcode) {
+  const collectionBarcode = trimOptional(flat.collectionBarcode)
+  const collectionName = trimOptional(flat.collectionName)
+  const position = trimOptional(flat.position)
+  if (collectionBarcode) {
     return {
       type: 'micronix_plate' as const,
-      barcode: flat.collectionBarcode,
-      ...(flat.position ? { position: flat.position } : {}),
+      barcode: collectionBarcode,
+      ...(position ? { position } : {}),
     }
   }
-  if (flat.collectionName) {
+  if (collectionName) {
     return {
       type: 'micronix_plate' as const,
-      name: flat.collectionName,
-      ...(flat.position ? { position: flat.position } : {}),
+      name: collectionName,
+      ...(position ? { position } : {}),
     }
   }
   return undefined
 }
 
 function cryovialCollection(flat: ContainerData) {
-  if (flat.collectionBarcode) {
+  const collectionBarcode = trimOptional(flat.collectionBarcode)
+  const collectionName = trimOptional(flat.collectionName)
+  const position = trimOptional(flat.position)
+  if (collectionBarcode) {
     return {
       type: 'cryovial_box' as const,
-      barcode: flat.collectionBarcode,
-      ...(flat.position ? { position: flat.position } : {}),
+      barcode: collectionBarcode,
+      ...(position ? { position } : {}),
     }
   }
-  if (flat.collectionName) {
+  if (collectionName) {
     return {
       type: 'cryovial_box' as const,
-      name: flat.collectionName,
-      ...(flat.position ? { position: flat.position } : {}),
+      name: collectionName,
+      ...(position ? { position } : {}),
     }
   }
   return undefined
@@ -70,23 +81,28 @@ export function flatContainerRegistrationToWriteInput(
   flat: ContainerData
 ): SpecimenContainerWriteInput {
   const comment = flat.comment?.trim() ? flat.comment : undefined
+  const barcode = trimOptional(flat.barcode)
+  const sublabel = trimOptional(flat.sublabel)
+  const sheetName = trimOptional(flat.sheetName)
+  const collectionName = trimOptional(flat.collectionName)
+  const collectionBarcode = trimOptional(flat.collectionBarcode)
 
   switch (flat.containerType) {
     case 'micronix_tube': {
       const collection = micronixCollection(flat)
       return {
         containerType: 'micronix_tube',
-        barcode: flat.barcode ?? '',
+        ...(barcode ? { barcode } : {}),
         ...(collection ? { collection } : {}),
         ...(comment ? { comment } : {}),
         ...quantityFields(flat),
-      }
+      } as SpecimenContainerWriteInput
     }
     case 'cryovial_tube': {
       const collection = cryovialCollection(flat)
       return {
         containerType: 'cryovial_tube',
-        ...(flat.barcode ? { barcode: flat.barcode } : {}),
+        ...(barcode ? { barcode } : {}),
         ...(collection ? { collection } : {}),
         ...(comment ? { comment } : {}),
         ...quantityFields(flat),
@@ -96,19 +112,19 @@ export function flatContainerRegistrationToWriteInput(
       const parentType = flat.parentCollectionType ?? 'box'
       const parentLocationId =
         flat.collectionLocationId != null ? { locationId: flat.collectionLocationId } : {}
-      const parent = flat.collectionName
-        ? { type: parentType, name: flat.collectionName, ...parentLocationId }
-        : flat.collectionBarcode
-          ? { type: parentType, name: flat.collectionBarcode, ...parentLocationId }
+      const parent = collectionName
+        ? { type: parentType, name: collectionName, ...parentLocationId }
+        : collectionBarcode
+          ? { type: parentType, name: collectionBarcode, ...parentLocationId }
           : undefined
       return {
         containerType: 'paper',
-        ...(flat.sublabel ? { sublabel: flat.sublabel } : {}),
-        ...(flat.sheetName
+        ...(sublabel ? { sublabel } : {}),
+        ...(sheetName
           ? {
               collection: {
                 type: 'sheet',
-                name: flat.sheetName,
+                name: sheetName,
                 ...(parent ? { parent } : {}),
               },
             }

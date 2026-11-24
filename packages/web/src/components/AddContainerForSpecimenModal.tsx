@@ -1,10 +1,31 @@
 import { useState, useEffect } from 'react'
-import { Modal } from '../ui'
+import { Modal, getQueryErrorMessage } from '../ui'
 import ContainerRegistration, { type ContainerData } from './ContainerRegistration'
 import { useAddSpecimenContainer } from '../hooks/useContainers'
 import { flatContainerRegistrationToWriteInput } from '../lib/specimen-container-payload'
 import { specimenTypesApi } from '../lib/api/reference-data';
 import '../styles/subject-specimen.css'
+
+function formatAddContainerError(err: unknown): string {
+  const data =
+    err && typeof err === 'object' && 'response' in err
+      ? (err as {
+          response?: {
+            data?: {
+              error?: string
+              details?: Array<{ path?: Array<string | number>; message?: string }>
+            }
+          }
+        }).response?.data
+      : undefined
+  if (Array.isArray(data?.details) && data.details.length > 0) {
+    const parts = data.details
+      .filter((issue) => typeof issue.message === 'string' && issue.message.length > 0)
+      .map((issue) => (issue.path?.length ? `${issue.path.join('.')}: ${issue.message}` : issue.message!))
+    if (parts.length > 0) return parts.join('; ')
+  }
+  return getQueryErrorMessage(err, 'Failed to add container')
+}
 
 interface AddContainerForSpecimenModalProps {
   isOpen: boolean
@@ -33,6 +54,7 @@ export default function AddContainerForSpecimenModal({
   useEffect(() => {
     if (!isOpen || !specimenTypeId) return
     let cancelled = false
+    setError(null)
     setAllowedTypesLoading(true)
     specimenTypesApi
       .getContainerTypes(specimenTypeId)
@@ -62,11 +84,7 @@ export default function AddContainerForSpecimenModal({
       onSuccess?.()
       onClose()
     } catch (err: unknown) {
-      const message =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-          : null
-      setError(message || 'Failed to add container')
+      setError(formatAddContainerError(err))
     } finally {
       setLoading(false)
     }
@@ -76,7 +94,7 @@ export default function AddContainerForSpecimenModal({
     <Modal isOpen onClose={onClose} title="Add container" contentClassName="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
       <form onSubmit={handleSubmit}>
         {error && (
-          <div className="mb-4 p-3 bg-app-trend-down/10 border border-app-trend-down rounded text-sm text-app-trend-down">
+          <div role="alert" className="mb-4 p-3 bg-app-trend-down/10 border border-app-trend-down rounded text-sm text-app-trend-down">
             {error}
           </div>
         )}
