@@ -41,6 +41,7 @@ check 'docker compose run --rm demo-seed' 'there is no demo-seed compose service
 check '"Execute Move"' 'paper move confirm button is Confirm Move'
 check '\[Barcode Export\]' 'sidebar and page heading are Micronix Barcode Export'
 check 'Only administrators (can )?create (or|and) edit locations' 'members create locations and delete empty ones'
+check 'Click \*\*Edit Location\*\*' 'the edit control is a pencil icon; Edit Location is the title of its form'
 
 if [ "$fail" -ne 0 ]; then
   echo
