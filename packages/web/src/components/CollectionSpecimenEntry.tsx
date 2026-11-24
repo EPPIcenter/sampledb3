@@ -115,8 +115,15 @@ export default function CollectionSpecimenEntry({
       for (const [position, entry] of entries.entries()) {
         if (entry.studyShortCode && entry.subjectName && entry.specimenTypeName) {
           validEntries.push({ ...entry, position })
-        } else if (entry.subjectName || entry.barcode || entry.collectionDate) {
+        } else if (
+          entry.studyShortCode ||
+          entry.subjectName ||
+          entry.specimenTypeName ||
+          entry.barcode ||
+          entry.collectionDate
+        ) {
           // Started but missing study, subject, or specimen type: say so instead of skipping it.
+          // No field is pre-filled, so any value here is one the user entered.
           incompletePositions.push(position)
         }
       }
