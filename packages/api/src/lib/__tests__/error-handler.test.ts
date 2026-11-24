@@ -127,13 +127,30 @@ describe('error-handler', () => {
       }
     })
 
-    it('returns 409 and CONFLICT for ConflictError', async () => {
+    it('returns 409 and CONFLICT for ConflictError and logs at warning level', async () => {
       const app = createAppWithError(new ConflictError('Resource already exists'))
       const res = await app.request('http://localhost/test')
       expect(res.status).toBe(409)
       const data = await getJson(res)
       expect(data.error).toBe('Resource already exists')
       expect(data.errorCode).toBe('CONFLICT')
+
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const atErrorLevel = await testDb.select().from(errorLogs).where(eq(errorLogs.message, 'Resource already exists'))
+      expect(atErrorLevel).toHaveLength(0)
+
+      const previous = process.env.ERROR_LOG_LEVEL
+      process.env.ERROR_LOG_LEVEL = 'warning'
+      try {
+        await app.request('http://localhost/test')
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        const atWarningLevel = await testDb.select().from(errorLogs).where(eq(errorLogs.message, 'Resource already exists'))
+        expect(atWarningLevel).toHaveLength(1)
+        expect(atWarningLevel[0].level).toBe('warning')
+      } finally {
+        if (previous !== undefined) process.env.ERROR_LOG_LEVEL = previous
+        else delete process.env.ERROR_LOG_LEVEL
+      }
     })
 
     it('returns 400 and VALIDATION_ERROR for ZodError', async () => {
@@ -147,7 +164,7 @@ describe('error-handler', () => {
       expect(data.details).toBeDefined()
     })
 
-    it('returns 400 and VALIDATION_ERROR for ValidationError (custom)', async () => {
+    it('returns 400 and VALIDATION_ERROR for ValidationError (custom) and logs at warning level', async () => {
       const app = createAppWithError(new ValidationError('Invalid input', { field: 'name' }))
       const res = await app.request('http://localhost/test')
       expect(res.status).toBe(400)
@@ -155,6 +172,23 @@ describe('error-handler', () => {
       expect(data.error).toBe('Invalid input')
       expect(data.errorCode).toBe('VALIDATION_ERROR')
       expect(data.details).toEqual({ field: 'name' })
+
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const atErrorLevel = await testDb.select().from(errorLogs).where(eq(errorLogs.message, 'Invalid input'))
+      expect(atErrorLevel).toHaveLength(0)
+
+      const previous = process.env.ERROR_LOG_LEVEL
+      process.env.ERROR_LOG_LEVEL = 'warning'
+      try {
+        await app.request('http://localhost/test')
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        const atWarningLevel = await testDb.select().from(errorLogs).where(eq(errorLogs.message, 'Invalid input'))
+        expect(atWarningLevel).toHaveLength(1)
+        expect(atWarningLevel[0].level).toBe('warning')
+      } finally {
+        if (previous !== undefined) process.env.ERROR_LOG_LEVEL = previous
+        else delete process.env.ERROR_LOG_LEVEL
+      }
     })
 
     it('returns 400 without logging an error row when a request body is malformed JSON', async () => {

@@ -170,8 +170,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
     }
     
     if (error instanceof ConflictError) {
-      // Log error asynchronously (non-blocking)
-      logBackendError(database, error, errorContext).catch(logPersistFailure)
+      logError(database, 'backend', 'warning', error.message, error, errorContext).catch(logPersistFailure)
       return c.json({
         ...error.fields,
         error: error.message,
@@ -193,8 +192,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
     }
     
     if (error instanceof ValidationError) {
-      // Log error asynchronously (non-blocking)
-      logBackendError(database, error, errorContext).catch(logPersistFailure)
+      logError(database, 'backend', 'warning', error.message, error, errorContext).catch(logPersistFailure)
       return c.json({
         error: error.message,
         details: error.details,
