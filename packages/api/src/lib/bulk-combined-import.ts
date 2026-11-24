@@ -10,7 +10,7 @@ import { and, eq } from 'drizzle-orm'
 import { validateStudyShortCode, validateSubjectName } from './validation'
 import { utcNow } from './datetime'
 import { resolveSpecimenTypeByName } from './identifier-resolution'
-import { ConflictError, ValidationError } from './error-handler'
+import { ConflictError, sqliteConstraintConflict, ValidationError } from './error-handler'
 import { withRolledBackTransaction, withWriteTransaction } from '../db/write-transaction'
 import {
   RefusedWithErrors,
@@ -73,6 +73,12 @@ export interface BulkCombinedError {
 /** The subjects could not all be registered; nothing was written. */
 class BulkCombinedRejected extends RefusedWithErrors<BulkCombinedError> {}
 
+/**
+ * The Source given to registration for a subject that could not be found or created. No Subject
+ * has this id, so registration refuses the entries, after checking their containers.
+ */
+const UNREGISTERED_SUBJECT_ID = -1
+
 /** A subject's own study wins over the payload-level default. */
 export function resolveSubjectStudyShortCode(
   payloadStudyShortCode: string | undefined,
@@ -100,27 +106,18 @@ async function registerSubjects(
   const studyIds = new Map<string, Awaited<ReturnType<typeof validateStudyShortCode>>>()
   const specimenTypeIds = new Map<string, number | null>()
 
-  for (let subjectIndex = 0; subjectIndex < subjects.length; subjectIndex++) {
-    const subj = subjects[subjectIndex]
-    const subjectError = (message: string) =>
-      errors.push({ subjectIndex, specimenIndex: 0, rowIndex: subj.specimens[0]?.rowIndex, message })
-
+  /** The subject's record, found or just created, or why there is none. */
+  const findOrCreateSubject = async (
+    subj: BulkCombinedSubjectInput,
+  ): Promise<{ subject: typeof studySubject.$inferSelect; created: boolean } | { error: string } | { conflict: string }> => {
     const code = resolveSubjectStudyShortCode(payloadStudyShortCode, subj)
-    if (!code) {
-      subjectError('Study short code is required')
-      registered.push(null)
-      continue
-    }
+    if (!code) return { error: 'Study short code is required' }
     let study = studyIds.get(code)
     if (!study) {
       study = await validateStudyShortCode(database, code)
       studyIds.set(code, study)
     }
-    if (!study.valid || !study.studyId) {
-      subjectError(study.error ?? 'Invalid study')
-      registered.push(null)
-      continue
-    }
+    if (!study.valid || !study.studyId) return { error: study.error ?? 'Invalid study' }
     const studyId = study.studyId
 
     // Names are unique per study: a subject named again (in the database or earlier in this
@@ -131,21 +128,43 @@ async function registerSubjects(
       .from(studySubject)
       .where(and(eq(studySubject.studyId, studyId), eq(studySubject.name, name)))
       .get()
-    let subject = existing
-    if (!subject) {
-      const nameValidation = await validateSubjectName(database, studyId, name)
-      if (!nameValidation.valid) {
-        subjectError(nameValidation.error ?? 'Invalid subject name')
-        registered.push(null)
-        continue
-      }
-      subject = database
+    if (existing) return { subject: existing, created: false }
+
+    const nameValidation = await validateSubjectName(database, studyId, name)
+    if (!nameValidation.valid) return { error: nameValidation.error ?? 'Invalid subject name' }
+    try {
+      const subject = database
         .insert(studySubject)
         .values({ studyId, name, created: now, lastUpdated: now, createdBy: userId, updatedBy: userId })
         .returning()
         .get()
+      return { subject, created: true }
+    } catch (error) {
+      const conflict = error instanceof Error ? sqliteConstraintConflict(error) : null
+      if (conflict === null) throw error
+      return { conflict }
     }
-    registered.push({ subject, created: !existing })
+  }
+
+  for (let subjectIndex = 0; subjectIndex < subjects.length; subjectIndex++) {
+    const subj = subjects[subjectIndex]
+    const subjectError = { subjectIndex, specimenIndex: 0, rowIndex: subj.specimens[0]?.rowIndex }
+
+    const found = await findOrCreateSubject(subj)
+    if ('conflict' in found) {
+      // A constraint hit while writing is a 409, as it is in registration (ADR 0010).
+      throw new BulkCombinedRejected(409, [...errors, { ...subjectError, message: found.conflict }])
+    }
+    // A subject with no record still has its specimens and containers checked, so one pass
+    // reports every problem in its rows.
+    let subjectId = UNREGISTERED_SUBJECT_ID
+    if ('error' in found) {
+      errors.push({ ...subjectError, message: found.error })
+      registered.push(null)
+    } else {
+      registered.push(found)
+      subjectId = found.subject.id
+    }
 
     for (let specimenIndex = 0; specimenIndex < subj.specimens.length; specimenIndex++) {
       const spec = subj.specimens[specimenIndex]
@@ -164,7 +183,7 @@ async function registerSubjects(
         continue
       }
       entries.push({
-        source: { subjectId: subject.id },
+        source: { subjectId },
         specimenTypeId,
         collectionDate: spec.collectionDate,
         containers: spec.container ? [spec.container] : [],
@@ -178,7 +197,10 @@ async function registerSubjects(
     registration = await registerSpecimens(database, entries, { userId, inputName })
   } catch (error) {
     if (!(error instanceof SpecimenRegistrationError)) throw error
-    const mapped = error.errors.map((e) => ({ ...entryRefs[e.entryIndex], message: e.message }))
+    const mapped = error.errors
+      // A subject with no record has its own error already; registration repeats it as a missing Source.
+      .filter((e) => !(e.field === 'source' && registered[entryRefs[e.entryIndex].subjectIndex] === null))
+      .map((e) => ({ ...entryRefs[e.entryIndex], message: e.message }))
     if (error.status === 409) throw new BulkCombinedRejected(409, [...errors, ...mapped])
     errors.push(...mapped)
   }
