@@ -69,8 +69,13 @@ function handleExportFailure(c: Context, message: string, error: unknown): Respo
   ) {
     return handleRouteError(error, c)
   }
-  const details = error instanceof Error ? error.message : String(error)
-  return handleRouteError(new RouteError(500, { error: message, details }), c)
+  // The cause's message can carry SQL or other internals, so it stays out of production
+  // responses, as in handleRouteError's 500s. handleRouteError logs the cause in full.
+  const body =
+    process.env.NODE_ENV === 'production'
+      ? { error: message }
+      : { error: message, details: error instanceof Error ? error.message : String(error) }
+  return handleRouteError(new RouteError(500, body, error), c)
 }
 
 /** Export columns: an array, or a JSON array in a string. Malformed JSON or a non-array throws a `ValidationError`. */

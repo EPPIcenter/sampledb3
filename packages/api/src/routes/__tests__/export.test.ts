@@ -770,5 +770,76 @@ describe('Export API', () => {
 
       spy.mockRestore()
     })
+
+    describe('with NODE_ENV=production', () => {
+      let previousNodeEnv: string | undefined
+      let previousLogFormat: string | undefined
+      let originalConsoleError: typeof console.error
+      let stderrLines: string[]
+
+      beforeEach(() => {
+        previousNodeEnv = process.env.NODE_ENV
+        previousLogFormat = process.env.LOG_FORMAT
+        process.env.NODE_ENV = 'production'
+        process.env.LOG_FORMAT = 'json'
+        stderrLines = []
+        originalConsoleError = console.error
+        console.error = (...args: unknown[]) => {
+          stderrLines.push(args.map(String).join(' '))
+        }
+      })
+
+      afterEach(() => {
+        console.error = originalConsoleError
+        process.env.NODE_ENV = previousNodeEnv
+        if (previousLogFormat === undefined) delete process.env.LOG_FORMAT
+        else process.env.LOG_FORMAT = previousLogFormat
+      })
+
+      /** The error_logs rows for `message`, once the handler's unawaited insert has run. */
+      async function loggedFailures(message: string) {
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        return ctx.db.select().from(errorLogs).where(eq(errorLogs.message, message))
+      }
+
+      it('keeps the cause of a 500 out of the response and logs it', async () => {
+        const sqlMessage = 'SQLITE_ERROR: no such column: specimen.secret_col in SELECT * FROM specimen'
+        const spy = vi.spyOn(specimensCsv, 'exportSpecimensCsv').mockRejectedValueOnce(new Error(sqlMessage))
+
+        const res = await ctx.request('/api/export/specimens.csv', { method: 'GET' })
+
+        expect(res.status).toBe(500)
+        const text = await res.text()
+        expect(JSON.parse(text)).toEqual({ error: 'Failed to export specimens' })
+        expect(text).not.toContain('SQLITE')
+        expect(stderrLines.some((line) => line.includes(sqlMessage))).toBe(true)
+        const rows = await loggedFailures('Failed to export specimens')
+        expect(rows).toHaveLength(1)
+        expect(rows[0].level).toBe('error')
+        expect(rows[0].stack).toContain(sqlMessage)
+
+        spy.mockRestore()
+      })
+
+      it('keeps a SQLite error out of a POST export 500 and logs it', async () => {
+        const study = await createTestStudy(ctx.db, { title: 'Broken Study', shortCode: 'BRK' })
+        await createTestStudySubject(ctx.db, { studyId: study.id, name: 'Subj1' })
+        ctx.sqlite.exec('ALTER TABLE storage_container_tag RENAME TO storage_container_tag_gone')
+
+        const res = await ctx.request('/api/export/containers', {
+          method: 'POST',
+          json: { study: 'BRK', subject_names: ['Subj1'], tag_ids: [1] },
+        })
+
+        expect(res.status).toBe(500)
+        const text = await res.text()
+        expect(JSON.parse(text)).toEqual({ error: 'Failed to export containers' })
+        expect(text).not.toContain('storage_container_tag')
+        expect(stderrLines.some((line) => line.includes('storage_container_tag'))).toBe(true)
+        const rows = await loggedFailures('Failed to export containers')
+        expect(rows).toHaveLength(1)
+        expect(rows[0].stack).toContain('storage_container_tag')
+      })
+    })
   })
 })

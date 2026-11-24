@@ -81,7 +81,15 @@ export function handleRouteError(error: unknown, c: Context): Response {
   
   // Preserve route-specific JSON bodies (search, containers read paths, etc.)
   if (error instanceof RouteError) {
-    logBackendError(database, error, errorContext).catch(logPersistFailure)
+    if (error.cause !== undefined) {
+      // The body leaves the cause out in production, so log it in full: stdout, and error_logs
+      // under the route's message with the cause's name and stack.
+      const cause = error.cause instanceof Error ? error.cause : new Error(String(error.cause))
+      logInternalError(cause, c)
+      logError(database, 'backend', 'error', error.message, cause, errorContext).catch(logPersistFailure)
+    } else {
+      logBackendError(database, error, errorContext).catch(logPersistFailure)
+    }
     return c.json(error.body, error.status as ContentfulStatusCode)
   }
 
@@ -295,14 +303,20 @@ export class UnauthorizedError extends Error {
   }
 }
 
-/** Fixed JSON error body for routes that must keep legacy client-visible shapes */
+/**
+ * Fixed JSON error body for routes that must keep legacy client-visible shapes. Pass the caught
+ * error as `cause` when the body stands in for an unexpected failure: `handleRouteError` logs
+ * it, and the body can then leave its message out.
+ */
 export class RouteError extends Error {
   constructor(
     public readonly status: number,
     public readonly body: ErrorResponse & Record<string, unknown>,
+    cause?: unknown,
   ) {
     super(typeof body.error === 'string' ? body.error : 'Route error')
     this.name = 'RouteError'
+    if (cause !== undefined) this.cause = cause
   }
 }
 

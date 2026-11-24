@@ -263,6 +263,31 @@ describe('error-handler', () => {
       expect(searchText).not.toContain(sqlMessage)
     })
 
+    it('logs the cause a RouteError carries, under the route message, and sends only the body', async () => {
+      const app = createAppWithError(new RouteError(500, { error: 'Failed to export containers' }, new Error(sqlMessage)))
+      const res = await app.request('http://localhost/test')
+
+      expect(res.status).toBe(500)
+      expect(await getJson(res)).toEqual({ error: 'Failed to export containers' })
+      expect(stderrLines.some((line) => line.includes(sqlMessage))).toBe(true)
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const rows = await testDb.select().from(errorLogs).where(eq(errorLogs.message, 'Failed to export containers'))
+      expect(rows).toHaveLength(1)
+      expect(rows[0].level).toBe('error')
+      expect(rows[0].stack).toContain(sqlMessage)
+    })
+
+    it('logs a RouteError cause that is not an Error', async () => {
+      const app = createAppWithError(new RouteError(500, { error: 'Failed to export inventory' }, sqlMessage))
+      await app.request('http://localhost/test')
+
+      expect(stderrLines.some((line) => line.includes(sqlMessage))).toBe(true)
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const rows = await testDb.select().from(errorLogs).where(eq(errorLogs.message, 'Failed to export inventory'))
+      expect(rows).toHaveLength(1)
+      expect(rows[0].stack).toContain(sqlMessage)
+    })
+
     it('keeps the raw SQLite text out of a constraint-conflict 409', async () => {
       const error = Object.assign(new Error('UNIQUE constraint failed: study.title'), { code: 'SQLITE_CONSTRAINT_UNIQUE' })
       const res = await createAppWithError(error).request('http://localhost/test')
