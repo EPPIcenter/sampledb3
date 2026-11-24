@@ -596,6 +596,52 @@ describe('Controls API', () => {
 
       expect(res.status).toBe(200)
     })
+
+    it('returns 409 when clearing targetDensityUnitId via properties creates a duplicate composition', async () => {
+      const strain = await createTestStrain(ctx.db, { name: '3D7' })
+      const unit = await createTestUnit(ctx.db, {
+        symbol: 'p/ul',
+        name: 'parasites per microliter',
+        category: 'concentration',
+      })
+      const strains = [{ id: strain.id, name: '3D7', percentage: 100 }]
+      await createTestControlDefinition(ctx.db, { name: 'NoUnit', properties: { strains, targetDensity: 100 } })
+      const withUnit = await createTestControlDefinition(ctx.db, {
+        name: 'WithUnit',
+        properties: { strains, targetDensity: 100, targetDensityUnitId: unit.id, targetDensityUnitSymbol: unit.symbol },
+      })
+
+      const res = await ctx.request(`${BASE}/${withUnit.id}`, {
+        method: 'PATCH',
+        json: { properties: { targetDensityUnitId: null } },
+      })
+
+      expect(res.status).toBe(409)
+      expect(await res.json()).toMatchObject({ errorCode: 'CONFLICT', existingDefinition: { name: 'NoUnit' } })
+    })
+
+    it('returns 409 when clearing top-level targetDensityUnitId creates a duplicate composition', async () => {
+      const strain = await createTestStrain(ctx.db, { name: '3D7' })
+      const unit = await createTestUnit(ctx.db, {
+        symbol: 'p/ul',
+        name: 'parasites per microliter',
+        category: 'concentration',
+      })
+      const strains = [{ id: strain.id, name: '3D7', percentage: 100 }]
+      await createTestControlDefinition(ctx.db, { name: 'NoUnit', properties: { strains, targetDensity: 100 } })
+      const withUnit = await createTestControlDefinition(ctx.db, {
+        name: 'WithUnit',
+        properties: { strains, targetDensity: 100, targetDensityUnitId: unit.id, targetDensityUnitSymbol: unit.symbol },
+      })
+
+      const res = await ctx.request(`${BASE}/${withUnit.id}`, {
+        method: 'PATCH',
+        json: { targetDensityUnitId: null },
+      })
+
+      expect(res.status).toBe(409)
+      expect(await res.json()).toMatchObject({ errorCode: 'CONFLICT', existingDefinition: { name: 'NoUnit' } })
+    })
   })
 
   describe(`PATCH ${BASE}/batches/:id`, () => {

@@ -552,7 +552,7 @@ controls.patch('/:id', memberMiddleware, async (c) => {
       name: z.string().min(1).optional(),
       controlType: z.string().optional(),
       targetDensity: z.number().optional(),
-      targetDensityUnitId: z.number().int().optional(),
+      targetDensityUnitId: z.number().int().nullable().optional(),
       strains: z.array(strainCompositionEntrySchema).optional(),
       properties: z.record(z.string(), z.any()).optional(),
     })
@@ -583,10 +583,15 @@ controls.patch('/:id', memberMiddleware, async (c) => {
       newProps.targetDensity = targetDensity
     }
     if (targetDensityUnitId !== undefined) {
-      newProps.targetDensityUnitId = targetDensityUnitId
-      const unitRecord = await dbInstance.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
-      if (unitRecord) {
-        newProps.targetDensityUnitSymbol = unitRecord.symbol
+      if (targetDensityUnitId === null) {
+        delete newProps.targetDensityUnitId
+        delete newProps.targetDensityUnitSymbol
+      } else {
+        newProps.targetDensityUnitId = targetDensityUnitId
+        const unitRecord = await dbInstance.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
+        if (unitRecord) {
+          newProps.targetDensityUnitSymbol = unitRecord.symbol
+        }
       }
     }
 
@@ -612,8 +617,8 @@ controls.patch('/:id', memberMiddleware, async (c) => {
         dbInstance,
         {
           strains: storedStrains.map((strain) => ({ strainId: strain.id, percentage: strain.percentage })),
-          targetDensity: newProps.targetDensity as number | undefined,
-          targetDensityUnitId: newProps.targetDensityUnitId as number | undefined,
+          targetDensity: newProps.targetDensity as number | null | undefined,
+          targetDensityUnitId: newProps.targetDensityUnitId as number | null | undefined,
         },
         { excludeId: id },
       )
