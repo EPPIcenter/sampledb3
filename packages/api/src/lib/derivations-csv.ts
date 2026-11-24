@@ -109,6 +109,8 @@ export interface DerivationCsvRow {
   bag_name?: string
   sheet_name?: string
   collection_barcode?: string
+  location_id?: string
+  collection_location_id?: string
   container_barcode?: string
   sublabel?: string
   position?: string
@@ -303,6 +305,9 @@ function derivationCsvRowToContainerWrite(
     bag_name: row.bag_name,
     sheet_name: row.sheet_name,
     collection_barcode: row.collection_barcode,
+    ...(containerType !== 'paper'
+      ? { location_id: row.location_id, collection_location_id: row.collection_location_id }
+      : {}),
     barcode: containerType === 'paper' ? undefined : row.container_barcode,
     sublabel: row.sublabel,
     position: row.position,

@@ -63,7 +63,7 @@ export default function DerivationsBulkImport() {
     setReviewCell,
     setCollectionLocation,
     goToStep,
-    createCollections,
+    continueToReview,
     importCsv,
   } = useDerivationsBulkImportWorkflow({ settings })
   const {
@@ -131,8 +131,8 @@ export default function DerivationsBulkImport() {
     void importCsv()
   }
 
-  const handleCreateCollections = () => {
-    void createCollections()
+  const handleContinueFromCollections = () => {
+    continueToReview()
   }
 
   const downloadTemplate = async () => {
@@ -680,10 +680,10 @@ export default function DerivationsBulkImport() {
           <div className="space-y-6">
             <div className="storage-card p-6 storage-reveal storage-reveal-2">
               <h2 className="storage-section-title text-xl font-semibold mb-2">
-                Create missing collections
+                Assign locations for new collections
               </h2>
               <p className="text-sm mb-4" style={{ color: 'rgb(var(--app-text-muted))' }}>
-                Assign a location for each collection below, then click Create collections & continue.
+                Assign a location for each new collection below. They will be created together with your derivations when you import.
               </p>
               <div className="space-y-4">
                 {missingCollections.map((coll, index) => (
@@ -704,19 +704,7 @@ export default function DerivationsBulkImport() {
                           </p>
                         )}
                       </div>
-                      {coll.status === 'success' && (
-                        <span className="text-app-trend-up text-sm font-medium">Created</span>
-                      )}
-                      {coll.status === 'creating' && (
-                        <span className="text-app-accent text-sm">Creating…</span>
-                      )}
-                      {coll.status === 'error' && (
-                        <span className="text-app-trend-down text-sm">Error</span>
-                      )}
                     </div>
-                    {coll.status === 'error' && coll.error && (
-                      <div className="mb-3 text-sm text-app-trend-down">{coll.error}</div>
-                    )}
                     <div>
                       <label className="block text-sm font-medium text-app-text mb-2">
                         Location <span className="text-app-trend-down">*</span>
@@ -727,7 +715,6 @@ export default function DerivationsBulkImport() {
                           setCollectionLocation(index, locationId ?? null)
                         }}
                         filterCollectionsOnly
-                        disabled={coll.status === 'creating' || coll.status === 'success'}
                       />
                     </div>
                   </div>
@@ -744,18 +731,14 @@ export default function DerivationsBulkImport() {
                 </button>
                 <button
                   type="button"
-                  onClick={handleCreateCollections}
+                  onClick={handleContinueFromCollections}
                   disabled={
                     workflowLoading ||
-                    missingCollections.some(
-                      (c) => (c.status !== 'success' && !c.locationId)
-                    )
+                    missingCollections.some((c) => !c.locationId)
                   }
                   className="storage-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {workflowLoading
-                    ? 'Creating & importing…'
-                    : 'Create collections & continue'}
+                  Continue to review
                 </button>
               </div>
             </div>

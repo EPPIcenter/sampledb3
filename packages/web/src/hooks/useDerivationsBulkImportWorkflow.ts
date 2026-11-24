@@ -4,8 +4,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { invalidateAfterBulkWrite } from '../lib/query-client'
 import type { BulkDerivationSettings } from '../lib/api/derivations'
 import {
+  continueFromCollections,
   createDerivationsBulkGateway,
-  createMissingCollections,
   derivationsBulkReducer,
   fileLoadedEvent,
   fileReadErrorEvent,
@@ -114,17 +114,16 @@ export function useDerivationsBulkImportWorkflow(options: UseDerivationsBulkImpo
     dispatch({ type: 'STEP_SET', step })
   }, [])
 
-  const createCollections = useCallback(() => {
-    return runBusy(async () => {
-      await createMissingCollections(selectMissingCollections(state), gateway, dispatch)
-    })
-  }, [gateway, runBusy, state])
+  const continueToReview = useCallback(() => {
+    const events = continueFromCollections(selectMissingCollections(state))
+    events.forEach((e) => dispatch(e))
+  }, [state])
 
   const importCsv = useCallback(() => {
     return runBusy(async () => {
       const events = await importDerivationsCsv(
         gateway,
-        selectCsvForImport(state),
+        selectCsvForImport(state, options.settings.containerType),
         options.settings,
       )
       events.forEach((e) => dispatch(e))
@@ -147,7 +146,7 @@ export function useDerivationsBulkImportWorkflow(options: UseDerivationsBulkImpo
     setReviewCell,
     setCollectionLocation,
     goToStep,
-    createCollections,
+    continueToReview,
     importCsv,
   }
 }

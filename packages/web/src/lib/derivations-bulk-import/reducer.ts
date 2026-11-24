@@ -98,8 +98,17 @@ export function selectMissingCollections(state: DerivationsBulkState): MissingDe
   )
 }
 
-export function selectCsvForImport(state: DerivationsBulkState): string {
-  return csvForImport(state.csvContent, state.reviewHeaders, state.reviewRows)
+export function selectCsvForImport(
+  state: DerivationsBulkState,
+  defaultContainerType?: 'micronix_tube' | 'cryovial_tube' | 'paper' | '',
+): string {
+  return csvForImport(
+    state.csvContent,
+    state.reviewHeaders,
+    state.reviewRows,
+    selectMissingCollections(state),
+    defaultContainerType,
+  )
 }
 
 /** The spreadsheet row of the API's row `index`, counting the header as row 1. */

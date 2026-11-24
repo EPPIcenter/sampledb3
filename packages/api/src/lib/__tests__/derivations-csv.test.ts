@@ -762,6 +762,34 @@ describe('derivations-csv', () => {
       const tubes = await testDb.select({ position: micronixTube.position }).from(micronixTube).where(eq(micronixTube.collectionId, platesCalled('PB-2')[0].id)).all()
       expect(tubes.map((t) => t.position).sort()).toEqual(['A01', 'A02', 'A03'])
     })
+
+    it('creates a missing plate atomically when rows carry collection_location_id, and rolls it back if a later row fails', async () => {
+      const { parent, locationId } = await seed()
+      const failingCsv = [
+        'parent_container_id,plate_name,position,container_barcode,collection_location_id',
+        `${parent.id},ATOMIC-P1,A01,C-ATOM-1,${locationId}`,
+        `${parent.id},ATOMIC-P1,A01,C-ATOM-2,${locationId}`,
+      ].join('\n')
+
+      const failed = await importDerivationsFromCsv(testDb, failingCsv, { settings })
+      expect(failed.rows.every((r) => !r.success)).toBe(true)
+      expect(platesCalled('ATOMIC-P1')).toHaveLength(0)
+
+      const goodCsv = [
+        'parent_container_id,collection_barcode,position,container_barcode,collection_location_id',
+        `${parent.id},ATOMIC-BC,A01,C-ATOM-1,${locationId}`,
+        `${parent.id},ATOMIC-BC,A02,C-ATOM-2,${locationId}`,
+      ].join('\n')
+
+      const imported = await importDerivationsFromCsv(testDb, goodCsv, { settings })
+      expect(imported.rows).toEqual([
+        expect.objectContaining({ index: 0, success: true }),
+        expect.objectContaining({ index: 1, success: true }),
+      ])
+      expect(platesCalled('ATOMIC-BC')).toEqual([
+        expect.objectContaining({ name: 'ATOMIC-BC', barcode: 'ATOMIC-BC' }),
+      ])
+    })
   })
 
   describe('unexpected internal errors', () => {

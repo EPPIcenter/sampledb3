@@ -90,7 +90,7 @@ describe('deriveMissingCollections', () => {
     expect(deriveMissingCollections(null)).toEqual([])
   })
 
-  it('keeps only will_be_created tube collections, as pending with no location', () => {
+  it('keeps only will_be_created tube collections, with no location assigned', () => {
     const result = deriveMissingCollections(
       validation([
         { name: 'P1', status: 'will_be_created', containerType: 'micronix_tube' },
@@ -100,8 +100,8 @@ describe('deriveMissingCollections', () => {
       ])
     )
     expect(result).toEqual([
-      { name: 'P1', barcode: undefined, containerType: 'micronix_tube', locationId: null, status: 'pending' },
-      { name: 'B1', barcode: undefined, containerType: 'cryovial_tube', locationId: null, status: 'pending' },
+      { name: 'P1', barcode: undefined, containerType: 'micronix_tube', locationId: null },
+      { name: 'B1', barcode: undefined, containerType: 'cryovial_tube', locationId: null },
     ])
   })
 })

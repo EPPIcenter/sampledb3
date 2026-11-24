@@ -1,4 +1,3 @@
-import { newCollectionName } from '@sampledb/contract'
 import type { BulkDerivationSettings } from '../api/derivations'
 import { nextStepAfterValidate } from './collections'
 import { parseFullCsv } from './csv'
@@ -37,65 +36,18 @@ export async function validateDerivationsCsv(
   }
 }
 
-export async function createOneMissingCollection(
-  gateway: DerivationsBulkGateway,
-  coll: MissingDerivationCollection,
-): Promise<{ name: string } | { error: string }> {
-  if (!coll.locationId) {
-    return { error: 'Location is required' }
-  }
-  // Named as bulk import and Specimen registration name it: after its barcode when it has no name.
-  const name = newCollectionName(coll)
-  if (!name) {
-    return { error: 'A new collection needs a name or a barcode' }
-  }
-  try {
-    const input = { name, locationId: coll.locationId, barcode: coll.barcode }
-    if (coll.containerType === 'micronix_tube') {
-      await gateway.createMicronixPlate(input)
-    } else {
-      await gateway.createCryovialBox(input)
-    }
-    return { name }
-  } catch (error: unknown) {
-    const errObj = error as { response?: { data?: { error?: string } }; message?: string }
-    return { error: errObj.response?.data?.error || errObj.message || 'Failed to create collection' }
-  }
-}
-
 /**
- * Create missing tube collections sequentially, emitting a progress event per
- * status change so the UI can render creating/success/error states live.
+ * Advance from the Collections step to Review without creating any Collections yet.
+ * Missing Collections are created atomically inside POST /imports/derivations-csv when
+ * the user runs the import.
  */
-export async function createMissingCollections(
+export function continueFromCollections(
   missing: MissingDerivationCollection[],
-  gateway: DerivationsBulkGateway,
-  emit: (event: DerivationsBulkEvent) => void,
-): Promise<{ allSuccess: boolean }> {
-  if (missing.length === 0) return { allSuccess: true }
-
-  let allSuccess = true
-  for (let i = 0; i < missing.length; i++) {
-    const coll = missing[i]
-    if (coll.status === 'success') continue
-    emit({ type: 'COLLECTION_PATCHED', index: i, patch: { status: 'creating' } })
-    const result = await createOneMissingCollection(gateway, coll)
-    if ('name' in result) {
-      emit({ type: 'COLLECTION_PATCHED', index: i, patch: { status: 'success', name: result.name } })
-    } else {
-      allSuccess = false
-      emit({
-        type: 'COLLECTION_PATCHED',
-        index: i,
-        patch: { status: 'error', error: result.error },
-      })
-    }
+): DerivationsBulkEvent[] {
+  if (missing.some((c) => c.locationId == null)) {
+    return [{ type: 'ERROR', message: 'Location is required for every new collection' }]
   }
-  if (allSuccess) {
-    emit({ type: 'ERROR_CLEARED' })
-    emit({ type: 'STEP_SET', step: 'review' })
-  }
-  return { allSuccess }
+  return [{ type: 'ERROR_CLEARED' }, { type: 'STEP_SET', step: 'review' }]
 }
 
 export async function importDerivationsCsv(

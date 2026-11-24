@@ -3,7 +3,31 @@ import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor, within } from '../../__tests__/helpers/render'
 import DerivationsBulkImport from '../DerivationsBulkImport'
 import { specimenTypesApi, unitsApi } from '../../lib/api/reference-data'
+import { collectionsApi } from '../../lib/api/collections'
 import { derivationsApi } from '../../lib/api/derivations'
+import { locationsApi } from '../../lib/api/locations'
+
+vi.mock('../../lib/api/locations', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('locations', {
+    locationsApi: {
+      list: vi.fn().mockResolvedValue({
+        locations: [
+          {
+            id: 7,
+            name: 'Freezer 1',
+            path: 'Freezer 1',
+            parentId: null,
+            canContainCollections: true,
+            storageTypeId: '1',
+            created: '',
+            lastUpdated: '',
+          },
+        ],
+      }),
+    },
+  })
+})
 
 vi.mock('../../lib/api/reference-data', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
@@ -39,6 +63,20 @@ describe('DerivationsBulkImport', () => {
     vi.clearAllMocks()
     vi.mocked(specimenTypesApi.list).mockResolvedValue({ data: [] })
     vi.mocked(unitsApi.listAll).mockResolvedValue([])
+    vi.mocked(locationsApi.list).mockResolvedValue({
+      locations: [
+        {
+          id: 7,
+          name: 'Freezer 1',
+          path: 'Freezer 1',
+          parentId: null,
+          canContainCollections: true,
+          storageTypeId: '1',
+          created: '',
+          lastUpdated: '',
+        },
+      ],
+    })
   })
 
   it('shows derivation import content', async () => {
@@ -176,5 +214,45 @@ describe('DerivationsBulkImport', () => {
       const resultRows = within(resultsTable).getAllByRole('row').slice(1)
       expect(resultRows.map((row) => within(row).getAllByRole('cell')[0]!.textContent)).toEqual(['2', '5'])
     })
+  })
+
+  it('does not pre-create missing Collections before import and attaches collection_location_id on submit', async () => {
+    const user = userEvent.setup()
+    vi.mocked(derivationsApi.validateCsv).mockResolvedValue({
+      rows: [{ index: 0, valid: true, collectionStatus: 'will_be_created' }],
+      collections: [{ name: 'NEW-PLATE', status: 'will_be_created', containerType: 'micronix_tube' }],
+      summary: { total: 1, valid: 1, invalid: 0, warnings: 0 },
+    })
+    vi.mocked(derivationsApi.importCsv).mockRejectedValueOnce(new Error('Server rejected import'))
+
+    const { container } = await render(<DerivationsBulkImport />)
+    const fileInput = container.querySelector<HTMLInputElement>('#derivation-csv-file')!
+    await waitFor(() => expect(fileInput).toBeEnabled())
+    const csv = 'parent_container_id,plate_name,position,container_barcode\n1,NEW-PLATE,A01,C1\n'
+    await user.upload(fileInput, new File([csv], 'derivations.csv', { type: 'text/csv' }))
+    await user.click(screen.getByRole('button', { name: /validate & continue/i }))
+
+    expect(await screen.findByRole('heading', { name: /assign locations for new collections/i })).toBeInTheDocument()
+    const continueBtn = screen.getByRole('button', { name: /continue to review/i })
+    expect(continueBtn).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: /select location/i }))
+    await user.click(await screen.findByRole('button', { name: /^select$/i }))
+    expect(continueBtn).toBeEnabled()
+    await user.click(continueBtn)
+
+    expect(collectionsApi.createMicronixPlate).not.toHaveBeenCalled()
+    expect(collectionsApi.createCryovialBox).not.toHaveBeenCalled()
+
+    const importBtn = await screen.findByRole('button', { name: /create derivations/i })
+    await user.click(importBtn)
+
+    await waitFor(() => expect(derivationsApi.importCsv).toHaveBeenCalledTimes(1))
+    const sentCsv = vi.mocked(derivationsApi.importCsv).mock.calls[0]![0]
+    expect(sentCsv).toBe(
+      'parent_container_id,plate_name,position,container_barcode,collection_location_id\n1,NEW-PLATE,A01,C1,7',
+    )
+    expect(await screen.findByText('Server rejected import')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /create derivations/i })).toBeEnabled()
   })
 })

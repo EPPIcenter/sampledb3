@@ -1,9 +1,8 @@
-import { collectionsApi } from '../api/collections'
 import { derivationsApi } from '../api/derivations'
 import { getQueryErrorMessage } from '../../ui'
 import type { DerivationsBulkGateway } from './types'
 
-/** Production gateway: derivations + collections HTTP adapters. */
+/** Production gateway: derivations HTTP adapters. */
 export function createDerivationsBulkGateway(): DerivationsBulkGateway {
   return {
     async validateCsv(csvContent, settings) {
@@ -19,12 +18,6 @@ export function createDerivationsBulkGateway(): DerivationsBulkGateway {
       } catch (error: unknown) {
         throw new Error(getQueryErrorMessage(error, 'Failed to import derivations'))
       }
-    },
-    createMicronixPlate(input) {
-      return collectionsApi.createMicronixPlate(input)
-    },
-    createCryovialBox(input) {
-      return collectionsApi.createCryovialBox(input)
     },
   }
 }

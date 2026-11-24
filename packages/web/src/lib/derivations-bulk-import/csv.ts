@@ -1,5 +1,7 @@
 import { serializeCsv } from '@sampledb/contract'
 import { parseCsvFileRows } from '../csv-file-rows'
+import { findMissingCollectionLocationId } from './collections'
+import type { MissingDerivationCollection } from './types'
 
 /**
  * Parse CSV text into header-keyed rows, dropping rows whose cells are all blank as the
@@ -41,9 +43,33 @@ export function csvForImport(
   csvContent: string,
   reviewHeaders: string[],
   reviewRows: Record<string, string>[],
+  missingCollections: MissingDerivationCollection[] = [],
+  defaultContainerType?: 'micronix_tube' | 'cryovial_tube' | 'paper' | '',
 ): string {
   if (reviewHeaders.length > 0 && reviewRows.length > 0) {
-    return serializeToCsv(reviewHeaders, reviewRows)
+    const hasAssignedLocation = missingCollections.some((c) => c.locationId != null)
+    if (!hasAssignedLocation) {
+      return serializeToCsv(reviewHeaders, reviewRows)
+    }
+    const existingLocationHeader = reviewHeaders.find((h) => {
+      const lower = h.trim().toLowerCase()
+      return lower === 'collection_location_id' || lower === 'location_id'
+    })
+    const locationHeader = existingLocationHeader ?? 'collection_location_id'
+    const headers = existingLocationHeader ? reviewHeaders : [...reviewHeaders, locationHeader]
+    const rows = reviewRows.map((row) => {
+      if (existingLocationHeader && (row[existingLocationHeader] ?? '').trim() !== '') {
+        return row
+      }
+      const locationId = findMissingCollectionLocationId(
+        row,
+        reviewHeaders,
+        missingCollections,
+        defaultContainerType,
+      )
+      return locationId != null ? { ...row, [locationHeader]: String(locationId) } : row
+    })
+    return serializeToCsv(headers, rows)
   }
   return csvContent
 }

@@ -9,8 +9,6 @@ export function stubGateway(overrides: Partial<DerivationsBulkGateway> = {}): De
         summary: { total: 0, valid: 0, invalid: 0, warnings: 0 },
       }),
     importCsv: () => Promise.resolve({ rows: [] }),
-    createMicronixPlate: () => Promise.resolve(),
-    createCryovialBox: () => Promise.resolve(),
     ...overrides,
   }
 }

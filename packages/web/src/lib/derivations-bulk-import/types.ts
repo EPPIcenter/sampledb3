@@ -13,8 +13,6 @@ export interface MissingDerivationCollection {
   barcode?: string
   containerType: 'micronix_tube' | 'cryovial_tube'
   locationId: number | null
-  status: 'pending' | 'creating' | 'success' | 'error'
-  error?: string
 }
 
 export interface DerivationsBulkState {
@@ -44,6 +42,4 @@ export type DerivationsBulkEvent =
 export interface DerivationsBulkGateway {
   validateCsv(csvContent: string, settings: BulkDerivationSettings): Promise<ValidationResult>
   importCsv(csvContent: string, settings: BulkDerivationSettings): Promise<{ rows: DerivationCsvImportResultRow[] }>
-  createMicronixPlate(input: { name: string; locationId: number; barcode?: string }): Promise<unknown>
-  createCryovialBox(input: { name: string; locationId: number; barcode?: string }): Promise<unknown>
 }

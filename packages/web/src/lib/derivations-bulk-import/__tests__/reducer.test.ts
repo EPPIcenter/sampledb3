@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   derivationsBulkReducer,
   initialDerivationsBulkState,
+  selectCsvForImport,
   selectMissingCollections,
   nextStepAfterValidate,
 } from '../index'
@@ -49,7 +50,7 @@ describe('derivationsBulkReducer', () => {
     })
     expect(nextStepAfterValidate(result)).toBe('collections')
     expect(selectMissingCollections(validated)).toEqual([
-      { name: 'P1', barcode: undefined, containerType: 'micronix_tube', locationId: null, status: 'pending' },
+      { name: 'P1', barcode: undefined, containerType: 'micronix_tube', locationId: null },
     ])
   })
 
@@ -75,5 +76,34 @@ describe('derivationsBulkReducer', () => {
     })
     expect(selectMissingCollections(state)[0].locationId).toBe(42)
     expect(selectMissingCollections(state)[0].name).toBe('P1')
+  })
+
+  it('attaches collection_location_id in selectCsvForImport for rows targeting missing collections', () => {
+    const result = validation([
+      { name: 'NEW-P1', status: 'will_be_created', containerType: 'micronix_tube' },
+      { barcode: 'BC-BOX', status: 'will_be_created', containerType: 'cryovial_tube' },
+    ])
+    let state = derivationsBulkReducer(initialDerivationsBulkState(), {
+      type: 'FILE_LOADED',
+      csvContent: 'parent_container_id,container_type,plate_name,box_name,collection_barcode,position\n1,micronix_tube,NEW-P1,,,A01\n2,cryovial_tube,,,BC-BOX,A01',
+    })
+    state = derivationsBulkReducer(state, {
+      type: 'VALIDATED',
+      result,
+      headers: ['parent_container_id', 'container_type', 'plate_name', 'box_name', 'collection_barcode', 'position'],
+      rows: [
+        { parent_container_id: '1', container_type: 'micronix_tube', plate_name: 'NEW-P1', box_name: '', collection_barcode: '', position: 'A01' },
+        { parent_container_id: '2', container_type: 'cryovial_tube', plate_name: '', box_name: '', collection_barcode: 'BC-BOX', position: 'A01' },
+      ],
+      fileRows: [2, 3],
+    })
+    state = derivationsBulkReducer(state, { type: 'COLLECTION_PATCHED', index: 0, patch: { locationId: 7 } })
+    state = derivationsBulkReducer(state, { type: 'COLLECTION_PATCHED', index: 1, patch: { locationId: 9 } })
+
+    expect(selectCsvForImport(state)).toBe(
+      'parent_container_id,container_type,plate_name,box_name,collection_barcode,position,collection_location_id\n' +
+        '1,micronix_tube,NEW-P1,,,A01,7\n' +
+        '2,cryovial_tube,,,BC-BOX,A01,9',
+    )
   })
 })
