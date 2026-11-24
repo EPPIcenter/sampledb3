@@ -51,9 +51,9 @@ export function buildCollectionBarcodeMap(
 ): Map<string, string> {
   const collectionBarcodeMap = new Map<string, string>()
   for (const coll of missingCollections) {
-    const wizardBarcode = coll.collectionBarcode?.trim()
-    if (wizardBarcode && coll.name) {
-      collectionBarcodeMap.set(coll.name, wizardBarcode)
+    const barcode = coll.collectionBarcode?.trim() || coll.barcode?.trim()
+    if (barcode && coll.name) {
+      collectionBarcodeMap.set(coll.name, barcode)
     }
   }
   return collectionBarcodeMap

@@ -298,4 +298,65 @@ describe('bulk-import-payload', () => {
       },
     })
   })
+
+  it('sends a file-provided Collection barcode on every row of a new Collection, even when an earlier row left collection_barcode blank', () => {
+    const p = buildBulkCombinedRequestPayload(
+      [
+        {
+          studyShortCode: 'S',
+          subjectName: 'Sub1',
+          specimenTypeName: 'T',
+          container: {
+            containerType: 'micronix_tube',
+            collectionName: 'Plate-New',
+            barcode: 'MT-1',
+            position: 'A01',
+          },
+        },
+        {
+          studyShortCode: 'S',
+          subjectName: 'Sub2',
+          specimenTypeName: 'T',
+          container: {
+            containerType: 'micronix_tube',
+            collectionName: 'Plate-New',
+            collectionBarcode: 'PB-999',
+            barcode: 'MT-2',
+            position: 'A02',
+          },
+        },
+      ],
+      {
+        containerType: 'micronix_tube',
+        fixedStudyShortCode: 'S',
+        missingCollections: [{ name: 'Plate-New', barcode: 'PB-999', locationId: 5 }],
+        atomicMode: 'full_file',
+      }
+    )
+    const containers = p.subjects.flatMap((s) => s.specimens.map((sp) => sp.container))
+    expect(containers).toEqual([
+      {
+        containerType: 'micronix_tube',
+        barcode: 'MT-1',
+        collection: {
+          type: 'micronix_plate',
+          name: 'Plate-New',
+          barcode: 'PB-999',
+          position: 'A01',
+          locationId: 5,
+        },
+      },
+      {
+        containerType: 'micronix_tube',
+        barcode: 'MT-2',
+        collection: {
+          type: 'micronix_plate',
+          name: 'Plate-New',
+          barcode: 'PB-999',
+          position: 'A02',
+          locationId: 5,
+        },
+      },
+    ])
+  })
 })

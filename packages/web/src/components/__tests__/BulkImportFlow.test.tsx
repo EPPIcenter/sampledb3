@@ -298,6 +298,43 @@ describe('BulkImportFlow', () => {
       ])
       expect(collections[0]).not.toHaveProperty('name')
     })
+
+    it('sends a file collection_barcode on every row of a new plate even when an earlier row leaves it blank', async () => {
+      const user = await validateCsv(
+        'subject_name,specimen_type_name,plate_name,collection_barcode,barcode,position\n' +
+          'S1,Serum,Plate-New,,MT1,A01\n' +
+          'S2,Serum,Plate-New,PB-999,MT2,A02',
+      )
+
+      expect(await screen.findByRole('heading', { name: 'Plate-New' })).toBeInTheDocument()
+      expect(screen.getByText('Barcode: PB-999')).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Select location 10' }))
+      await user.click(screen.getByRole('button', { name: /continue to import/i }))
+
+      await waitFor(() => expect(importsApi.bulkCombined).toHaveBeenCalled())
+      const request = vi.mocked(importsApi.bulkCombined).mock.calls[0]![0]
+      const collections = request.subjects.flatMap((s) => s.specimens.map((sp) => sp.container?.collection))
+      expect(collections).toEqual([
+        expect.objectContaining({ type: 'micronix_plate', name: 'Plate-New', barcode: 'PB-999', locationId: 10 }),
+        expect.objectContaining({ type: 'micronix_plate', name: 'Plate-New', barcode: 'PB-999', locationId: 10 }),
+      ])
+    })
+
+    it('reports a row error before import when two rows give different non-blank barcodes for one plate name', async () => {
+      await validateCsv(
+        'subject_name,specimen_type_name,plate_name,collection_barcode,barcode,position\n' +
+          'S1,Serum,Plate-New,PB-111,MT1,A01\n' +
+          'S2,Serum,Plate-New,PB-222,MT2,A02',
+      )
+
+      expect(
+        await screen.findByText(/Row 3:.*Plate-New.*PB-222.*PB-111/i),
+      ).toBeInTheDocument()
+      expect(collectionsApi.check).not.toHaveBeenCalled()
+      expect(importsApi.bulkCombinedValidate).not.toHaveBeenCalled()
+      expect(importsApi.bulkCombined).not.toHaveBeenCalled()
+    })
   })
 
   describe('errors name the file row', () => {

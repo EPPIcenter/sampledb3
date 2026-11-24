@@ -45,6 +45,7 @@ describe('bulk import contract conformance', () => {
       collection: {
         type: 'micronix_plate',
         name: 'Plate-A',
+        barcode: 'PLT-A',
         position: 'A01',
         locationId: 42,
       },

@@ -257,6 +257,45 @@ export function validateBulkImportRequiredCells(
   return errors
 }
 
+/**
+ * Report a row error when two rows name the same Collection with different non-blank
+ * collection_barcode values, rather than silently picking one.
+ */
+export function validateBulkImportCollectionBarcodes(
+  rows: CSVRow[],
+  fileRows: number[],
+  opts: {
+    importType: ImportType
+    containerType: ContainerType | 'none' | ''
+  }
+): BulkImportValidationError[] {
+  if (opts.importType === 'subjects' || !opts.containerType || opts.containerType === 'none') {
+    return []
+  }
+
+  const errors: BulkImportValidationError[] = []
+  const seen = new Map<string, { barcode: string; fileRow: number }>()
+
+  rows.forEach((row, index) => {
+    const ref = getBulkImportRowCollectionRef(row, opts.containerType)
+    if (!ref?.name || !ref.barcode) return
+
+    const fileRow = fileRows[index] ?? index + 2
+    const key = `${ref.type}:name:${ref.name}`
+    const first = seen.get(key)
+    if (!first) {
+      seen.set(key, { barcode: ref.barcode, fileRow })
+    } else if (first.barcode !== ref.barcode) {
+      errors.push({
+        fileRows: [fileRow],
+        error: `Collection '${ref.name}' has conflicting collection_barcode '${ref.barcode}' (row ${first.fileRow} has '${first.barcode}')`,
+      })
+    }
+  })
+
+  return errors
+}
+
 /** Map parsed CSV rows to API payloads (no business-rule validation). */
 export function mapBulkImportRowsToPayload(
   rows: CSVRow[],

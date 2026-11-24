@@ -10,6 +10,7 @@ import {
   getBulkImportRowCollectionRef,
   parseBulkImportCsvFileRows,
   validateBulkImportRequiredCells,
+  validateBulkImportCollectionBarcodes,
 } from '../bulk-import-validation'
 
 describe('bulk-import-validation', () => {
@@ -286,6 +287,43 @@ describe('bulk-import-validation', () => {
           containerType: 'none',
         })
       ).toEqual([{ fileRows: [2], error: 'Missing required value: study_short_code' }])
+    })
+  })
+
+  describe('validateBulkImportCollectionBarcodes', () => {
+    it('allows one blank row and one non-blank barcode row for the same Collection name', () => {
+      const csv =
+        'plate_name,collection_barcode\n' +
+        'Plate-New,\n' +
+        'Plate-New,PB-999\n' +
+        'Plate-New,PB-999\n'
+      const { rows, fileRows } = parseBulkImportCsvFileRows(csv)
+      expect(
+        validateBulkImportCollectionBarcodes(rows, fileRows, {
+          importType: 'combined',
+          containerType: 'micronix_tube',
+        })
+      ).toEqual([])
+    })
+
+    it('reports a row error when two rows give different non-blank barcodes for one Collection name', () => {
+      const csv =
+        'plate_name,collection_barcode\n' +
+        'Plate-New,PB-111\n' +
+        ',\n' +
+        'Plate-New,PB-222\n'
+      const { rows, fileRows } = parseBulkImportCsvFileRows(csv)
+      expect(
+        validateBulkImportCollectionBarcodes(rows, fileRows, {
+          importType: 'combined',
+          containerType: 'micronix_tube',
+        })
+      ).toEqual([
+        {
+          fileRows: [4],
+          error: "Collection 'Plate-New' has conflicting collection_barcode 'PB-222' (row 2 has 'PB-111')",
+        },
+      ])
     })
   })
 })

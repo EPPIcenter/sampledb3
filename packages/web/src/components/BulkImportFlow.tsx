@@ -15,6 +15,7 @@ import {
   getBulkImportOptionalFields,
   parseBulkImportCsvFileRows,
   validateBulkImportRequiredCells,
+  validateBulkImportCollectionBarcodes,
   mapBulkImportRowsToPayload,
   formatBulkImportError,
   getBulkImportRowCollectionRef,
@@ -259,11 +260,17 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         return
       }
 
-      const requiredCellErrors = validateBulkImportRequiredCells(rows, fileRows, {
-        importType,
-        containerType,
-        fixedStudyShortCode,
-      })
+      const requiredCellErrors = [
+        ...validateBulkImportRequiredCells(rows, fileRows, {
+          importType,
+          containerType,
+          fixedStudyShortCode,
+        }),
+        ...validateBulkImportCollectionBarcodes(rows, fileRows, {
+          importType,
+          containerType,
+        }),
+      ]
       if (requiredCellErrors.length > 0) {
         setValidationErrors(requiredCellErrors)
         return
