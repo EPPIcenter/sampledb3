@@ -446,7 +446,7 @@ export function specimenFormMock(): MockApiOverrides {
     subjectsApi: { create: vi.fn().mockResolvedValue({ subject: { id: 1 } }), createWithSpecimens: vi.fn() },
     settingsApi: {
       getContainerTypeUnits: vi.fn().mockResolvedValue({ units: [] }),
-      get: vi.fn().mockResolvedValue({ key: 'container_defaults', value: null }),
+      getValue: mockSettingsApiGetValue(),
     },
     unitsApi: {
       listAll: vi.fn().mockResolvedValue([

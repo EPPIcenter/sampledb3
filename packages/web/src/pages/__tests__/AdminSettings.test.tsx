@@ -7,14 +7,13 @@ vi.mock('../../lib/api/settings', async () => {
   return createMockedDomainModule('settings', {
   settingsApi: {
     getAll: vi.fn().mockResolvedValue({
-      data: {
-        container_defaults: {},
-        pagination_settings: { defaultPageSize: 10, maxPageSize: 100 },
-        password_requirements: { minLength: 8 },
-        session_settings: { maxAgeSeconds: 604800 },
-        export_configurations: { configurations: [] },
-        scanner_configurations: { configurations: [] },
-      },
+      container_defaults: {},
+      pagination_settings: { defaultPageSize: 10, maxPageSize: 100 },
+      password_requirements: { minLength: 8 },
+      session_settings: { maxAgeSeconds: 604800 },
+      export_configurations: { configurations: [] },
+      scanner_configurations: { configurations: [] },
+      table_view_configurations: null,
     }),
     getContainerTypeUnits: vi.fn().mockResolvedValue({ units: [] }),
   }

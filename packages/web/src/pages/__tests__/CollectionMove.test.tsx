@@ -27,7 +27,7 @@ vi.mock('../../lib/api/auth', async () => {
   return createMockedDomainModule('auth', {
     authApi: {
       getCurrentUser: vi.fn().mockResolvedValue({
-        data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
+        user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' },
       }),
     },
   })
