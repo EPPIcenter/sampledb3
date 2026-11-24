@@ -180,7 +180,8 @@ function rowValueError(row: DerivationCsvRow): string | null {
 function parseNumber(value?: string): number | undefined {
   if (value == null || value.trim() === '') return undefined
   const n = Number(value)
-  return Number.isNaN(n) ? undefined : n
+  // Number('Infinity') is a number, but not a quantity anyone can hold.
+  return Number.isFinite(n) ? n : undefined
 }
 
 /** Build a short user-facing label for the parent (no internal IDs). */
@@ -247,6 +248,12 @@ function childCollectionRef(
       : { name: row.bag_name, barcode, paperParentType: 'bag' }
   }
   return { name: row.plate_name, barcode }
+}
+
+/** Paper goes on a sheet in a box or bag that must already exist: the error for one that does not. */
+function missingPaperParentError(ref: ChildCollectionRef): string {
+  const kind = ref.paperParentType === 'bag' ? 'Bag' : 'Box'
+  return `${kind} '${ref.name ?? ''}' not found. Create it before importing paper derivations.`
 }
 
 function getCollectionNameLabelForType(
@@ -518,8 +525,7 @@ export async function validateDerivationsCsv(
       validationRow.collectionStatus = collectionInfo.status
 
       if (containerType === 'paper' && collectionInfo.status !== 'existing') {
-        const kind = childCollection.paperParentType === 'bag' ? 'Bag' : 'Box'
-        validationRow.error = `${kind} '${collectionName ?? ''}' not found. Create it before importing paper derivations.`
+        validationRow.error = missingPaperParentError(childCollection)
         validationRows.push(validationRow)
         invalidCount++
         continue
@@ -772,10 +778,15 @@ export async function importDerivationsFromCsv(
       }
     }
   } else {
-    // Dry run: validation only, no DB writes
+    // Dry run: the checks an import makes on each row, with no DB writes
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
       try {
+        const valueError = rowValueError(row)
+        if (valueError) {
+          results.push({ index: i, success: false, error: valueError })
+          continue
+        }
         const parentContainerId = await resolveParentContainerId(database, row)
         const containerType = (settings?.containerType || row.container_type || 'micronix_tube') as 'micronix_tube' | 'cryovial_tube' | 'paper'
         const containerParsed = derivationCsvRowToContainerWrite(row, containerType)
@@ -787,7 +798,13 @@ export async function importDerivationsFromCsv(
           })
           continue
         }
-        const collectionInfo = await resolveCollectionId(database, containerType, childCollectionRef(row, containerType))
+        const childCollection = childCollectionRef(row, containerType)
+        const collectionInfo = await resolveCollectionId(database, containerType, childCollection)
+        // An import creates a missing sheet, but not the box or bag that holds it.
+        if (containerType === 'paper' && collectionInfo.status !== 'existing') {
+          results.push({ index: i, success: false, error: missingPaperParentError(childCollection) })
+          continue
+        }
 
         results.push({
           index: i,
