@@ -28,6 +28,7 @@ import {
   micronixTube,
   box,
   paper,
+  errorLogs,
 } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { failInsertsWithUniqueViolation } from '../../__tests__/helpers/constraint-race'
@@ -791,6 +792,67 @@ describe('Specimens API', () => {
         },
       })
       expect(res.status).toBe(400)
+    })
+  })
+
+  describe('POST /api/specimens internal error handling', () => {
+    it('returns 500 and hides the raw message in production when container creation hits an internal error', async () => {
+      const study = await createTestStudy(ctx.db, { title: 'Err Study', shortCode: 'ERR1' })
+      const subject = await createTestStudySubject(ctx.db, { studyId: study.id, name: 'S1' })
+      const specType = await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const loc = await createTestLocation(ctx.db, {
+        name: 'Loc',
+        parentId: null,
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+      const unitRow = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await ctx.db.insert(specimenTypeContainerType).values({ specimenTypeId: specType.id, containerType: 'micronix_tube' })
+      await ctx.db.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unitRow.id })
+      clearSettingsCache(ctx.db, 'container_defaults')
+      clearDefaultsCache(ctx.db)
+      await setContainerDefaults(ctx.db, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      const now = utcNow()
+      const [plate] = await ctx.db
+        .insert(micronixPlate)
+        .values({ name: 'ERR-PLATE', locationId: loc.id, barcode: null, created: now, lastUpdated: now })
+        .returning()
+
+      // Cause an unexpected DB failure inside container creation.
+      ctx.sqlite.exec('DROP TABLE micronix_tube')
+
+      const previousNodeEnv = process.env.NODE_ENV
+      process.env.NODE_ENV = 'production'
+      try {
+        const res = await ctx.request('/api/specimens', {
+          method: 'POST',
+          json: {
+            sourceType: 'subject',
+            sourceId: subject.id,
+            specimenTypeId: specType.id,
+            container: {
+              containerType: 'micronix_tube',
+              barcode: 'BC-500',
+              collection: { type: 'micronix_plate', id: plate.id, position: 'A01' },
+            },
+          },
+        })
+
+        expect(res.status).toBe(500)
+        const text = await res.text()
+        expect(JSON.parse(text)).toEqual({ error: 'Internal server error', errorCode: 'INTERNAL_ERROR' })
+        expect(text).not.toContain('micronix_tube')
+        expect(await ctx.db.select().from(specimen)).toHaveLength(0)
+
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        const logged = await ctx.db.select().from(errorLogs)
+        expect(logged.some((row) => row.level === 'error' && row.message.includes('micronix_tube'))).toBe(true)
+      } finally {
+        process.env.NODE_ENV = previousNodeEnv
+      }
     })
   })
 })

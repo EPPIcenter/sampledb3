@@ -7,7 +7,7 @@ import { listSpecimens } from '../lib/specimens/specimen-read'
 import { validateSpecimenData } from '../lib/validation'
 import { createContainerForSpecimen, pickContainerQuantity } from '../lib/container-creation'
 import type { RegistrationContainer } from '../lib/specimen-registration'
-import { ConflictError, handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
+import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import { containerSchema, containerSchemaWithLocation } from '../lib/schemas'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
@@ -195,16 +195,13 @@ specimens.post('/', memberMiddleware, async (c) => {
           quantity: pickContainerQuantity(container),
         })
         if (!result.success) {
-          await dbInstance.delete(storageContainer).where(eq(storageContainer.specimenId, newSpecimen.id))
-          await dbInstance.delete(specimen).where(eq(specimen.id, newSpecimen.id))
           throw new ValidationError(result.error || 'Failed to create container')
         }
         containerResult = result
       } catch (err) {
         await dbInstance.delete(storageContainer).where(eq(storageContainer.specimenId, newSpecimen.id))
         await dbInstance.delete(specimen).where(eq(specimen.id, newSpecimen.id))
-        if (err instanceof ValidationError || err instanceof ConflictError) throw err
-        throw new ValidationError(err instanceof Error ? err.message : 'Failed to create container')
+        throw err
       }
     }
     
