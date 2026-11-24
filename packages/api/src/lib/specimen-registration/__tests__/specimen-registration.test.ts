@@ -310,6 +310,23 @@ describe('Specimen registration', () => {
     ])
   })
 
+  it('reports a blank Micronix tube barcode as a validation error', async () => {
+    const error = await rejection([entry([tube('   ', { name: 'P1', position: 'A01' })])])
+
+    expect(error.status).toBe(400)
+    expect(error.errors).toEqual([
+      { entryIndex: 0, containerIndex: 0, field: 'barcode', message: 'Barcode is required for micronix tubes' },
+    ])
+    expect(await count(storageContainer)).toBe(0)
+  })
+
+  it('stores a Micronix tube barcode without the spaces around it', async () => {
+    const result = await registerSpecimens(db, [entry([tube(' T1 ', { name: 'P1', position: 'A01' })])])
+
+    const [row] = await db.select().from(micronixTube).where(eq(micronixTube.id, result.entries[0].containerIds[0]))
+    expect(row.barcode).toBe('T1')
+  })
+
   it('rejects a unit not allowed for the container type', async () => {
     const other = await createTestUnit(db, { symbol: 'mg', name: 'milligram', category: 'mass' })
 
