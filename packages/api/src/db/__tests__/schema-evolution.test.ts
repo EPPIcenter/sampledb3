@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Database } from 'bun:sqlite'
-import { existsSync, unlinkSync } from 'fs'
-import { join } from 'path'
+import { existsSync, readFileSync, unlinkSync } from 'fs'
+import { dirname, join } from 'path'
 import { tmpdir } from 'os'
+import { fileURLToPath } from 'url'
 import {
   CURRENT_SCHEMA_VERSION,
   evolveOperationalSchema,
@@ -11,7 +12,13 @@ import {
   isEmptyOperationalDatabase,
 } from '../schema-evolution'
 import { openOperationalDatabase } from '../open'
-import { SchemaMigrationError, listNumberedMigrations, runSqlMigration, runSqlMigrationStatements } from '../migration-runner'
+import {
+  SchemaMigrationError,
+  listNumberedMigrations,
+  runSqlMigration,
+  runSqlMigrationStatements,
+  splitSqlStatements,
+} from '../migration-runner'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 import * as schema from '../schema'
 import { listContainersWithInvalidGridPosition, listSpecimensWithNonIsoCollectionDate } from '../../lib/data-audit'
@@ -394,6 +401,129 @@ describe('schema evolution', () => {
     expect(temp).toEqual([])
     const leftovers = await listSpecimensWithNonIsoCollectionDate(drizzle(sqlite, { schema }))
     expect(leftovers).toEqual(unreadable.map((collectionDate, i) => ({ id: i + 2, collectionDate })))
+    sqlite.close()
+  })
+
+  const SUBJECT_DATE_INDEX = 'idx_specimen_study_subject_type_date'
+  const CONTROL_BATCH_DATE_INDEX = 'idx_specimen_control_batch_type_date'
+
+  /**
+   * A database created from the version 1 snapshot, which has both unique collection-date
+   * indexes, without the ones in `withoutIndexes`. Holds Subjects 1 and 2, control batches 1
+   * and 2, and Specimen types 1 to 3.
+   */
+  function version1Install(withoutIndexes: string[] = []): Database {
+    const sqlite = new Database(testDbPath)
+    const snapshot = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'initial_schema_v1.sql')
+    for (const statement of splitSqlStatements(readFileSync(snapshot, 'utf-8'))) sqlite.exec(statement)
+    for (const index of withoutIndexes) sqlite.exec(`DROP INDEX ${index}`)
+    const now = '2024-01-01 00:00:00'
+    sqlite.exec(`INSERT INTO study (id, title, short_code, is_longitudinal, lead_person, created, last_updated) VALUES (1, 'Study', 'ST', 0, 'Lab', '${now}', '${now}')`)
+    sqlite.exec(`INSERT INTO study_subject (id, study_id, name, created, last_updated) VALUES (1, 1, 'S1', '${now}', '${now}'), (2, 1, 'S2', '${now}', '${now}')`)
+    sqlite.exec(`INSERT INTO control_definition (id, name, control_type) VALUES (1, 'Control', 'blood')`)
+    sqlite.exec(`INSERT INTO control_batch (id, control_definition_id, name) VALUES (1, 1, 'Batch 1'), (2, 1, 'Batch 2')`)
+    sqlite.exec(`INSERT INTO specimen_type (id, name, created, last_updated) VALUES (1, 'DBS', '${now}', '${now}'), (2, 'WB', '${now}', '${now}'), (3, 'Plasma', '${now}', '${now}')`)
+    return sqlite
+  }
+
+  type DatedSpecimen = [id: number, ownerId: number, specimenTypeId: number, collectionDate: string | null]
+
+  function insertSpecimens(sqlite: Database, ownerColumn: string, specimens: DatedSpecimen[]): void {
+    const insert = sqlite.prepare(`INSERT INTO specimen (id, ${ownerColumn}, specimen_type_id, collection_date) VALUES (?, ?, ?, ?)`)
+    for (const specimen of specimens) insert.run(...specimen)
+  }
+
+  function collectionDates(sqlite: Database): Array<[number, string | null]> {
+    const rows = sqlite.prepare('SELECT id, collection_date AS date FROM specimen ORDER BY id').all() as Array<{ id: number; date: string | null }>
+    return rows.map((r) => [r.id, r.date])
+  }
+
+  /** Specimens 5 to 9 collide with nothing: another owner, another Specimen type, another date, and blanks. */
+  const NOT_COLLIDING: DatedSpecimen[] = [
+    [5, 2, 1, '1/2/24'],
+    [6, 1, 3, '1/2/24'],
+    [7, 1, 1, ' 3/4/2024 '],
+    [8, 1, 1, ''],
+    [9, 1, 1, '  '],
+  ]
+  const NOT_COLLIDING_MIGRATED: Array<[number, string | null]> = [
+    [5, '2024-01-02'],
+    [6, '2024-01-02'],
+    [7, '2024-03-04'],
+    [8, null],
+    [9, null],
+  ]
+
+  for (const [owner, ownerColumn] of [
+    ['Subject', 'study_subject_id'],
+    ['control batch', 'control_batch_id'],
+  ] as const) {
+    it(`migration 008 leaves a date as it is when another Specimen of the ${owner} and type already stores its rewrite`, async () => {
+      const sqlite = version1Install()
+      insertSpecimens(sqlite, ownerColumn, [[1, 1, 1, '2024-01-02'], [2, 1, 1, '1/2/24'], ...NOT_COLLIDING])
+
+      evolveOperationalSchema(sqlite)
+
+      expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+      expect(collectionDates(sqlite)).toEqual([[1, '2024-01-02'], [2, '1/2/24'], ...NOT_COLLIDING_MIGRATED])
+      const leftovers = await listSpecimensWithNonIsoCollectionDate(drizzle(sqlite, { schema }))
+      expect(leftovers).toEqual([{ id: 2, collectionDate: '1/2/24' }])
+      const temp = sqlite.prepare(`SELECT name FROM sqlite_temp_master WHERE name LIKE '__migration_008%'`).all()
+      expect(temp).toEqual([])
+      sqlite.close()
+    })
+
+    it(`migration 008 leaves every date as it is when two Specimens of the ${owner} and type would be rewritten to one date`, async () => {
+      const sqlite = version1Install()
+      insertSpecimens(sqlite, ownerColumn, [[1, 1, 1, ' 2024-01-02 '], [2, 1, 1, '01/02/2024'], [3, 1, 1, '1/2/24'], ...NOT_COLLIDING])
+
+      evolveOperationalSchema(sqlite)
+
+      expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+      expect(collectionDates(sqlite)).toEqual([[1, ' 2024-01-02 '], [2, '01/02/2024'], [3, '1/2/24'], ...NOT_COLLIDING_MIGRATED])
+      const leftovers = await listSpecimensWithNonIsoCollectionDate(drizzle(sqlite, { schema }))
+      expect(leftovers).toEqual([
+        { id: 1, collectionDate: ' 2024-01-02 ' },
+        { id: 2, collectionDate: '01/02/2024' },
+        { id: 3, collectionDate: '1/2/24' },
+      ])
+      sqlite.close()
+    })
+  }
+
+  /** Spellings of one date on the Specimens of one Subject and type, and of one control batch and type. */
+  function insertCollidingSubjectAndControlBatchSpecimens(sqlite: Database): void {
+    insertSpecimens(sqlite, 'study_subject_id', [[1, 1, 1, '2024-01-02'], [2, 1, 1, '1/2/24'], [3, 1, 2, ' 2024-01-02 '], [4, 1, 2, '01/02/2024']])
+    insertSpecimens(sqlite, 'control_batch_id', [[11, 1, 1, '2024-01-02'], [12, 1, 1, '1/2/24'], [13, 1, 2, ' 2024-01-02 '], [14, 1, 2, '01/02/2024']])
+  }
+
+  it('migration 008 rewrites every readable date on a database without the unique collection-date indexes', () => {
+    const sqlite = version1Install([SUBJECT_DATE_INDEX, CONTROL_BATCH_DATE_INDEX])
+    insertCollidingSubjectAndControlBatchSpecimens(sqlite)
+    insertSpecimens(sqlite, 'study_subject_id', NOT_COLLIDING)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(collectionDates(sqlite)).toEqual([
+      [1, '2024-01-02'], [2, '2024-01-02'], [3, '2024-01-02'], [4, '2024-01-02'],
+      ...NOT_COLLIDING_MIGRATED,
+      [11, '2024-01-02'], [12, '2024-01-02'], [13, '2024-01-02'], [14, '2024-01-02'],
+    ])
+    sqlite.close()
+  })
+
+  it('migration 008 skips a rewrite only for the owner whose unique collection-date index exists', () => {
+    const sqlite = version1Install([CONTROL_BATCH_DATE_INDEX])
+    insertCollidingSubjectAndControlBatchSpecimens(sqlite)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(collectionDates(sqlite)).toEqual([
+      [1, '2024-01-02'], [2, '1/2/24'], [3, ' 2024-01-02 '], [4, '01/02/2024'],
+      [11, '2024-01-02'], [12, '2024-01-02'], [13, '2024-01-02'], [14, '2024-01-02'],
+    ])
     sqlite.close()
   })
 
