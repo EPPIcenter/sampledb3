@@ -166,8 +166,18 @@ describe('ReferenceData Page', () => {
 
       await user.click(await screen.findByRole('button', { name: 'Add New' }))
 
-      const dialog = await screen.findByRole('dialog')
+      const dialog = await screen.findByRole('dialog', { name: 'Add Specimen Types' })
       expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    })
+
+    it('titles the form Edit when a row is edited', async () => {
+      const user = userEvent.setup()
+      await renderPage()
+
+      await user.click(await screen.findByRole('button', { name: 'Edit' }))
+
+      const dialog = await screen.findByRole('dialog', { name: 'Edit Specimen Types' })
+      expect(within(dialog).getByLabelText(/^Name/)).toHaveValue('Plasma')
     })
 
     it('should close form when cancel is clicked', async () => {

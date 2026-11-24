@@ -184,7 +184,8 @@ function ReferenceDataContent({
   }
 
   const getTitle = () => {
-    return editingItem ? `Edit ${config.label}` : `Add ${config.label}`
+    // Add New opens the form with an empty item, which has no id.
+    return editingItem?.id != null ? `Edit ${config.label}` : `Add ${config.label}`
   }
 
   return (
