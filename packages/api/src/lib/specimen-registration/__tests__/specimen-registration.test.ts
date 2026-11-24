@@ -303,6 +303,54 @@ describe('Specimen registration', () => {
       expect(result.collectionsCreated).toEqual([{ type: 'micronix_plate', id: expect.any(Number), name: 'ONLY-BC' }])
     })
 
+    it('treats a whitespace-only name as omitted, naming the new plate after its trimmed barcode and refusing if that name is taken', async () => {
+      const created = await registerSpecimens(db, [
+        entry([tube('T1', { name: '   ', barcode: ' BC-1 ', locationId, position: 'A01' })]),
+      ])
+
+      expect(created.collectionsCreated).toEqual([{ type: 'micronix_plate', id: expect.any(Number), name: 'BC-1' }])
+      const plate = db.select().from(micronixPlate).where(eq(micronixPlate.id, created.collectionsCreated[0].id)).get()
+      expect(plate).toMatchObject({ name: 'BC-1', barcode: 'BC-1' })
+
+      // When a plate named 'BC-TAKEN' exists (without barcode), a blank name must trigger the barcode-as-name check.
+      await createTestMicronixPlate(db, { name: 'BC-TAKEN', locationId })
+      const error = await rejection([
+        entry([tube('T2', { name: '   ', barcode: 'BC-TAKEN', locationId, position: 'A02' })], '2024-02-01'),
+      ])
+      expect(error.status).toBe(400)
+      expect(error.errors[0].message).toContain("would be named 'BC-TAKEN', but a micronix plate with that name already exists")
+      expect(isStoredDataClash(error.errors[0])).toBe(true)
+    })
+
+    it('treats a whitespace-only barcode as omitted instead of storing a blank barcode', async () => {
+      const result = await registerSpecimens(db, [
+        entry([tube('T1', { name: ' NEW ', barcode: '   ', locationId, position: 'A01' })]),
+      ])
+
+      expect(result.collectionsCreated).toEqual([{ type: 'micronix_plate', id: expect.any(Number), name: 'NEW' }])
+      const plate = db.select().from(micronixPlate).where(eq(micronixPlate.id, result.collectionsCreated[0].id)).get()
+      expect(plate).toMatchObject({ name: 'NEW', barcode: null })
+    })
+
+    it('trims surrounding whitespace on Collection names and barcodes before lookup and storage', async () => {
+      const result = await registerSpecimens(db, [
+        entry([tube('T1', { name: ' P1 ', position: 'A02' })]),
+        entry([paperOn(' Sheet-Trim ', 's1')], '2024-02-01'),
+        entry(
+          [{ containerType: 'paper', sublabel: 's2', collection: { type: 'sheet', name: 'Sheet-Trim', parent: { type: 'box', name: ' PaperBox ' } } }],
+          '2024-02-02',
+        ),
+      ])
+
+      // Reused existing P1 and created one PaperBox + one Sheet-Trim (trimmed).
+      expect(result.collectionsCreated.map((c) => [c.type, c.name])).toEqual([
+        ['box', 'PaperBox'],
+        ['sheet', 'Sheet-Trim'],
+      ])
+      const sheets = await db.select().from(sheet)
+      expect(sheets.map((s) => s.name)).toEqual(['Sheet-Trim'])
+    })
+
     it('refuses to create a plate without a location', async () => {
       const error = await rejection([entry([tube('T1', { name: 'NOPE', position: 'A01' })])])
 

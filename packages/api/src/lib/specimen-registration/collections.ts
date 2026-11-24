@@ -55,6 +55,12 @@ const PLURALS: Record<GridCollectionType, string> = {
 /** "a and b", "a, b, and c". */
 const AND = new Intl.ListFormat('en', { type: 'conjunction' })
 
+/** Trimmed Collection identifier, or undefined when omitted or blank after trimming. */
+function trimmedIdentifier(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : undefined
+}
+
 export function targetKey(target: CollectionTarget): string {
   return 'existingId' in target ? `e${target.existingId}` : `p${target.plannedIndex}`
 }
@@ -153,7 +159,8 @@ export class CollectionPlanner {
       if (!byId) return { error: `${label} not found: id ${collection.id}` }
       found('id', [byId])
     }
-    const { barcode, name } = collection
+    const barcode = trimmedIdentifier(collection.barcode)
+    const name = trimmedIdentifier(collection.name)
     if (barcode) {
       const stored = this.storedGrid(type, 'barcode', barcode)
       found('barcode', stored ? [stored] : this.plannedCandidates(type, (p) => 'barcode' in p && p.barcode === barcode))
@@ -172,14 +179,14 @@ export class CollectionPlanner {
     }
     const match = matches.at(0)
     if (match) {
-      if (collection.barcode && match.barcode !== collection.barcode) {
+      if (barcode && match.barcode !== barcode) {
         const actual = match.barcode ? `has barcode '${match.barcode}'` : 'has no barcode'
-        return { error: `${label} '${match.name}' ${actual}, not '${collection.barcode}'.` }
+        return { error: `${label} '${match.name}' ${actual}, not '${barcode}'.` }
       }
-      if (collection.name && match.name !== collection.name) {
+      if (name && match.name !== name) {
         // The name matched nothing, so the id or, failing that, the barcode found this one.
-        const found = collection.id != null ? `${label} id ${collection.id}` : `${label} with barcode '${collection.barcode ?? ''}'`
-        return { error: `${found} is named '${match.name}', not '${collection.name}'.` }
+        const found = collection.id != null ? `${label} id ${collection.id}` : `${label} with barcode '${barcode ?? ''}'`
+        return { error: `${found} is named '${match.name}', not '${name}'.` }
       }
       const conflict = this.locationConflict(match, collection.locationId)
       if (conflict) return { error: conflict }
@@ -189,7 +196,7 @@ export class CollectionPlanner {
     if (collection.locationId == null) {
       return { error: 'Collection not found and no location provided' }
     }
-    const newName = newCollectionName(collection)
+    const newName = newCollectionName({ name, barcode })
     if (!newName) {
       return { error: `A new ${label.toLowerCase()} needs a name or a barcode.` }
     }
@@ -225,7 +232,7 @@ export class CollectionPlanner {
       if (!byId) return { error: `${label} not found: id ${parent.id}` }
       candidates.push(byId)
     }
-    const name = parent.name
+    const name = trimmedIdentifier(parent.name)
     if (name) {
       const stored = this.storedParent(type, 'name', name)
       candidates.push(...(stored ? [stored] : this.plannedCandidates(type, (p) => p.name === name)))
@@ -234,32 +241,33 @@ export class CollectionPlanner {
     const matches = distinctCandidates(candidates)
     const match = matches.at(0)
     if (match) {
-      if (matches.length > 1 || (parent.name && match.name !== parent.name)) {
-        return { error: `${label} id ${parent.id ?? ''} is named '${match.name}', not '${parent.name ?? ''}'.` }
+      if (matches.length > 1 || (name && match.name !== name)) {
+        return { error: `${label} id ${parent.id ?? ''} is named '${match.name}', not '${name ?? ''}'.` }
       }
       const conflict = this.locationConflict(match, parent.locationId)
       if (conflict) return { error: conflict }
       return { target: match.target }
     }
 
-    if (!parent.name) {
+    if (!name) {
       return { error: `A new ${label.toLowerCase()} needs a name.` }
     }
     if (parent.locationId == null) {
-      return { error: `Collection (${type}) not found: ${parent.name}` }
+      return { error: `Collection (${type}) not found: ${name}` }
     }
     const badLocation = locationError(parent.locationId, this.database)
     if (badLocation) return { error: badLocation }
-    this.planned.push({ type, name: parent.name, locationId: parent.locationId })
+    this.planned.push({ type, name, locationId: parent.locationId })
     return { target: { plannedIndex: this.planned.length - 1 } }
   }
 
   async resolveSheet(collection: SheetCollectionInput): Promise<Resolution> {
+    const name = trimmedIdentifier(collection.name)
     if (collection.id != null) {
       const row = await this.database.select().from(sheet).where(eq(sheet.id, collection.id)).get()
       if (!row) return { error: `Sheet not found: id ${collection.id}` }
-      if (collection.name && collection.name !== row.name) {
-        return { error: `Sheet id ${collection.id} is named '${row.name}', not '${collection.name}'.` }
+      if (name && name !== row.name) {
+        return { error: `Sheet id ${collection.id} is named '${row.name}', not '${name}'.` }
       }
       if (collection.parent) {
         const plannedBefore = this.planned.length
@@ -276,10 +284,9 @@ export class CollectionPlanner {
       return { target: { existingId: row.id } }
     }
 
-    if (!collection.name) return { error: 'A sheet needs an id or a name.' }
+    if (!name) return { error: 'A sheet needs an id or a name.' }
     if (!collection.parent) return { error: 'A sheet named without an id needs its box or bag.' }
 
-    const name = collection.name
     const parentType = collection.parent.type
     const parent = await this.resolveParent(collection.parent)
     if ('error' in parent) return parent
