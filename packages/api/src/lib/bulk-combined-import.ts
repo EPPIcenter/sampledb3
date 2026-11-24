@@ -144,6 +144,10 @@ async function registerSubjects(
     } catch (error) {
       const conflict = error instanceof Error ? sqliteConstraintConflict(error) : null
       if (conflict === null) throw error
+      const constraintCode = (error as { code?: unknown }).code
+      if (constraintCode === 'SQLITE_CONSTRAINT_UNIQUE' || constraintCode === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
+        return { conflict: `Subject '${name}' already exists in Study '${code}'.` }
+      }
       return { conflict }
     }
   }

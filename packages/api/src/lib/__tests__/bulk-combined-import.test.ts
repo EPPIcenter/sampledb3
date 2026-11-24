@@ -496,7 +496,7 @@ describe('bulk-combined-import', () => {
       it('is that subject\'s error in per_subject mode, and the import goes on to the next subject', async () => {
         const imported = await runBulkCombinedImport(testDb, { studyShortCode: 'ST1', atomicMode: 'per_subject', subjects: subjects() }, undefined)
 
-        expect(imported.errors).toEqual([{ index: 1, error: expect.stringMatching(/^Subject 'Raced': A record with this .* already exists\.$/) }])
+        expect(imported.errors).toEqual([{ index: 1, error: "Subject 'Raced': Subject 'Raced' already exists in Study 'ST1'." }])
         expect(imported.results.map((r) => r.subject.name)).toEqual(['Existing', 'Existing'])
         expect(imported.summary).toMatchObject({ subjectsCreated: 0, specimensCreated: 1, containersCreated: 1 })
       })
@@ -509,14 +509,18 @@ describe('bulk-combined-import', () => {
         )
 
         expect(imported).toBeInstanceOf(ConflictError)
-        expect((imported as ConflictError).details).toEqual({ errors: [{ subjectIndex: 1, specimenIndex: 0, message: expect.stringContaining('already exists') }] })
+        expect((imported as ConflictError).details).toEqual({
+          errors: [{ subjectIndex: 1, specimenIndex: 0, message: "Subject 'Raced' already exists in Study 'ST1'." }],
+        })
         expect((await testDb.select().from(specimen)).length).toBe(before)
       })
 
       it('is reported by validate for that subject', async () => {
         const validation = await validateBulkCombinedPayload(testDb, { studyShortCode: 'ST1', atomicMode: 'per_subject', subjects: subjects() })
 
-        expect(validation.errors).toEqual([{ subjectIndex: 1, specimenIndex: 0, message: expect.stringContaining('already exists') }])
+        expect(validation.errors).toEqual([
+          { subjectIndex: 1, specimenIndex: 0, message: "Subject 'Raced' already exists in Study 'ST1'." },
+        ])
       })
 
       it('replies 400 (ValidationError) listing every subject error when a validation error precedes a subject constraint hit', async () => {
