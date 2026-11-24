@@ -2,7 +2,7 @@
 import React from 'react'
 import type { Column } from '../components/ReferenceDataTable'
 import type { SpecimenType, Unit } from '../lib/api/types';
-import type { Tag, StorageType, Strain } from '../lib/api/reference-data';
+import type { Tag, Strain } from '../lib/api/reference-data';
 import { specimenTypesApi, tagsApi, storageTypesApi, strainsApi, unitsApi } from '../lib/api/reference-data';
 import ContainerTypesCell from '../components/ContainerTypesCell'
 import ContainerTypeToggle from '../components/ContainerTypeToggle'
@@ -29,7 +29,6 @@ export interface ReferenceDataConfig {
   getItemKey: () => string
   // Table configuration
   getColumns: (dependencies?: {
-    storageTypes?: StorageType[]
     locations?: Location[]
     containerTypeRelationships?: Record<number, string[]>
     containerTypeUsageInfo?: Record<number, Record<string, boolean>>

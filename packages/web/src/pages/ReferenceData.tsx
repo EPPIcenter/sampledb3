@@ -10,7 +10,7 @@ import {
   type ReferenceDataConfig,
   type ReferenceDataType,
 } from '../config/reference-data-config'
-import { invalidateAfterReferenceDataWrite, useStorageTypes } from '../hooks/useReferenceData'
+import { invalidateAfterReferenceDataWrite } from '../hooks/useReferenceData'
 import {
   useReferenceDataAllLocations,
   useReferenceDataTab,
@@ -19,7 +19,7 @@ import {
 import { specimenTypesApi } from '../lib/api/reference-data'
 import type { Location, SpecimenType } from '../lib/api/types'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
-import { PageError, SectionMessage, fromQuery, getQueryErrorMessage } from '../ui'
+import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/reference-data.css'
 
 export default function ReferenceData() {
@@ -83,9 +83,6 @@ function ReferenceDataContent({
   )
   const containerTypeRelationships = containerTypesQuery.relationships
   const containerTypeUsageInfo = containerTypesQuery.usageInfo
-
-  const storageTypesQuery = useStorageTypes()
-  const storageTypes = storageTypesQuery.data
 
   // Debounce search input
   useEffect(() => {
@@ -164,10 +161,6 @@ function ReferenceDataContent({
 
   const getColumns = () => {
     const deps: Record<string, unknown> = {}
-    // Add storageTypes if needed (for locations)
-    if (storageTypes) {
-      deps.storageTypes = storageTypes
-    }
     // Add all locations (without pagination) for parent name lookups
     if ((activeTab as string) === 'locations' && allLocations.length > 0) {
       deps.locations = allLocations
@@ -238,13 +231,6 @@ function ReferenceDataContent({
                 title={`Could not load ${config.label}`}
                 message={getQueryErrorMessage(tabQuery.error, 'Failed to load reference data')}
                 onRetry={() => void tabQuery.refetch()}
-              />
-            )}
-
-            {storageTypesQuery.isError && (
-              <SectionMessage
-                variant="error"
-                message={`Could not load storage types: ${getQueryErrorMessage(storageTypesQuery.error, 'the request failed')}`}
               />
             )}
 

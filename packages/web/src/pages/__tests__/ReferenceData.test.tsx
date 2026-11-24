@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import ReferenceData from '../ReferenceData'
 import { getReferenceDataConfig } from '../../config/reference-data-config'
-import { specimenTypeKeys, tagKeys, useStorageTypes } from '../../hooks/useReferenceData'
+import { specimenTypeKeys, tagKeys } from '../../hooks/useReferenceData'
 import { referenceDataPageKeys } from '../../hooks/useReferenceDataPage'
 import { exportWorkflowKeys } from '../../hooks/useExportWorkflow'
-import { specimenTypesApi } from '../../lib/api/reference-data'
+import { specimenTypesApi, storageTypesApi } from '../../lib/api/reference-data'
 import {
   createInvalidationTestClient,
   keysNotInvalidated,
@@ -55,6 +55,9 @@ vi.mock('../../lib/api/reference-data', async () => {
     specimenTypesApi: {
       addContainerType: vi.fn().mockResolvedValue(undefined),
       removeContainerType: vi.fn().mockResolvedValue(undefined),
+    },
+    storageTypesApi: {
+      list: vi.fn().mockResolvedValue({ data: [] }),
     },
   })
 })
@@ -114,22 +117,6 @@ vi.mock('../../lib/api/locations', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { referenceDataLocationsMock } = await import('../../__tests__/helpers/mock-api-templates')
   return createMockedDomainModule('locations', referenceDataLocationsMock())
-})
-
-// Mock the hooks
-vi.mock('../../hooks/useReferenceData', async () => {
-  const actual = await vi.importActual<typeof import('../../hooks/useReferenceData')>(
-    '../../hooks/useReferenceData'
-  )
-  return {
-    ...actual,
-    useStorageTypes: vi.fn().mockReturnValue({
-      data: [],
-      isLoading: false,
-      isError: false,
-      error: null,
-    }),
-  }
 })
 
 // Mock the UserContext
@@ -201,6 +188,12 @@ describe('ReferenceData Page', () => {
       })
     })
 
+    it('does not fetch storage types when loading another tab', async () => {
+      await render(<ReferenceData />, { initialEntries: ['/reference-data?tab=specimen-types'] })
+      expect(await screen.findByText('Reference Data Management')).toBeInTheDocument()
+      expect(storageTypesApi.list).not.toHaveBeenCalled()
+    })
+
     it('shows PageError with retry when tab load fails', async () => {
       mockUseReferenceDataTab.mockReturnValue({
         data: undefined,
@@ -217,35 +210,6 @@ describe('ReferenceData Page', () => {
         expect(screen.getByText(/Could not load specimen types/i)).toBeInTheDocument()
         expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
       })
-    })
-  })
-
-  describe('Storage types load', () => {
-    const loaded = { data: [], isLoading: false, isError: false, error: null } as unknown as ReturnType<typeof useStorageTypes>
-
-    afterEach(() => {
-      vi.mocked(useStorageTypes).mockReturnValue(loaded)
-    })
-
-    it('shows a failed storage types load inline, beside the tab that did load', async () => {
-      vi.mocked(useStorageTypes).mockReturnValue({
-        data: undefined,
-        isLoading: false,
-        isError: true,
-        error: Object.assign(new Error('Request failed'), { response: { data: { error: 'Storage types are unavailable' } } }),
-      } as unknown as ReturnType<typeof useStorageTypes>)
-
-      await render(<ReferenceData />, { initialEntries: ['/reference-data?tab=specimen-types'] })
-
-      expect(await screen.findByRole('alert')).toHaveTextContent('Could not load storage types: Storage types are unavailable')
-      expect(screen.getByRole('button', { name: 'Add New' })).toBeInTheDocument()
-    })
-
-    it('shows no error while storage types are loaded', async () => {
-      await render(<ReferenceData />, { initialEntries: ['/reference-data?tab=specimen-types'] })
-
-      expect(await screen.findByRole('button', { name: 'Add New' })).toBeInTheDocument()
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     })
   })
 

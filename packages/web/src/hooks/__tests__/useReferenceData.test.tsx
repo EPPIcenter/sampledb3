@@ -9,7 +9,6 @@ import {
   useCreateSpecimenType,
   useUpdateSpecimenType,
   useDeleteSpecimenType,
-  useStorageTypes,
   useTags,
   useCreateTag,
   useDeleteTag,
@@ -17,15 +16,13 @@ import {
   tagKeys,
 } from '../useReferenceData'
 import { exportWorkflowKeys } from '../useExportWorkflow'
-import { specimenTypesApi, storageTypesApi, tagsApi } from '../../lib/api/reference-data'
+import { specimenTypesApi, tagsApi } from '../../lib/api/reference-data'
 import {
   createInvalidationTestClient,
   keysNotInvalidated,
   observeQuery,
   seedQueries,
 } from '../../__tests__/helpers/query-invalidation'
-import type { SpecimenType } from '../../lib/api/types'
-import type { StorageType } from '../../lib/api/reference-data'
 
 // Mock the API module
 vi.mock('../../lib/api/reference-data', async () => {
@@ -37,9 +34,6 @@ vi.mock('../../lib/api/reference-data', async () => {
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
-  },
-  storageTypesApi: {
-    list: vi.fn(),
   },
   tagsApi: {
     list: vi.fn(),
@@ -275,29 +269,6 @@ describe('useReferenceData Hooks', () => {
 
   // Note: useStates hook has been removed - states are deprecated
   // The test for useStates has been removed as the hook no longer exists
-
-  describe('useStorageTypes', () => {
-    it('should fetch and return storage types', async () => {
-      const mockData = {
-        data: [
-          { id: 1, name: 'Freezer', description: 'Cold storage' },
-          { id: 2, name: 'Room Temp', description: 'Room temperature' },
-        ],
-      }
-
-      vi.mocked(storageTypesApi.list).mockResolvedValue(mockData as Awaited<ReturnType<typeof storageTypesApi.list>>)
-
-      const { result } = renderHook(() => useStorageTypes(), {
-        wrapper: createWrapper(),
-      })
-
-      await waitFor(() => {
-        expect(result.current.isSuccess).toBe(true)
-      })
-
-      expect(result.current.data).toEqual(mockData.data)
-    })
-  })
 })
 
 // ADR 0001: a query hook used on a migrated screen leaves a read error to the screen, which
@@ -308,20 +279,6 @@ describe('read errors raise no toast', () => {
   })
 
   const failure = Object.assign(new Error('Request failed'), { response: { data: { error: 'Server said no' } } })
-
-  it('useStorageTypes reports the error to its caller without a toast', async () => {
-    vi.mocked(storageTypesApi.list).mockRejectedValue(failure)
-
-    const { result } = renderHook(() => ({ query: useStorageTypes(), toasts: useToast().toasts }), {
-      wrapper: createWrapper(),
-    })
-
-    await waitFor(() => {
-      expect(result.current.query.isError).toBe(true)
-    })
-    expect(result.current.query.error).toBe(failure)
-    expect(result.current.toasts).toEqual([])
-  })
 
   it('useSpecimenType reports the error to its caller without a toast', async () => {
     vi.mocked(specimenTypesApi.get).mockRejectedValue(failure)

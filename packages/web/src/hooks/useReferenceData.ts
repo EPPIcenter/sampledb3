@@ -44,7 +44,6 @@ export function invalidateAfterReferenceDataWrite(
 
 export const specimenTypeKeys = createReferenceDataKeys('specimen-types')
 export const tagKeys = createReferenceDataKeys('tags')
-export const storageTypeKeys = createReferenceDataKeys('storage-types')
 export const strainKeys = createReferenceDataKeys('strains')
 // compositionKeys - REMOVED: Compositions no longer used
 
@@ -252,17 +251,6 @@ export function useDeleteTag() {
 }
 
 // Storage Types
-/** Every storage type. Raises no toast on a failed load: the caller shows the read error inline (ADR 0001). */
-export function useStorageTypes() {
-  return useQuery({
-    queryKey: storageTypeKeys.list(),
-    queryFn: async () => {
-      const res = await storageTypesApi.list()
-      return res.data
-    },
-  })
-}
-
 export function useCreateStorageType() {
   const queryClient = useQueryClient()
   const { success, error: showError } = useToast()
