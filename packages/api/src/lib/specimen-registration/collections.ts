@@ -177,6 +177,21 @@ export class CollectionPlanner {
     if (!newName) {
       return { error: `A new ${label.toLowerCase()} needs a name or a barcode.` }
     }
+    if (!name) {
+      // Created from a barcode alone, the Collection takes the barcode as its name, and names are
+      // unique per type. The lookups above searched for the barcode, not for that name.
+      const kind = label.toLowerCase()
+      const taken = this.storedGrid(type, 'name', newName)
+        ? `a ${kind} with that name already exists`
+        : this.plannedCandidates(type, (p) => p.name === newName).length > 0
+          ? `this request already creates a ${kind} with that name`
+          : null
+      if (taken) {
+        return {
+          error: `A new ${kind} with barcode '${newName}' and no name would be named '${newName}', but ${taken}. Give the new ${kind} a name.`,
+        }
+      }
+    }
     const badLocation = locationError(collection.locationId, this.database)
     if (badLocation) return { error: badLocation }
     this.planned.push({ type, name: newName, barcode, locationId: collection.locationId })

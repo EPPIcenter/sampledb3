@@ -216,6 +216,55 @@ describe('Specimen registration', () => {
       expect(created).toMatchObject({ barcode: 'NEW-BC', locationId })
     })
 
+    it('rejects a new plate whose barcode, used as its name, is another plate\'s name', async () => {
+      await createTestMicronixPlate(db, { name: 'BC-COLLIDE', locationId })
+
+      const error = await rejection([
+        entry([tube('T1', { barcode: 'BC-COLLIDE', locationId, position: 'A01' })]),
+        entry([tube('T2', { name: 'P1', barcode: 'UNKNOWN', position: 'A02' })], '2024-02-01'),
+      ])
+
+      expect(error.status).toBe(400)
+      expect(error.errors).toEqual([
+        {
+          entryIndex: 0,
+          containerIndex: 0,
+          field: 'collection',
+          message:
+            "A new micronix plate with barcode 'BC-COLLIDE' and no name would be named 'BC-COLLIDE', but a micronix plate with that name already exists. Give the new micronix plate a name.",
+        },
+        expect.objectContaining({ entryIndex: 1, containerIndex: 0, field: 'collection' }),
+      ])
+      expect(await count(micronixPlate)).toBe(2)
+    })
+
+    it('rejects a new plate whose barcode, used as its name, is the name of a plate the request already creates', async () => {
+      const error = await rejection([
+        entry([tube('T1', { name: 'NEW', locationId, position: 'A01' })]),
+        entry([tube('T2', { barcode: 'NEW', locationId, position: 'A02' })], '2024-02-01'),
+      ])
+
+      expect(error.status).toBe(400)
+      expect(error.errors).toEqual([
+        {
+          entryIndex: 1,
+          containerIndex: 0,
+          field: 'collection',
+          message:
+            "A new micronix plate with barcode 'NEW' and no name would be named 'NEW', but this request already creates a micronix plate with that name. Give the new micronix plate a name.",
+        },
+      ])
+    })
+
+    it('creates a plate from a barcode alone, named after the barcode', async () => {
+      const result = await registerSpecimens(db, [
+        entry([tube('T1', { barcode: 'ONLY-BC', locationId, position: 'A01' })]),
+        entry([tube('T2', { barcode: 'ONLY-BC', position: 'A02' })], '2024-02-01'),
+      ])
+
+      expect(result.collectionsCreated).toEqual([{ type: 'micronix_plate', id: expect.any(Number), name: 'ONLY-BC' }])
+    })
+
     it('refuses to create a plate without a location', async () => {
       const error = await rejection([entry([tube('T1', { name: 'NOPE', position: 'A01' })])])
 
