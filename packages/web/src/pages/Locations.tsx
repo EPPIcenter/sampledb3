@@ -19,6 +19,7 @@ import LocationForm from '../components/LocationForm'
 import LocationHierarchyStatsDisplay from '../components/LocationHierarchyStats'
 import LocationCapabilityBadge from '../components/LocationCapabilityBadge'
 import { useUser } from '../contexts/UserContext'
+import { useToast } from '../contexts/ToastContext'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import { useClickOutside } from '../hooks/useClickOutside'
 import '../styles/storage.css'
@@ -56,6 +57,7 @@ export default function Locations() {
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const { canManageReferenceData, canCreateLocations, canDeleteLocations } = useUser()
+  const { error: showError } = useToast()
   // Renaming, moving, and changing canContainCollections stay admin-only; members create and delete (#141).
   const canEdit = canManageReferenceData
   const canCreate = canCreateLocations
@@ -399,12 +401,12 @@ export default function Locations() {
       await reloadLocations(true)
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(null), 3000)
-    } catch (error: any) {
-      const errorMessage =
-        error.response?.data?.error ||
-        error.message ||
-        'Failed to delete location'
-      alert(errorMessage)
+    } catch (error) {
+      showError(getQueryErrorMessage(error, 'Failed to delete location'))
+      // The API refused what the dialog offered, so the tree is out of date: close the dialog and reload.
+      setDeletingLocationId(null)
+      setLocationDetailsCache({})
+      await reloadLocations(true)
     } finally {
       setMutationLoading(false)
     }

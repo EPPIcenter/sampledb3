@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor, within } from '../../__tests__/helpers/render'
 import Locations from '../Locations'
+import { ToastContainer } from '../../components/Toast'
 
 vi.mock('../../lib/api/locations', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
@@ -149,7 +150,12 @@ describe('Locations page: what each role can do (#141)', () => {
   async function renderAs(role: Role) {
     signInAs(role)
     const user = userEvent.setup()
-    await render(<Locations />)
+    await render(
+      <>
+        <Locations />
+        <ToastContainer />
+      </>,
+    )
     // The tree opens with its roots collapsed; expand Freezer A so both rows show.
     await user.click(await screen.findByRole('button', { name: 'Expand Freezer A' }))
     await screen.findByRole('button', { name: /^Shelf 1/ })
@@ -301,6 +307,42 @@ describe('Locations page: what each role can do (#141)', () => {
 
       await waitFor(() => expect(locationsApi.delete).toHaveBeenCalledWith(2))
       expect(await screen.findByText('Location deleted successfully')).toBeInTheDocument()
+    })
+
+    it("is shown the API's reason in a toast when a delete is refused", async () => {
+      mockDetail(shelf)
+      vi.mocked(locationsApi.delete).mockRejectedValue({
+        response: {
+          data: { error: 'Cannot delete location: it holds collections. Move them to another location first.' },
+        },
+      })
+      const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+      const user = await renderAs('member')
+      const listCalls = vi.mocked(locationsApi.list).mock.calls.length
+
+      await user.click((await screen.findAllByRole('button', { name: 'Delete location' }))[1])
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Cannot delete location: it holds collections. Move them to another location first.',
+      )
+      expect(alert).not.toHaveBeenCalled()
+      expect(screen.queryByText('Location deleted successfully')).not.toBeInTheDocument()
+      // The dialog closes and the tree reloads, since the page offered a delete the API refused.
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      await waitFor(() => expect(vi.mocked(locationsApi.list).mock.calls.length).toBeGreaterThan(listCalls))
+      expect(screen.getByRole('button', { name: /^Shelf 1/ })).toBeInTheDocument()
+    })
+
+    it('is told the delete failed when the error carries no message', async () => {
+      mockDetail(shelf)
+      vi.mocked(locationsApi.delete).mockRejectedValue({})
+      const user = await renderAs('member')
+
+      await user.click((await screen.findAllByRole('button', { name: 'Delete location' }))[1])
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Failed to delete location')
     })
 
     it('is told a Location with child Locations cannot be deleted', async () => {
