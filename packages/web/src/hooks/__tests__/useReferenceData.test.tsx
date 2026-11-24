@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactNode } from 'react'
-import { ToastProvider } from '../../contexts/ToastContext'
+import { ToastProvider, useToast } from '../../contexts/ToastContext'
 import {
   useSpecimenTypes,
   useSpecimenType,
@@ -10,6 +10,7 @@ import {
   useUpdateSpecimenType,
   useDeleteSpecimenType,
   useStorageTypes,
+  useTags,
   useCreateTag,
   useDeleteTag,
   specimenTypeKeys,
@@ -299,6 +300,58 @@ describe('useReferenceData Hooks', () => {
 
       expect(result.current.data).toEqual(mockData.data)
     })
+  })
+})
+
+// ADR 0001: a query hook used on a migrated screen leaves a read error to the screen, which
+// shows it inline, so the hook itself raises no toast.
+describe('read errors raise no toast', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const failure = Object.assign(new Error('Request failed'), { response: { data: { error: 'Server said no' } } })
+
+  it('useStorageTypes reports the error to its caller without a toast', async () => {
+    vi.mocked(storageTypesApi.list).mockRejectedValue(failure)
+
+    const { result } = renderHook(() => ({ query: useStorageTypes(), toasts: useToast().toasts }), {
+      wrapper: createWrapper(),
+    })
+
+    await waitFor(() => {
+      expect(result.current.query.isError).toBe(true)
+    })
+    expect(result.current.query.error).toBe(failure)
+    expect(result.current.toasts).toEqual([])
+  })
+
+  it('useSpecimenType reports the error to its caller without a toast', async () => {
+    vi.mocked(specimenTypesApi.get).mockRejectedValue(failure)
+
+    const { result } = renderHook(() => ({ query: useSpecimenType(1), toasts: useToast().toasts }), {
+      wrapper: createWrapper(),
+    })
+
+    await waitFor(() => {
+      expect(result.current.query.isError).toBe(true)
+    })
+    expect(result.current.query.error).toBe(failure)
+    expect(result.current.toasts).toEqual([])
+  })
+
+  it('useTags reports the error to its caller without a toast', async () => {
+    vi.mocked(tagsApi.list).mockRejectedValue(failure)
+
+    const { result } = renderHook(() => ({ query: useTags(), toasts: useToast().toasts }), {
+      wrapper: createWrapper(),
+    })
+
+    await waitFor(() => {
+      expect(result.current.query.isError).toBe(true)
+    })
+    expect(result.current.query.error).toBe(failure)
+    expect(result.current.toasts).toEqual([])
   })
 })
 

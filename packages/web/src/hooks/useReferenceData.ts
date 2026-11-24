@@ -91,19 +91,11 @@ export function useSpecimenTypesByContainerType(
   })
 }
 
+/** One specimen type. Raises no toast on a failed load: the caller shows the read error inline (ADR 0001). */
 export function useSpecimenType(id: number) {
-  const { error: showError } = useToast()
-  
   return useQuery({
     queryKey: specimenTypeKeys.detail(id),
-    queryFn: async () => {
-      try {
-        return await specimenTypesApi.get(id)
-      } catch (err: any) {
-        showError(err.response?.data?.error || 'Failed to load specimen type')
-        throw err
-      }
-    },
+    queryFn: () => specimenTypesApi.get(id),
     enabled: !!id,
   })
 }
@@ -179,19 +171,13 @@ export function useDeleteSpecimenType() {
 
 // States
 // Tags (replaces States)
+/** Every Tag. Raises no toast on a failed load: the caller shows the read error inline (ADR 0001). */
 export function useTags() {
-  const { error: showError } = useToast()
-  
   return useQuery({
     queryKey: tagKeys.list(),
     queryFn: async () => {
-      try {
-        const res = await tagsApi.list()
-        return res.data
-      } catch (err: any) {
-        showError(err.response?.data?.error || 'Failed to load tags')
-        throw err
-      }
+      const res = await tagsApi.list()
+      return res.data
     },
   })
 }
@@ -266,19 +252,13 @@ export function useDeleteTag() {
 }
 
 // Storage Types
+/** Every storage type. Raises no toast on a failed load: the caller shows the read error inline (ADR 0001). */
 export function useStorageTypes() {
-  const { error: showError } = useToast()
-  
   return useQuery({
     queryKey: storageTypeKeys.list(),
     queryFn: async () => {
-      try {
-        const res = await storageTypesApi.list()
-        return res.data
-      } catch (err: any) {
-        showError(err.response?.data?.error || 'Failed to load storage types')
-        throw err
-      }
+      const res = await storageTypesApi.list()
+      return res.data
     },
   })
 }

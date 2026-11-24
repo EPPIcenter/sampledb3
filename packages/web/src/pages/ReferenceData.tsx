@@ -19,7 +19,7 @@ import {
 import { specimenTypesApi } from '../lib/api/reference-data'
 import type { Location, SpecimenType } from '../lib/api/types'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
-import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
+import { PageError, SectionMessage, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/reference-data.css'
 
 export default function ReferenceData() {
@@ -84,7 +84,8 @@ function ReferenceDataContent({
   const containerTypeRelationships = containerTypesQuery.relationships
   const containerTypeUsageInfo = containerTypesQuery.usageInfo
 
-  const { data: storageTypes } = useStorageTypes()
+  const storageTypesQuery = useStorageTypes()
+  const storageTypes = storageTypesQuery.data
 
   // Debounce search input
   useEffect(() => {
@@ -237,6 +238,13 @@ function ReferenceDataContent({
                 title={`Could not load ${config.label}`}
                 message={getQueryErrorMessage(tabQuery.error, 'Failed to load reference data')}
                 onRetry={() => void tabQuery.refetch()}
+              />
+            )}
+
+            {storageTypesQuery.isError && (
+              <SectionMessage
+                variant="error"
+                message={`Could not load storage types: ${getQueryErrorMessage(storageTypesQuery.error, 'the request failed')}`}
               />
             )}
 
