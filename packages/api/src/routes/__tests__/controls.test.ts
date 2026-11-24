@@ -482,6 +482,47 @@ describe('Controls API', () => {
       })
     })
 
+    it('returns 409 when a properties patch changes density to match another definition', async () => {
+      const strain = await createTestStrain(ctx.db, { name: '3D7' })
+      const strains = [{ id: strain.id, name: '3D7', percentage: 100 }]
+      await createTestControlDefinition(ctx.db, { name: 'D100', properties: { strains, targetDensity: 100 } })
+      const def = await createTestControlDefinition(ctx.db, { name: 'D200', properties: { strains, targetDensity: 200 } })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { properties: { targetDensity: 100 } } })
+
+      expect(res.status).toBe(409)
+      expect(await res.json()).toMatchObject({ errorCode: 'CONFLICT', existingDefinition: { name: 'D100' } })
+      const [stored] = await ctx.db.select().from(controlDefinition).where(eq(controlDefinition.id, def.id))
+      expect(stored?.properties).toMatchObject({ targetDensity: 200 })
+    })
+
+    it('returns 409 when a properties patch changes strains to match another definition', async () => {
+      const strainA = await createTestStrain(ctx.db, { name: '3D7' })
+      const strainB = await createTestStrain(ctx.db, { name: 'Dd2' })
+      const strainsA = [{ id: strainA.id, name: '3D7', percentage: 100 }]
+      const strainsB = [{ id: strainB.id, name: 'Dd2', percentage: 100 }]
+      await createTestControlDefinition(ctx.db, { name: 'A100', properties: { strains: strainsA, targetDensity: 100 } })
+      const def = await createTestControlDefinition(ctx.db, { name: 'B100', properties: { strains: strainsB, targetDensity: 100 } })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { properties: { strains: strainsA } } })
+
+      expect(res.status).toBe(409)
+    })
+
+    it('accepts a properties patch that leaves the composition alone', async () => {
+      // Two definitions that already share a composition (data from before the rule) stay editable.
+      const strain = await createTestStrain(ctx.db, { name: '3D7' })
+      const strains = [{ id: strain.id, name: '3D7', percentage: 100 }]
+      await createTestControlDefinition(ctx.db, { name: 'First', properties: { strains, targetDensity: 100 } })
+      const def = await createTestControlDefinition(ctx.db, { name: 'Second', properties: { strains, targetDensity: 100 } })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { properties: { note: 'recount' } } })
+
+      expect(res.status).toBe(200)
+      const [stored] = await ctx.db.select().from(controlDefinition).where(eq(controlDefinition.id, def.id))
+      expect(stored?.properties).toMatchObject({ note: 'recount', targetDensity: 100 })
+    })
+
     it('does not count the definition being edited as a duplicate', async () => {
       const strain = await createTestStrain(ctx.db, { name: '3D7' })
       const strains = [{ id: strain.id, name: '3D7', percentage: 100 }]
