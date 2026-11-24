@@ -649,7 +649,7 @@ describe('Controls API', () => {
       expect(patchData.batch.productionDate).toBe('2026-06-15')
     })
 
-    it('returns 400 when name already exists', async () => {
+    it('returns 409 when name already exists', async () => {
       const strain = await createTestStrain(ctx.db, { name: 'Strain Dup' })
       const definition = await createTestControlDefinition(ctx.db, {
         name: 'DefDup',
@@ -658,10 +658,19 @@ describe('Controls API', () => {
           targetDensity: 700,
         },
       })
-      await ctx.request(`${BASE}/${definition.id}/batches`, {
+      const firstCreate = await ctx.request(`${BASE}/${definition.id}/batches`, {
         method: 'POST',
         json: { name: 'Existing Batch', productionDate: '2026-04-01' },
       })
+      expect(firstCreate.status).toBe(201)
+
+      const dupCreate = await ctx.request(`${BASE}/${definition.id}/batches`, {
+        method: 'POST',
+        json: { name: 'Existing Batch', productionDate: '2026-04-01' },
+      })
+      expect(dupCreate.status).toBe(409)
+      expect(await dupCreate.json()).toMatchObject({ errorCode: 'CONFLICT' })
+
       const createRes = await ctx.request(`${BASE}/${definition.id}/batches`, {
         method: 'POST',
         json: { name: 'Second Batch', productionDate: '2026-04-02' },
@@ -673,7 +682,8 @@ describe('Controls API', () => {
         method: 'PATCH',
         json: { name: 'Existing Batch' },
       })
-      expect(patchRes.status).toBe(400)
+      expect(patchRes.status).toBe(409)
+      expect(await patchRes.json()).toMatchObject({ errorCode: 'CONFLICT' })
     })
 
     it('returns 404 for non-existent batch', async () => {

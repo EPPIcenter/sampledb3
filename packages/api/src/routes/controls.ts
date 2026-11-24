@@ -117,7 +117,14 @@ controls.patch('/batches/:id', memberMiddleware, async (c) => {
     if (data.name) {
       const validation = await validateControlBatchName(dbInstance, data.name, id)
       if (!validation.valid) {
-        return c.json({ error: validation.error, suggestion: validation.suggestion }, 400)
+        if (validation.conflict) {
+          throw new ConflictError(
+            validation.error || 'Batch name must be unique',
+            undefined,
+            validation.suggestion !== undefined ? { suggestion: validation.suggestion } : {},
+          )
+        }
+        throw new ValidationError(validation.error || 'Invalid batch name')
       }
     }
 
