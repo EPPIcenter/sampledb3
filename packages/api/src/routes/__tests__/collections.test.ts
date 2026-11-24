@@ -445,15 +445,17 @@ describe('Collections API', () => {
       expect(after?.locationId).toBe(src.id)
     })
 
-    it('answers a move that moved nothing with the same 400 body and records it in error_logs', async () => {
+    it('answers a move that moved nothing with the same 400 body and logs it at warning, not error', async () => {
       const { dst } = await setupPlateAndBox()
+      const requestMove = () =>
+        ctx.request('/api/collections/move', {
+          method: 'POST',
+          json: {
+            moves: [{ collectionType: 'cryovial_box', identifier: { type: 'id', id: 999_999 }, targetLocationId: dst.id }],
+          },
+        })
 
-      const res = await ctx.request('/api/collections/move', {
-        method: 'POST',
-        json: {
-          moves: [{ collectionType: 'cryovial_box', identifier: { type: 'id', id: 999_999 }, targetLocationId: dst.id }],
-        },
-      })
+      const res = await requestMove()
 
       expect(res.status).toBe(400)
       expect(await res.json()).toEqual({
@@ -461,11 +463,24 @@ describe('Collections API', () => {
         moved: 0,
         errors: [{ row: 1, error: expect.stringContaining('ID 999999') }],
       })
-      // The handler writes the log without awaiting it.
+      // The handler writes the log without awaiting it. At the default ERROR_LOG_LEVEL ('error'),
+      // a rejected move is not persisted as an error row.
       await new Promise((resolve) => setTimeout(resolve, 50))
-      const logged = await ctx.db.select().from(errorLogs).where(eq(errorLogs.message, 'Move operation failed'))
-      expect(logged).toHaveLength(1)
-      expect(logged[0].errorCode).toBe('RouteError')
+      expect(await ctx.db.select().from(errorLogs).where(eq(errorLogs.message, 'Move operation failed'))).toHaveLength(0)
+
+      const previous = process.env.ERROR_LOG_LEVEL
+      process.env.ERROR_LOG_LEVEL = 'warning'
+      try {
+        await requestMove()
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        const logged = await ctx.db.select().from(errorLogs).where(eq(errorLogs.message, 'Move operation failed'))
+        expect(logged).toHaveLength(1)
+        expect(logged[0].level).toBe('warning')
+        expect(logged[0].errorCode).toBe('RouteError')
+      } finally {
+        if (previous !== undefined) process.env.ERROR_LOG_LEVEL = previous
+        else delete process.env.ERROR_LOG_LEVEL
+      }
     })
 
     it('returns 200 with moved and errors when a best-effort move moves some Collections', async () => {

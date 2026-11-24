@@ -81,7 +81,10 @@ export function handleRouteError(error: unknown, c: Context): Response {
   
   // Preserve route-specific JSON bodies (search, containers read paths, etc.)
   if (error instanceof RouteError) {
-    if (error.cause !== undefined) {
+    if (error.status < 500) {
+      // 4xx outcomes (e.g. rejected move, invalid export format) are client errors, not server faults.
+      logError(database, 'backend', 'warning', error.message, error.cause ?? error, errorContext).catch(logPersistFailure)
+    } else if (error.cause !== undefined) {
       // The body leaves the cause out in production, so log it in full: stdout, and error_logs
       // under the route's message with the cause's name and stack.
       const cause = error.cause instanceof Error ? error.cause : new Error(String(error.cause))

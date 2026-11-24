@@ -195,6 +195,32 @@ describe('error-handler', () => {
       expect(data.error).toBe('Failed to fetch containers')
       expect(data.details).toBe('timeout')
     })
+
+    it('logs a 4xx RouteError at warning level rather than error level', async () => {
+      const app = createAppWithError(new RouteError(400, { error: 'Invalid format' }))
+      const res = await app.request('http://localhost/test')
+      expect(res.status).toBe(400)
+      expect(await getJson(res)).toEqual({ error: 'Invalid format' })
+
+      // At the default ERROR_LOG_LEVEL ('error'), a 4xx RouteError is not persisted.
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const atErrorLevel = await testDb.select().from(errorLogs).where(eq(errorLogs.message, 'Invalid format'))
+      expect(atErrorLevel).toHaveLength(0)
+
+      const previous = process.env.ERROR_LOG_LEVEL
+      process.env.ERROR_LOG_LEVEL = 'warning'
+      try {
+        await app.request('http://localhost/test')
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        const atWarningLevel = await testDb.select().from(errorLogs).where(eq(errorLogs.message, 'Invalid format'))
+        expect(atWarningLevel).toHaveLength(1)
+        expect(atWarningLevel[0].level).toBe('warning')
+        expect(atWarningLevel[0].errorCode).toBe('RouteError')
+      } finally {
+        if (previous !== undefined) process.env.ERROR_LOG_LEVEL = previous
+        else delete process.env.ERROR_LOG_LEVEL
+      }
+    })
   })
 
   describe('with NODE_ENV=production', () => {
