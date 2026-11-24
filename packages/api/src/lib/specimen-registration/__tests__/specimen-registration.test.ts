@@ -28,6 +28,7 @@ import {
   storageContainer,
 } from '../../../db/schema'
 import { setContainerDefaults } from '../../settings'
+import { clearDefaultsCache } from '../../defaults'
 import {
   checkSpecimenRegistration,
   isStoredDataClash,
@@ -580,6 +581,30 @@ describe('Specimen registration', () => {
     const error = await rejection([entry([{ ...tube('T1', { name: 'P1', position: 'A01' }), unitId: other.id }])])
 
     expect(error.errors[0]).toMatchObject({ field: 'unitId', message: expect.stringContaining("Unit 'mg' is not allowed") })
+  })
+
+  it('reports missing container defaults as a unitId validation problem', async () => {
+    sqlite.exec('DELETE FROM settings')
+    clearDefaultsCache(db)
+
+    const error = await rejection([entry([tube('T1', { name: 'P1', position: 'A01' })])])
+
+    expect(error.errors).toEqual([
+      expect.objectContaining({ field: 'unitId', message: expect.stringContaining('Container defaults are not configured') }),
+    ])
+  })
+
+  it('propagates a database error during unit/default lookup instead of turning it into a unitId validation problem', async () => {
+    clearDefaultsCache(db)
+    sqlite.exec('DROP TABLE container_type_unit')
+
+    const caught = await registerSpecimens(db, [entry([tube('T1', { name: 'P1', position: 'A01' })])]).then(
+      () => null,
+      (e: unknown) => e,
+    )
+
+    expect(caught).toBeInstanceOf(Error)
+    expect(caught).not.toBeInstanceOf(SpecimenRegistrationError)
   })
 
   it('rejects a quantity that is not finite and keys it to its own field', async () => {

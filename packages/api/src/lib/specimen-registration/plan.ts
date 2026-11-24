@@ -13,7 +13,12 @@ import {
   studySubject,
   type Specimen,
 } from '../../db/schema'
-import { getDefaultRemainingQuantity, getDefaultTotalQuantity, getDefaultUnit } from '../defaults'
+import {
+  ContainerDefaultsNotConfiguredError,
+  getDefaultRemainingQuantity,
+  getDefaultTotalQuantity,
+  getDefaultUnit,
+} from '../defaults'
 import { parseGridPosition } from '@sampledb/contract'
 import { checkGridPositionOccupancy, occupiedGridPositionMessage } from '../container-occupancy'
 import {
@@ -266,7 +271,11 @@ async function planContainer(
       problems.push({ field: totalOutOfBounds ? 'totalQuantity' : 'remainingQuantity', message: quantityError })
     }
   } catch (error) {
-    problems.push({ field: 'unitId', message: error instanceof Error ? error.message : 'Container defaults are not configured' })
+    if (error instanceof ContainerDefaultsNotConfiguredError) {
+      problems.push({ field: 'unitId', message: error.message })
+    } else {
+      throw error
+    }
   }
 
   let collection: CollectionTarget | null = null
