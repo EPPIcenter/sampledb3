@@ -25,7 +25,7 @@ export function createSearchRoutes(database: Database): Hono {
       return c.json(data)
     } catch (error: unknown) {
       return handleRouteError(
-        new RouteError(500, searchFailedBody(c.req.query('q') || '', error)),
+        new RouteError(500, searchFailedBody(c.req.query('q') || '', error), error),
         c,
       )
     }

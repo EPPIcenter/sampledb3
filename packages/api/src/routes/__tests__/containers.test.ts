@@ -81,6 +81,20 @@ describe('Containers API', () => {
       vi.restoreAllMocks()
     })
 
+    it('logs the cause of a failed list to error_logs', async () => {
+      vi.spyOn(containerEnrichment, 'enrichContainersForApi').mockRejectedValueOnce(
+        new Error('enrichment failed'),
+      )
+
+      await ctx.request('/api/containers')
+
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const rows = await ctx.db.select().from(errorLogs).where(eq(errorLogs.message, 'Failed to fetch containers'))
+      expect(rows).toHaveLength(1)
+      expect(rows[0].stack).toContain('enrichment failed')
+      vi.restoreAllMocks()
+    })
+
     describe('tag_ids filter', () => {
       type ListResponse = {
         containers: Array<{ id: number }>

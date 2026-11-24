@@ -87,7 +87,7 @@ containers.get('/', authMiddleware, async (c) => {
   } catch (error: unknown) {
     if (error instanceof ValidationError) return handleRouteError(error, c)
     return handleRouteError(
-      new RouteError(500, containersFetchFailedBody('Failed to fetch containers', error)),
+      new RouteError(500, containersFetchFailedBody('Failed to fetch containers', error), error),
       c,
     )
   }
@@ -125,7 +125,7 @@ containers.get('/:id', authMiddleware, async (c) => {
     })
   } catch (error: unknown) {
     return handleRouteError(
-      new RouteError(500, containersFetchFailedBody('Failed to fetch container', error)),
+      new RouteError(500, containersFetchFailedBody('Failed to fetch container', error), error),
       c,
     )
   }
@@ -337,7 +337,7 @@ containers.get('/:id/tags', authMiddleware, async (c) => {
     return c.json({ tags })
   } catch (error: unknown) {
     return handleRouteError(
-      new RouteError(500, containersFetchFailedBody('Failed to fetch container tags', error)),
+      new RouteError(500, containersFetchFailedBody('Failed to fetch container tags', error), error),
       c,
     )
   }
@@ -418,7 +418,7 @@ containers.delete('/:id/tags/:tagId', memberMiddleware, async (c) => {
     return c.json({ success: true })
   } catch (error: unknown) {
     return handleRouteError(
-      new RouteError(500, containersFetchFailedBody('Failed to remove tag', error)),
+      new RouteError(500, containersFetchFailedBody('Failed to remove tag', error), error),
       c,
     )
   }
