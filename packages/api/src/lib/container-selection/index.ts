@@ -151,8 +151,8 @@ function checkSubjectDates(selection: Extract<ContainerSelection, { kind: 'subje
 /**
  * Run each scope (one per chunk of a listed selection) and collect its Specimens and the
  * Containers that also pass the Container-level conditions. Scopes may overlap, so rows are
- * collected by id. With any Container-level
- * condition, only Specimens with a matching Container are kept.
+ * collected by id. With any Container-level condition, only Specimens with a matching
+ * Container are kept, and only those are loaded.
  */
 async function runScopes(
   database: Database,
@@ -162,29 +162,41 @@ async function runScopes(
   const specimensById = new Map<number, SelectedSpecimen>()
   const containersById = new Map<number, SelectedContainer>()
   const containerTypes = new Map<number, ContainerSubtype>()
-  for (const scope of scopes) {
-    for (const row of await database.select().from(specimen).where(scope.specimens)) specimensById.set(row.id, row)
-    const rows = await database
-      .select({ container: getTableColumns(storageContainer), containerType: containerTypeSql })
-      .from(storageContainer)
-      .innerJoin(specimen, eq(storageContainer.specimenId, specimen.id))
-      .where(and(scope.specimens, scope.containers, ...containerConditions))
-    for (const row of rows) {
-      containersById.set(row.container.id, row.container)
-      containerTypes.set(row.container.id, row.containerType)
-    }
+  const hasContainerLevelFilter = containerConditions.length > 0
+  const containerFields = { container: getTableColumns(storageContainer), containerType: containerTypeSql }
+  const addContainer = (row: { container: SelectedContainer; containerType: ContainerSubtype }) => {
+    containersById.set(row.container.id, row.container)
+    containerTypes.set(row.container.id, row.containerType)
   }
-  const containers = [...containersById.values()]
-  let specimens = [...specimensById.values()]
-  if (containerConditions.length > 0) {
-    const stored = new Set(containers.map((container) => container.specimenId))
-    specimens = specimens.filter((row) => stored.has(row.id))
+  for (const scope of scopes) {
+    const matchingContainers = and(scope.specimens, scope.containers, ...containerConditions)
+    if (hasContainerLevelFilter) {
+      // The kept Specimens are the ones joined to a matching Container, so one query returns
+      // both and the scope's other Specimens are never loaded.
+      const rows = await database
+        .select({ ...containerFields, specimen: getTableColumns(specimen) })
+        .from(storageContainer)
+        .innerJoin(specimen, eq(storageContainer.specimenId, specimen.id))
+        .where(matchingContainers)
+      for (const row of rows) {
+        addContainer(row)
+        specimensById.set(row.specimen.id, row.specimen)
+      }
+    } else {
+      for (const row of await database.select().from(specimen).where(scope.specimens)) specimensById.set(row.id, row)
+      const rows = await database
+        .select(containerFields)
+        .from(storageContainer)
+        .innerJoin(specimen, eq(storageContainer.specimenId, specimen.id))
+        .where(matchingContainers)
+      for (const row of rows) addContainer(row)
+    }
   }
   const byId = (a: { id: number }, b: { id: number }) => a.id - b.id
   return {
-    containers: containers.sort(byId),
-    specimens: specimens.sort(byId),
+    containers: [...containersById.values()].sort(byId),
+    specimens: [...specimensById.values()].sort(byId),
     containerTypes,
-    hasContainerLevelFilter: containerConditions.length > 0,
+    hasContainerLevelFilter,
   }
 }

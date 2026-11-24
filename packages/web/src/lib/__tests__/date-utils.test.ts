@@ -179,3 +179,30 @@ describe('server timestamps (UTC with no zone marker)', () => {
     expect([month.getFullYear(), month.getMonth(), month.getDate()]).toEqual([2026, 10, 1])
   })
 })
+
+// vitest.config.ts pins TZ to America/Los_Angeles, where 2024-11-03 is a 25-hour day
+// (DST ends) and 2024-03-10 a 23-hour one (DST starts).
+describe('calendarDaysBetween', () => {
+  it('counts one day across a DST fall-back', async () => {
+    const { calendarDaysBetween } = await import('../date-utils')
+    expect(calendarDaysBetween('2024-11-03', '2024-11-04')).toBe(1)
+  })
+
+  it('counts one day across a DST spring-forward', async () => {
+    const { calendarDaysBetween } = await import('../date-utils')
+    expect(calendarDaysBetween('2024-03-10', '2024-03-11')).toBe(1)
+  })
+
+  it('counts zero days for the same date and whole days across months and a leap day', async () => {
+    const { calendarDaysBetween } = await import('../date-utils')
+    expect(calendarDaysBetween('2024-01-15', '2024-01-15')).toBe(0)
+    expect(calendarDaysBetween('2024-02-28', '2024-03-01')).toBe(2)
+    expect(calendarDaysBetween('2024-01-01', '2024-12-31')).toBe(365)
+  })
+
+  it('counts by the date part of a timestamp, whatever the time of day', async () => {
+    const { calendarDaysBetween } = await import('../date-utils')
+    expect(calendarDaysBetween('2024-11-03T09:00:00', '2024-11-04T10:00:00')).toBe(1)
+    expect(calendarDaysBetween('2024-11-03 23:00:00', '2024-11-04 01:00:00')).toBe(1)
+  })
+})

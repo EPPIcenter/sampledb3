@@ -6,9 +6,14 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createControlsRoutes } from '../controls'
-import { containerTypeUnit, controlBatch, controlDefinition, specimen, specimenTypeContainerType } from '../../db/schema'
-import { setContainerDefaults } from '../../lib/settings'
-import { utcNow } from '../../lib/datetime'
+import {
+  containerTypeUnit,
+  controlBatch,
+  controlDefinition,
+  specimen,
+  specimenTypeContainerType,
+  storageContainer,
+} from '../../db/schema'
 import {
   createTestControlBatch,
   createTestControlDefinition,
@@ -20,8 +25,44 @@ import {
   createTestStrain,
   createTestUnit,
 } from '../../__tests__/helpers/factories'
+import type { Database } from '../../db/client'
+import { clearDefaultsCache } from '../../lib/defaults'
+import { utcNow } from '../../lib/datetime'
+import { clearSettingsCache, setContainerDefaults } from '../../lib/settings'
 
 const BASE = '/api/blood-controls'
+
+/**
+ * What a control batch with micronix tubes needs: two blood control definitions, a 'DNA'
+ * specimen type that allows micronix tubes, and an empty plate. `batch` builds one request batch.
+ */
+async function seedMicronixBatchFixtures(db: Database) {
+  clearSettingsCache()
+  clearDefaultsCache()
+  const unit = await createTestUnit(db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+  await setContainerDefaults(db, {
+    micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+  })
+  await db.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+  const def100 = await createTestControlDefinition(db, { name: 'D100', controlType: 'blood' })
+  const def200 = await createTestControlDefinition(db, { name: 'D200', controlType: 'blood' })
+  const specimenType = await createTestSpecimenType(db, { name: 'DNA' })
+  await db.insert(specimenTypeContainerType).values({ specimenTypeId: specimenType.id, containerType: 'micronix_tube', created: utcNow() })
+  const storageType = await createTestStorageType(db, { name: 'Freezer' })
+  const location = await createTestLocation(db, { name: 'Loc', storageTypeId: String(storageType.id) })
+  const plate = await createTestMicronixPlate(db, { name: 'Plate1', locationId: location.id })
+  const specimens = (barcode: string, position: string, specimenTypeName = 'DNA') => [
+    {
+      specimenTypeName,
+      containers: [{ containerType: 'micronix_tube', barcode, collection: { type: 'micronix_plate', id: plate.id, position } }],
+    },
+  ]
+  const batch = (controlDefinitionId: number, name: string, barcode: string, position: string, specimenTypeName?: string) => ({
+    batch: { controlDefinitionId, name },
+    specimens: specimens(barcode, position, specimenTypeName),
+  })
+  return { def100, def200, batch, specimens }
+}
 
 describe('Controls API', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -505,6 +546,47 @@ describe('Controls API', () => {
       })
     })
 
+    it('returns 409 when a properties patch changes density to match another definition', async () => {
+      const strain = await createTestStrain(ctx.db, { name: '3D7' })
+      const strains = [{ id: strain.id, name: '3D7', percentage: 100 }]
+      await createTestControlDefinition(ctx.db, { name: 'D100', properties: { strains, targetDensity: 100 } })
+      const def = await createTestControlDefinition(ctx.db, { name: 'D200', properties: { strains, targetDensity: 200 } })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { properties: { targetDensity: 100 } } })
+
+      expect(res.status).toBe(409)
+      expect(await res.json()).toMatchObject({ errorCode: 'CONFLICT', existingDefinition: { name: 'D100' } })
+      const [stored] = await ctx.db.select().from(controlDefinition).where(eq(controlDefinition.id, def.id))
+      expect(stored?.properties).toMatchObject({ targetDensity: 200 })
+    })
+
+    it('returns 409 when a properties patch changes strains to match another definition', async () => {
+      const strainA = await createTestStrain(ctx.db, { name: '3D7' })
+      const strainB = await createTestStrain(ctx.db, { name: 'Dd2' })
+      const strainsA = [{ id: strainA.id, name: '3D7', percentage: 100 }]
+      const strainsB = [{ id: strainB.id, name: 'Dd2', percentage: 100 }]
+      await createTestControlDefinition(ctx.db, { name: 'A100', properties: { strains: strainsA, targetDensity: 100 } })
+      const def = await createTestControlDefinition(ctx.db, { name: 'B100', properties: { strains: strainsB, targetDensity: 100 } })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { properties: { strains: strainsA } } })
+
+      expect(res.status).toBe(409)
+    })
+
+    it('accepts a properties patch that leaves the composition alone', async () => {
+      // Two definitions that already share a composition (data from before the rule) stay editable.
+      const strain = await createTestStrain(ctx.db, { name: '3D7' })
+      const strains = [{ id: strain.id, name: '3D7', percentage: 100 }]
+      await createTestControlDefinition(ctx.db, { name: 'First', properties: { strains, targetDensity: 100 } })
+      const def = await createTestControlDefinition(ctx.db, { name: 'Second', properties: { strains, targetDensity: 100 } })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { properties: { note: 'recount' } } })
+
+      expect(res.status).toBe(200)
+      const [stored] = await ctx.db.select().from(controlDefinition).where(eq(controlDefinition.id, def.id))
+      expect(stored?.properties).toMatchObject({ note: 'recount', targetDensity: 100 })
+    })
+
     it('does not count the definition being edited as a duplicate', async () => {
       const strain = await createTestStrain(ctx.db, { name: '3D7' })
       const strains = [{ id: strain.id, name: '3D7', percentage: 100 }]
@@ -728,6 +810,144 @@ describe('Controls API', () => {
       expect(res.status).toBe(200)
       expect(await ctx.db.select().from(controlBatch).where(eq(controlBatch.id, batch.id)).get()).toBeUndefined()
       expect(await ctx.db.select().from(specimen).where(eq(specimen.id, spec.id)).get()).toBeUndefined()
+    })
+  })
+
+  describe(`POST ${BASE}/batches/create-many-with-specimens`, () => {
+    const path = `${BASE}/batches/create-many-with-specimens`
+
+    it('returns 201 and creates every batch with its specimens and containers', async () => {
+      const { def100, def200, batch } = await seedMicronixBatchFixtures(ctx.db)
+
+      const res = await ctx.request(path, {
+        method: 'POST',
+        json: { batches: [batch(def100.id, 'B100', 'MT1', 'A01'), batch(def200.id, 'B200', 'MT2', 'A02')] },
+      })
+
+      expect(res.status).toBe(201)
+      const data = (await res.json()) as {
+        batches: Array<{ batch: { name: string; controlDefinitionId: number }; specimens: Array<{ containerCount: number }> }>
+      }
+      expect(data.batches.map((created) => created.batch)).toMatchObject([
+        { name: 'B100', controlDefinitionId: def100.id },
+        { name: 'B200', controlDefinitionId: def200.id },
+      ])
+      expect(data.batches.map((created) => created.specimens.map((s) => s.containerCount))).toEqual([[1], [1]])
+      expect(await ctx.db.select().from(controlBatch).all()).toHaveLength(2)
+      expect(await ctx.db.select().from(specimen).all()).toHaveLength(2)
+      expect(await ctx.db.select().from(storageContainer).all()).toHaveLength(2)
+    })
+
+    it('returns 409 for a conflict in a later batch and creates none of them', async () => {
+      const { def100, def200, batch } = await seedMicronixBatchFixtures(ctx.db)
+      const conflicts = [
+        // The second batch reuses the first one's name, tube barcode, or position.
+        { second: batch(def200.id, 'B100', 'MT2', 'A02'), error: "Control batch 2 ('B100'): Batch name 'B100' already exists. No control batches were created." },
+        { second: batch(def200.id, 'B200', 'MT1', 'A02'), error: "Control batch 2 ('B200'): Barcode 'MT1' already exists. Use a different barcode. No control batches were created." },
+        {
+          second: batch(def200.id, 'B200', 'MT2', 'A01'),
+          error: "Control batch 2 ('B200'): Position A01 is already used in this plate. Use a different position or plate. No control batches were created.",
+        },
+      ]
+
+      for (const { second, error } of conflicts) {
+        const res = await ctx.request(path, {
+          method: 'POST',
+          json: { batches: [batch(def100.id, 'B100', 'MT1', 'A01'), second] },
+        })
+
+        expect(res.status).toBe(409)
+        expect(await res.json()).toMatchObject({ error, errorCode: 'CONFLICT' })
+        expect(await ctx.db.select().from(controlBatch).all()).toHaveLength(0)
+        expect(await ctx.db.select().from(specimen).all()).toHaveLength(0)
+        expect(await ctx.db.select().from(storageContainer).all()).toHaveLength(0)
+      }
+    })
+
+    it('returns 400 for bad input in a later batch and creates none of them', async () => {
+      const { def100, def200, batch } = await seedMicronixBatchFixtures(ctx.db)
+
+      const res = await ctx.request(path, {
+        method: 'POST',
+        json: { batches: [batch(def100.id, 'B100', 'MT1', 'A01'), batch(def200.id, 'B200', 'MT2', 'A02', 'Nope')] },
+      })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({
+        error: "Control batch 2 ('B200'): Specimen type not found: Nope. No control batches were created.",
+        errorCode: 'VALIDATION_ERROR',
+      })
+      expect(await ctx.db.select().from(controlBatch).all()).toHaveLength(0)
+      expect(await ctx.db.select().from(storageContainer).all()).toHaveLength(0)
+    })
+
+    it('returns 400 for a body that does not match the schema', async () => {
+      const { def100, batch } = await seedMicronixBatchFixtures(ctx.db)
+      // A batch may omit its name here (it is generated), so the mismatch is the missing definition.
+      const noDefinition = { ...batch(def100.id, 'B100', 'MT1', 'A01'), batch: { name: 'B100' } }
+
+      for (const json of [{ batches: [] }, { batches: [noDefinition] }]) {
+        const res = await ctx.request(path, { method: 'POST', json })
+        expect(res.status).toBe(400)
+        expect(await res.json()).toMatchObject({ errorCode: 'VALIDATION_ERROR' })
+      }
+      expect(await ctx.db.select().from(controlBatch).all()).toHaveLength(0)
+    })
+
+    it('returns 401 when not authenticated', async () => {
+      const res = await authenticatedRequest(ctx.createRequestApp(), path, { method: 'POST', json: { batches: [] } })
+      expect(res.status).toBe(401)
+    })
+  })
+
+  describe(`POST ${BASE}/batches/create-with-specimens`, () => {
+    it('returns 409 for a duplicate batch name, a duplicate tube barcode, and an occupied position', async () => {
+      const { def100, def200, batch } = await seedMicronixBatchFixtures(ctx.db)
+      const first = await ctx.request(`${BASE}/batches/create-with-specimens`, {
+        method: 'POST',
+        json: batch(def100.id, 'B100', 'MT1', 'A01'),
+      })
+      expect(first.status).toBe(201)
+
+      const conflicts = [
+        { json: batch(def200.id, 'B100', 'MT2', 'A02'), error: "Batch name 'B100' already exists" },
+        { json: batch(def200.id, 'B200', 'MT1', 'A02'), error: "Barcode 'MT1' already exists. Use a different barcode." },
+        { json: batch(def200.id, 'B200', 'MT2', 'A01'), error: 'Position A01 is already used in this plate. Use a different position or plate.' },
+      ]
+      for (const { json, error } of conflicts) {
+        const res = await ctx.request(`${BASE}/batches/create-with-specimens`, { method: 'POST', json })
+        expect(res.status).toBe(409)
+        expect(await res.json()).toMatchObject({ error, errorCode: 'CONFLICT' })
+      }
+      expect(await ctx.db.select().from(controlBatch).all()).toHaveLength(1)
+      expect(await ctx.db.select().from(storageContainer).all()).toHaveLength(1)
+    })
+
+    it('returns 400 for an unknown specimen type or control definition', async () => {
+      const { def100, batch } = await seedMicronixBatchFixtures(ctx.db)
+
+      for (const json of [batch(def100.id, 'B100', 'MT1', 'A01', 'Nope'), batch(99999, 'B100', 'MT1', 'A01')]) {
+        const res = await ctx.request(`${BASE}/batches/create-with-specimens`, { method: 'POST', json })
+        expect(res.status).toBe(400)
+      }
+      expect(await ctx.db.select().from(controlBatch).all()).toHaveLength(0)
+    })
+  })
+
+  describe(`POST ${BASE}/batches/:id/specimens/bulk`, () => {
+    it('returns 409 for an occupied position and 400 for an unknown specimen type', async () => {
+      const { def100, specimens } = await seedMicronixBatchFixtures(ctx.db)
+      const existing = await createTestControlBatch(ctx.db, def100.id, { name: 'B100' })
+      const path = `${BASE}/batches/${existing.id}/specimens/bulk`
+      const first = await ctx.request(path, { method: 'POST', json: { specimens: specimens('MT1', 'A01') } })
+      expect(first.status).toBe(201)
+
+      const occupied = await ctx.request(path, { method: 'POST', json: { specimens: specimens('MT2', 'A01') } })
+      const unknownType = await ctx.request(path, { method: 'POST', json: { specimens: specimens('MT3', 'A03', 'Nope') } })
+
+      expect(occupied.status).toBe(409)
+      expect(unknownType.status).toBe(400)
+      expect(await ctx.db.select().from(storageContainer).all()).toHaveLength(1)
     })
   })
 })

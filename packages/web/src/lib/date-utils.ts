@@ -27,6 +27,22 @@ export function displayDateTime(value: string): number {
   return parseDisplayDate(value).getTime()
 }
 
+/** UTC midnight of a value's calendar date: its leading YYYY-MM-DD, or else its local date. */
+function calendarDateAsUtc(value: string): number {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+  if (match) return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  const date = new Date(value)
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+/**
+ * Whole calendar days from one date to a later one, as the API counts a study's duration.
+ * Counted in UTC, where every day is 24 hours: local midnights are 25 hours apart when DST ends.
+ */
+export function calendarDaysBetween(from: string, to: string): number {
+  return Math.round((calendarDateAsUtc(to) - calendarDateAsUtc(from)) / 86_400_000)
+}
+
 /** A Date as a local YYYY-MM-DD calendar date (toISOString() gives the UTC date). */
 export function toLocalDateString(date: Date): string {
   const year = date.getFullYear()

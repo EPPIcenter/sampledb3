@@ -25,7 +25,13 @@ import { GRID_COLLECTION_OF } from './tables'
 import { findTubesUsingBarcode } from '../identifier-resolution'
 import { CollectionPlanner, targetKey, type CollectionTarget, type GridCollectionType, type PlannedCollection } from './collections'
 import { validateContainerWriteFields } from './container-fields'
-import type { RegistrationContainer, RegistrationEntry, RegistrationError, RegistrationSource } from './types'
+import {
+  markStoredDataClash,
+  type RegistrationContainer,
+  type RegistrationEntry,
+  type RegistrationError,
+  type RegistrationSource,
+} from './types'
 
 export type PlannedSpecimen =
   | { existing: Specimen }
@@ -207,7 +213,10 @@ export async function planRegistration(
     for (let containerIndex = 0; containerIndex < entry.containers.length; containerIndex++) {
       const planned = await planContainer(database, planner, claims, entry.containers[containerIndex], specimenTypeId)
       if ('errors' in planned) {
-        for (const e of planned.errors) errors.push({ entryIndex, containerIndex, ...e })
+        for (const { clash, ...problem } of planned.errors) {
+          const error = { entryIndex, containerIndex, ...problem }
+          errors.push(clash ? markStoredDataClash(error) : error)
+        }
       } else {
         containers.push({ entryIndex, containerIndex, ...planned })
       }
@@ -217,7 +226,8 @@ export async function planRegistration(
   return { plan: { specimens, specimenIndexOfEntry, containers, collections: planner.planned }, errors }
 }
 
-type ContainerProblem = { field: string; message: string }
+/** `clash` marks a problem with stored data (an occupied position, a barcode in use), not with the input alone. */
+type ContainerProblem = { field: string; message: string; clash?: true }
 
 async function planContainer(
   database: Database,
@@ -304,7 +314,9 @@ async function planContainer(
             collectionId: collection.existingId,
             position,
           })
-          if (occupancy.occupied) problems.push({ field: 'position', message: occupiedGridPositionMessage(position, gridType) })
+          if (occupancy.occupied) {
+            problems.push({ field: 'position', message: occupiedGridPositionMessage(position, gridType), clash: true })
+          }
         }
         if (!claims.take({ kind: 'position', gridType, collection, position })) {
           problems.push({
@@ -321,7 +333,11 @@ async function planContainer(
       const taken = await findTubesUsingBarcode(database, barcode)
       if (taken.length > 0) {
         const asVariant = taken.some((match) => match.barcode === barcode) ? '' : ` as '${taken[0].barcode}'`
-        problems.push({ field: 'barcode', message: `Barcode '${barcode}' already exists${asVariant}. Use a different barcode.` })
+        problems.push({
+          field: 'barcode',
+          message: `Barcode '${barcode}' already exists${asVariant}. Use a different barcode.`,
+          clash: true,
+        })
       }
       if (!claims.take({ kind: 'barcode', barcode })) {
         problems.push({

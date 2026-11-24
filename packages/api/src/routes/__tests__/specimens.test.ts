@@ -642,6 +642,21 @@ describe('Specimens API', () => {
       expect(await ctx.db.select().from(storageContainer).where(eq(storageContainer.specimenId, testSpecimen.id))).toEqual([])
     })
 
+    it('returns 400 when a micronix tube barcode is only whitespace', async () => {
+      const res = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {
+        method: 'POST',
+        json: {
+          containerType: 'micronix_tube',
+          barcode: '   ',
+          collection: { type: 'micronix_plate', name: 'ADD-PLATE', position: 'A01' },
+        },
+      })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ error: 'Barcode is required for micronix tubes' })
+      expect(await ctx.db.select().from(storageContainer).where(eq(storageContainer.specimenId, testSpecimen.id))).toEqual([])
+    })
+
     it('rejects a barcode on a paper container at the schema (ADR 0006)', async () => {
       const res = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {
         method: 'POST',
