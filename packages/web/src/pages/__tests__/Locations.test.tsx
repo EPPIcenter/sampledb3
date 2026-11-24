@@ -151,10 +151,52 @@ describe('Locations page: what each role can do (#141)', () => {
     const user = userEvent.setup()
     await render(<Locations />)
     // The tree opens with its roots collapsed; expand Freezer A so both rows show.
-    await user.click(await screen.findByRole('button', { name: '▸' }))
-    await screen.findByRole('button', { name: /Shelf 1/ })
+    await user.click(await screen.findByRole('button', { name: 'Expand Freezer A' }))
+    await screen.findByRole('button', { name: /^Shelf 1/ })
     return user
   }
+
+  describe('tree rows', () => {
+    it('expands and collapses a Location with a toggle named for it', async () => {
+      signInAs('viewer')
+      const user = userEvent.setup()
+      await render(<Locations />)
+
+      const expand = await screen.findByRole('button', { name: 'Expand Freezer A' })
+      expect(expand).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.queryByRole('button', { name: /^Shelf 1/ })).not.toBeInTheDocument()
+
+      await user.click(expand)
+
+      expect(await screen.findByRole('button', { name: /^Shelf 1/ })).toBeInTheDocument()
+      const collapse = screen.getByRole('button', { name: 'Collapse Freezer A' })
+      expect(collapse).toHaveAttribute('aria-expanded', 'true')
+
+      await user.click(collapse)
+
+      expect(screen.queryByRole('button', { name: /^Shelf 1/ })).not.toBeInTheDocument()
+    })
+
+    it('gives a Location with no child Locations no toggle', async () => {
+      await renderAs('viewer')
+
+      expect(screen.queryByRole('button', { name: /(Expand|Collapse) Shelf 1/ })).not.toBeInTheDocument()
+    })
+
+    it('keeps the toggle outside the button that selects the Location', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+      await renderAs('viewer')
+
+      const row = screen.getByRole('button', { name: /^Freezer A/ })
+      expect(row).not.toContainElement(screen.getByRole('button', { name: 'Collapse Freezer A' }))
+      for (const button of screen.getAllByRole('button')) {
+        expect(button.querySelector('button')).toBeNull()
+      }
+      // React logs "<button> cannot be a descendant of <button>" for a nested one.
+      expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/descendant|validateDOMNesting/)
+      consoleError.mockRestore()
+    })
+  })
 
   /** Opens the page the way the Create Location command does. */
   async function renderFromCreateCommand(role: Role) {
@@ -308,7 +350,7 @@ describe('Locations page: what each role can do (#141)', () => {
       await renderFromCreateCommand('viewer')
 
       // The form opens once the list has loaded, so wait for the tree before checking.
-      expect(await screen.findByRole('button', { name: /Freezer A/ })).toBeInTheDocument()
+      expect(await screen.findByRole('button', { name: /^Freezer A/ })).toBeInTheDocument()
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
   })
