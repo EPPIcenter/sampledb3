@@ -59,6 +59,37 @@ describe('resolveParentContainerId', () => {
         "Parent container id '999999' not found",
       )
     })
+
+    it.each(['Infinity', '0', '-5', '1.5', 'abc'])(
+      'rejects non-positive-integer parent_container_id %j instead of falling through to barcode',
+      async (badId) => {
+        const location = await freezer(testDb)
+        const plate = await createTestMicronixPlate(testDb, { name: 'Plate-BadId', locationId: location.id })
+        const container = await createTestStorageContainer(testDb)
+        await testDb.insert(micronixTube).values({
+          id: container.id,
+          collectionId: plate.id,
+          barcode: 'MT-FALLBACK',
+          position: 'A01',
+        })
+
+        await expect(
+          resolveParentContainerId(testDb, row({ parent_container_id: badId, parent_container_barcode: 'MT-FALLBACK' })),
+        ).rejects.toThrow(`Invalid parent_container_id '${badId}': must be a positive integer`)
+      },
+    )
+
+    it.each(['Infinity', '0', '-1', '2.5', 'not-an-id'])(
+      'rejects non-positive-integer parent_control_batch_id %j',
+      async (badId) => {
+        await expect(
+          resolveParentContainerId(
+            testDb,
+            row({ parent_control_batch_id: badId, parent_specimen_type_name: 'Whole Blood' }),
+          ),
+        ).rejects.toThrow(`Invalid parent_control_batch_id '${badId}': must be a positive integer`)
+      },
+    )
   })
 
   describe('barcode', () => {

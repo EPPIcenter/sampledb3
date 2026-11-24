@@ -16,10 +16,20 @@ import { parseCollectionDate } from '../validation'
 import { ValidationError } from '../error-handler'
 import type { DerivationCsvRow } from '../derivations-csv'
 
-function parseNumber(value?: string): number | undefined {
-  if (value == null || value.trim() === '') return undefined
-  const n = Number(value)
-  return Number.isNaN(n) ? undefined : n
+function parsePositiveIntegerId(
+  column: 'parent_container_id' | 'parent_control_batch_id',
+  value?: string,
+): number | undefined {
+  const raw = (value ?? '').trim()
+  if (raw === '') return undefined
+  if (!/^\d+$/.test(raw)) {
+    throw new ValidationError(`Invalid ${column} '${raw}': must be a positive integer`)
+  }
+  const n = Number(raw)
+  if (!Number.isSafeInteger(n) || n <= 0) {
+    throw new ValidationError(`Invalid ${column} '${raw}': must be a positive integer`)
+  }
+  return n
 }
 
 /**
@@ -50,8 +60,8 @@ export async function resolveParentContainerId(
   row: DerivationCsvRow,
 ): Promise<number> {
   // 1. Explicit ID
-  const explicitId = parseNumber(row.parent_container_id)
-  if (explicitId) {
+  const explicitId = parsePositiveIntegerId('parent_container_id', row.parent_container_id)
+  if (explicitId !== undefined) {
     const existing = await database
       .select({ id: storageContainer.id })
       .from(storageContainer)
@@ -82,19 +92,17 @@ export async function resolveParentContainerId(
 
     // Resolve control batch
     let batchId: number | undefined
-    if (row.parent_control_batch_id) {
-      const batchIdNum = parseNumber(row.parent_control_batch_id)
-      if (batchIdNum) {
-        const batch = await database
-          .select({ id: controlBatch.id })
-          .from(controlBatch)
-          .where(eq(controlBatch.id, batchIdNum))
-          .get()
-        if (!batch) {
-          throw new ValidationError(`Control batch id '${batchIdNum}' not found`)
-        }
-        batchId = batch.id
+    const batchIdNum = parsePositiveIntegerId('parent_control_batch_id', row.parent_control_batch_id)
+    if (batchIdNum !== undefined) {
+      const batch = await database
+        .select({ id: controlBatch.id })
+        .from(controlBatch)
+        .where(eq(controlBatch.id, batchIdNum))
+        .get()
+      if (!batch) {
+        throw new ValidationError(`Control batch id '${batchIdNum}' not found`)
       }
+      batchId = batch.id
     } else if (row.parent_control_batch_name) {
       const batch = await database
         .select({ id: controlBatch.id })

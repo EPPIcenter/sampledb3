@@ -52,7 +52,7 @@ function normalizeWell(s: string): string {
 function parseNum(v: string): number | null {
   if (v === '') return null
   const n = parseFloat(String(v).replace(/,/g, ''))
-  if (Number.isNaN(n)) return null
+  if (!Number.isFinite(n)) return null
   return n
 }
 
