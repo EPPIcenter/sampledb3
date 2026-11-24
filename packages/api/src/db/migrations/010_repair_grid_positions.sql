@@ -6,9 +6,12 @@
 --   - leading dashes are stripped and the rest stored in stored form (`--A01`, `-F02`, `a1`)
 --   - a position that is a letter followed by the tube's own barcode is cleared (`A1145854300`)
 --   - an `NA` position is cleared (`NA`, `NA01`)
--- A cleared Container stays in its Collection as an Unplaced container. Aborts, changing
--- nothing, if any other position is found or if a repair would put two Containers in one
--- position of the same Collection (micronix tubes and static wells share a plate).
+-- A cleared Container stays in its Collection as an Unplaced container. A position that fits
+-- none of these cases is left as it is, and so is every repair that would put two Containers in
+-- one position of the same Collection (micronix tubes and static wells share a plate), whether
+-- it collides with a stored position or with another repair. The migration runs at startup on
+-- every install, so it must not stop one; the integrity report's "Containers with an invalid
+-- Grid position" check lists what is left.
 CREATE TEMP TABLE __migration_010_repair AS
 WITH stored AS (
   SELECT 'micronix_tube' AS tbl, id, barcode, position, 8 AS max_rows, 12 AS max_cols
