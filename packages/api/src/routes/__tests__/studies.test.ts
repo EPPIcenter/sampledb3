@@ -5,7 +5,14 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createStudiesRoutes } from '../studies'
-import { createTestStudy, createTestSpecimenType, createTestUnit } from '../../__tests__/helpers/factories'
+import {
+  createTestStudy,
+  createTestStudySubject,
+  createTestSpecimenType,
+  createTestUnit,
+  seedLargeTestStudy,
+} from '../../__tests__/helpers/factories'
+import { specimen } from '../../db/schema'
 
 describe('Studies API (list, get, create, update)', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -150,6 +157,23 @@ describe('Studies API (list, get, create, update)', () => {
   })
 
   describe('GET /api/studies/:id/summary', () => {
+    it('counts study duration in calendar days, as the study page does', async () => {
+      const studyRecord = await createTestStudy(ctx.db, { title: 'Dated Study', shortCode: 'DAT01' })
+      const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })
+      const subject = await createTestStudySubject(ctx.db, { studyId: studyRecord.id, name: 'S1' })
+      // A time of day must not round the duration up to a second day.
+      await ctx.db.insert(specimen).values([
+        { studySubjectId: subject.id, specimenTypeId: type.id, collectionDate: '2024-11-03' },
+        { studySubjectId: subject.id, specimenTypeId: type.id, collectionDate: '2024-11-04 18:00:00' },
+      ])
+
+      const res = await ctx.request(`/api/studies/${studyRecord.id}/summary`)
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { summary: { studyDurationDays: number | null } }
+      expect(data.summary.studyDurationDays).toBe(1)
+    })
+
     it('handles studies with more specimens than SQLite allows as bound parameters', async () => {
       const studyRecord = await createTestStudy(ctx.db, { title: 'Big Study', shortCode: 'BIG01' })
       const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })
@@ -179,5 +203,50 @@ describe('Studies API (list, get, create, update)', () => {
       expect(data.summary.totalSpecimens).toBe(count)
       expect(data.summary.totalContainers).toBe(count)
     }, 60_000)
+  })
+
+  describe('GET /api/studies/:id/timeline', () => {
+    it('handles studies with more subjects than SQLite allows as bound parameters', async () => {
+      const studyRecord = await createTestStudy(ctx.db, { title: 'Big Study', shortCode: 'BIG01' })
+      const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })
+      const unit = await createTestUnit(ctx.db, { symbol: 'spots', name: 'spots', category: 'count' })
+      const count = 70_000
+      seedLargeTestStudy(ctx.sqlite, { studyId: studyRecord.id, specimenTypeId: type.id, unitId: unit.id }, count)
+
+      const res = await ctx.request(`/api/studies/${studyRecord.id}/timeline`)
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        subjects: Array<{ specimens: Array<{ specimenTypeName: string }> }>
+        dateRange: { earliest: string; latest: string } | null
+      }
+      expect(data.subjects).toHaveLength(count)
+      expect(data.subjects.every((subject) => subject.specimens.length === 1)).toBe(true)
+      expect(data.subjects[0].specimens[0].specimenTypeName).toBe('DBS')
+      expect(data.dateRange).toEqual({ earliest: '2024-01-01', latest: '2024-01-01' })
+    }, 60_000)
+
+    it('returns only the specimens of the requested study', async () => {
+      const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })
+      const mine = await createTestStudy(ctx.db, { title: 'Mine', shortCode: 'MINE' })
+      const other = await createTestStudy(ctx.db, { title: 'Other', shortCode: 'OTHER' })
+      const mySubject = await createTestStudySubject(ctx.db, { studyId: mine.id, name: 'S1' })
+      const otherSubject = await createTestStudySubject(ctx.db, { studyId: other.id, name: 'S1' })
+      await ctx.db.insert(specimen).values([
+        { studySubjectId: mySubject.id, specimenTypeId: type.id, collectionDate: '2024-02-01' },
+        { studySubjectId: otherSubject.id, specimenTypeId: type.id, collectionDate: '2024-03-01' },
+      ])
+
+      const res = await ctx.request(`/api/studies/${mine.id}/timeline`)
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        subjects: Array<{ id: number; specimens: Array<{ collectionDate: string }> }>
+        dateRange: { earliest: string; latest: string } | null
+      }
+      expect(data.subjects).toHaveLength(1)
+      expect(data.subjects[0]).toMatchObject({ id: mySubject.id, specimens: [{ collectionDate: '2024-02-01' }] })
+      expect(data.dateRange).toEqual({ earliest: '2024-02-01', latest: '2024-02-01' })
+    })
   })
 })

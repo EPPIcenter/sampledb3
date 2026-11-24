@@ -63,6 +63,51 @@ describe('CollectionSpecimenEntry', () => {
     expect(specimensApi.createBulk).not.toHaveBeenCalled()
   })
 
+  /** Fills study, subject, and specimen type for A01, so a submit has one complete row. */
+  async function completeA01(user: ReturnType<typeof userEvent.setup>) {
+    await user.selectOptions(selectsWith('Select study')[0], 'ST1')
+    await user.type(screen.getAllByPlaceholderText('Subject name')[0], 'S1')
+    await user.selectOptions(selectsWith('Select type')[0], 'DNA')
+  }
+
+  it('reports a position with only a study chosen', async () => {
+    const user = userEvent.setup()
+    await renderEntry()
+    await completeA01(user)
+    await user.selectOptions(selectsWith('Select study')[1], 'ST1')
+
+    await user.click(screen.getByRole('button', { name: /create|add|save/i }))
+
+    expect(await screen.findByText(/Complete or clear these positions.*A02/)).toBeInTheDocument()
+    expect(specimensApi.createBulk).not.toHaveBeenCalled()
+  })
+
+  it('reports a position with only a specimen type chosen', async () => {
+    const user = userEvent.setup()
+    await renderEntry()
+    await completeA01(user)
+    await user.selectOptions(selectsWith('Select type')[1], 'DNA')
+
+    await user.click(screen.getByRole('button', { name: /create|add|save/i }))
+
+    expect(await screen.findByText(/Complete or clear these positions.*A02/)).toBeInTheDocument()
+    expect(specimensApi.createBulk).not.toHaveBeenCalled()
+  })
+
+  it('skips a position whose fields were all cleared again', async () => {
+    vi.mocked(specimensApi.createBulk).mockResolvedValue({ specimens: [], created: 1 })
+    const user = userEvent.setup()
+    await renderEntry()
+    await completeA01(user)
+    await user.selectOptions(selectsWith('Select study')[1], 'ST1')
+    await user.selectOptions(selectsWith('Select study')[1], '')
+
+    await user.click(screen.getByRole('button', { name: /create|add|save/i }))
+
+    expect(specimensApi.createBulk).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(specimensApi.createBulk).mock.calls[0][0].specimens).toHaveLength(1)
+  })
+
   it('keeps the study picked for a position', async () => {
     const user = userEvent.setup()
     await renderEntry()

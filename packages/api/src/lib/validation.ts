@@ -189,7 +189,7 @@ export async function validateControlBatchName(
   database: Database,
   name: string,
   excludeId?: number
-): Promise<{ valid: boolean; error?: string; suggestion?: string }> {
+): Promise<{ valid: boolean; error?: string; suggestion?: string; /** The name is taken (a conflict, not a malformed name). */ conflict?: true }> {
   const trimmedName = name.trim()
   
   if (trimmedName.length === 0) {
@@ -235,6 +235,7 @@ export async function validateControlBatchName(
       valid: false,
       error: `Batch name '${trimmedName}' already exists`,
       suggestion,
+      conflict: true,
     }
   }
   
