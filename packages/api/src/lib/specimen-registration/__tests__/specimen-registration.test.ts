@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import { setupTestDatabase, cleanupTestDatabase } from '../../../__tests__/helpers/db-setup'
 import {
   createTestBox,
+  createTestCryovialBox,
   createTestLocation,
   createTestMicronixPlate,
   createTestSheet,
@@ -182,6 +183,34 @@ describe('Specimen registration', () => {
       const error = await rejection([entry([tube('T1', { name: 'P2', barcode: 'P1-BC', position: 'A01' })])])
 
       expect(error.errors[0].message).toContain("point to different micronix plates: 'P1' and 'P2'")
+    })
+
+    it('names the id and the name when they find different plates', async () => {
+      await createTestMicronixPlate(db, { name: 'P2', barcode: 'P2-BC', locationId })
+
+      const error = await rejection([entry([tube('T1', { id: plate.id, name: 'P2', position: 'A01' })])])
+
+      expect(error.errors[0].message).toBe("Collection id and name point to different micronix plates: 'P1' and 'P2'.")
+    })
+
+    it('names the id and the barcode when they find different plates', async () => {
+      await createTestMicronixPlate(db, { name: 'P2', barcode: 'P2-BC', locationId })
+
+      const error = await rejection([entry([tube('T1', { id: plate.id, barcode: 'P2-BC', position: 'A01' })])])
+
+      expect(error.errors[0].message).toBe("Collection id and barcode point to different micronix plates: 'P1' and 'P2'.")
+    })
+
+    it('names all three identifiers when each finds a different box', async () => {
+      const first = await createTestCryovialBox(db, { name: 'B1', barcode: 'B1-BC', locationId })
+      await createTestCryovialBox(db, { name: 'B2', barcode: 'B2-BC', locationId })
+      await createTestCryovialBox(db, { name: 'B3', barcode: 'B3-BC', locationId })
+
+      const error = await rejection([
+        entry([{ containerType: 'cryovial_tube', collection: { type: 'cryovial_box', id: first.id, barcode: 'B2-BC', name: 'B3', position: 'A01' } }]),
+      ])
+
+      expect(error.errors[0].message).toBe("Collection id, barcode, and name point to different cryovial boxes: 'B1', 'B2', and 'B3'.")
     })
 
     it('names the id when the plate it finds has another name', async () => {
