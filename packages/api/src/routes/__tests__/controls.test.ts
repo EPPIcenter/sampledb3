@@ -6,7 +6,14 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createControlsRoutes } from '../controls'
-import { containerTypeUnit, controlBatch, controlDefinition, specimenTypeContainerType, storageContainer } from '../../db/schema'
+import {
+  containerTypeUnit,
+  controlBatch,
+  controlDefinition,
+  specimen,
+  specimenTypeContainerType,
+  storageContainer,
+} from '../../db/schema'
 import {
   createTestControlBatch,
   createTestControlDefinition,
@@ -720,6 +727,92 @@ describe('Controls API', () => {
         method: 'POST',
         json: { targetDensity: 1000, strains: [] },
       })
+      expect(res.status).toBe(401)
+    })
+  })
+
+  describe(`POST ${BASE}/batches/create-many-with-specimens`, () => {
+    const path = `${BASE}/batches/create-many-with-specimens`
+
+    it('returns 201 and creates every batch with its specimens and containers', async () => {
+      const { def100, def200, batch } = await seedMicronixBatchFixtures(ctx.db)
+
+      const res = await ctx.request(path, {
+        method: 'POST',
+        json: { batches: [batch(def100.id, 'B100', 'MT1', 'A01'), batch(def200.id, 'B200', 'MT2', 'A02')] },
+      })
+
+      expect(res.status).toBe(201)
+      const data = (await res.json()) as {
+        batches: Array<{ batch: { name: string; controlDefinitionId: number }; specimens: Array<{ containerCount: number }> }>
+      }
+      expect(data.batches.map((created) => created.batch)).toMatchObject([
+        { name: 'B100', controlDefinitionId: def100.id },
+        { name: 'B200', controlDefinitionId: def200.id },
+      ])
+      expect(data.batches.map((created) => created.specimens.map((s) => s.containerCount))).toEqual([[1], [1]])
+      expect(await ctx.db.select().from(controlBatch).all()).toHaveLength(2)
+      expect(await ctx.db.select().from(specimen).all()).toHaveLength(2)
+      expect(await ctx.db.select().from(storageContainer).all()).toHaveLength(2)
+    })
+
+    it('returns 409 for a conflict in a later batch and creates none of them', async () => {
+      const { def100, def200, batch } = await seedMicronixBatchFixtures(ctx.db)
+      const conflicts = [
+        // The second batch reuses the first one's name, tube barcode, or position.
+        { second: batch(def200.id, 'B100', 'MT2', 'A02'), error: "Control batch 2 ('B100'): Batch name 'B100' already exists. No control batches were created." },
+        { second: batch(def200.id, 'B200', 'MT1', 'A02'), error: "Control batch 2 ('B200'): Barcode 'MT1' already exists. No control batches were created." },
+        {
+          second: batch(def200.id, 'B200', 'MT2', 'A01'),
+          error: "Control batch 2 ('B200'): Position A01 is already used in this plate. Use a different position or plate. No control batches were created.",
+        },
+      ]
+
+      for (const { second, error } of conflicts) {
+        const res = await ctx.request(path, {
+          method: 'POST',
+          json: { batches: [batch(def100.id, 'B100', 'MT1', 'A01'), second] },
+        })
+
+        expect(res.status).toBe(409)
+        expect(await res.json()).toMatchObject({ error, errorCode: 'CONFLICT' })
+        expect(await ctx.db.select().from(controlBatch).all()).toHaveLength(0)
+        expect(await ctx.db.select().from(specimen).all()).toHaveLength(0)
+        expect(await ctx.db.select().from(storageContainer).all()).toHaveLength(0)
+      }
+    })
+
+    it('returns 400 for bad input in a later batch and creates none of them', async () => {
+      const { def100, def200, batch } = await seedMicronixBatchFixtures(ctx.db)
+
+      const res = await ctx.request(path, {
+        method: 'POST',
+        json: { batches: [batch(def100.id, 'B100', 'MT1', 'A01'), batch(def200.id, 'B200', 'MT2', 'A02', 'Nope')] },
+      })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({
+        error: "Control batch 2 ('B200'): Specimen type not found: Nope. No control batches were created.",
+        errorCode: 'VALIDATION_ERROR',
+      })
+      expect(await ctx.db.select().from(controlBatch).all()).toHaveLength(0)
+      expect(await ctx.db.select().from(storageContainer).all()).toHaveLength(0)
+    })
+
+    it('returns 400 for a body that does not match the schema', async () => {
+      const { def100, batch } = await seedMicronixBatchFixtures(ctx.db)
+      const noName = { ...batch(def100.id, 'B100', 'MT1', 'A01'), batch: { controlDefinitionId: def100.id } }
+
+      for (const json of [{ batches: [] }, { batches: [noName] }]) {
+        const res = await ctx.request(path, { method: 'POST', json })
+        expect(res.status).toBe(400)
+        expect(await res.json()).toMatchObject({ errorCode: 'VALIDATION_ERROR' })
+      }
+      expect(await ctx.db.select().from(controlBatch).all()).toHaveLength(0)
+    })
+
+    it('returns 401 when not authenticated', async () => {
+      const res = await authenticatedRequest(ctx.createRequestApp(), path, { method: 'POST', json: { batches: [] } })
       expect(res.status).toBe(401)
     })
   })
