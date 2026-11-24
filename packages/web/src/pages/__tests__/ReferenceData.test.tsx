@@ -33,12 +33,6 @@ vi.mock('../../hooks/useReferenceDataPage', async () => {
   return {
     ...actual,
     useReferenceDataTab: mockUseReferenceDataTab,
-    useReferenceDataAllLocations: vi.fn(() => ({
-      data: [],
-      isPending: false,
-      isError: false,
-      isSuccess: true,
-    })),
     useSpecimenTypeContainerTypes: vi.fn(() => ({
       relationships: {},
       usageInfo: {},
@@ -89,24 +83,16 @@ vi.mock('../../config/reference-data-config', () => {
   const mockStatesConfig = createMockConfig('states', 'States', {
     dataKey: 'states',
   })
-  const mockLocationsConfig = createMockConfig('locations', 'Locations', {
-    dataKey: 'locations',
-    requiresPagination: true,
-    requiresSearch: true,
-    pagination: { total: 0, page: 1, limit: 50, totalPages: 0 },
-  })
 
   return {
     referenceDataConfigs: [
       mockSpecimenTypesConfig,
       mockStatesConfig,
-      mockLocationsConfig,
     ],
     getReferenceDataConfig: (key: string) => {
       const configs: any = {
         'specimen-types': mockSpecimenTypesConfig,
         'states': mockStatesConfig,
-        'locations': mockLocationsConfig,
       }
       return configs[key]
     },
@@ -331,13 +317,11 @@ describe('ReferenceData Page', () => {
     })
   })
 
-  describe('Locations Tab', () => {
-    it('renders locations tab when clicked', async () => {
-      const user = userEvent.setup()
-      await render(<ReferenceData />)
-      const locationsTab = screen.getByText('Locations')
-      await user.click(locationsTab)
-      expect(locationsTab).toBeInTheDocument()
+  describe('Invalid tab', () => {
+    it('shows Invalid tab when tab=locations is requested', async () => {
+      await render(<ReferenceData />, { initialEntries: ['/reference-data?tab=locations'] })
+      expect(screen.getByText('Invalid tab')).toBeInTheDocument()
+      expect(mockUseReferenceDataTab).not.toHaveBeenCalled()
     })
   })
 })

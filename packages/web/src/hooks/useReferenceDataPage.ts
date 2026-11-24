@@ -8,7 +8,6 @@ import { getReferenceDataConfig } from '../config/reference-data-config'
 export const referenceDataPageKeys = {
   all: ['reference-data-page'] as const,
   tab: (tab: ReferenceDataType, search: string) => [...referenceDataPageKeys.all, tab, search] as const,
-  allLocations: () => [...referenceDataPageKeys.all, 'all-locations'] as const,
   containerTypes: (specimenTypeId: number) =>
     [...referenceDataPageKeys.all, 'container-types', specimenTypeId] as const,
 }
@@ -39,17 +38,6 @@ export function useReferenceDataTab(activeTab: ReferenceDataType, searchDebounce
   return useQuery({
     queryKey: referenceDataPageKeys.tab(activeTab, searchDebounced),
     queryFn: () => loadTabData(activeTab, searchDebounced),
-  })
-}
-
-export function useReferenceDataAllLocations(enabled: boolean) {
-  return useQuery({
-    queryKey: referenceDataPageKeys.allLocations(),
-    queryFn: async () => {
-      const res = await locationsApi.list()
-      return res.locations
-    },
-    enabled,
   })
 }
 
