@@ -46,6 +46,22 @@ export type RegistrationError = {
   message: string
 }
 
+const storedDataClashes = new WeakSet<RegistrationError>()
+
+/**
+ * Record that this error is a clash with stored data: an occupied position or a barcode in use.
+ * The mark is kept off the error object so a registration error's wire shape does not change.
+ */
+export function markStoredDataClash(error: RegistrationError): RegistrationError {
+  storedDataClashes.add(error)
+  return error
+}
+
+/** True for an error the plan marked as a clash with stored data, not a fault in the input alone. */
+export function isStoredDataClash(error: RegistrationError | undefined): boolean {
+  return error !== undefined && storedDataClashes.has(error)
+}
+
 export type RegisteredEntry = {
   specimen: Specimen
   /** True when the Specimen existed before this entry, in the database or from an earlier entry. */

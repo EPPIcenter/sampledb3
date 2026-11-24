@@ -589,8 +589,17 @@ controls.patch('/:id', memberMiddleware, async (c) => {
     }
 
     // Same rule as create: no two definitions with the same density and strain mix.
-    if (strains !== undefined || targetDensity !== undefined || targetDensityUnitId !== undefined) {
-      const storedStrains = (newProps.strains as Array<{ id: number; percentage: number }> | undefined) ?? []
+    // `properties` is merged into the stored properties, so it can change the composition too.
+    const compositionKeys = ['strains', 'targetDensity', 'targetDensityUnitId']
+    const setsComposition =
+      strains !== undefined ||
+      targetDensity !== undefined ||
+      targetDensityUnitId !== undefined ||
+      (properties !== undefined && compositionKeys.some((key) => key in properties))
+    if (setsComposition) {
+      const storedStrains = Array.isArray(newProps.strains)
+        ? (newProps.strains as Array<{ id: number; percentage: number }>)
+        : []
       const duplicate = await findBloodControlDefinitionByComposition(
         dbInstance,
         {
