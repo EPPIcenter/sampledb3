@@ -148,19 +148,21 @@ async function registerSubjects(
     }
   }
 
+  let hasValidationError = false
+
   for (let subjectIndex = 0; subjectIndex < subjects.length; subjectIndex++) {
     const subj = subjects[subjectIndex]
     const subjectError = { subjectIndex, specimenIndex: 0, rowIndex: subj.specimens[0]?.rowIndex }
 
     const found = await findOrCreateSubject(subj)
-    if ('conflict' in found) {
-      // A constraint hit while writing is a 409, as it is in registration (ADR 0010).
-      throw new BulkCombinedRejected(409, [...errors, { ...subjectError, message: found.conflict }])
-    }
     // A subject with no record still has its specimens and containers checked, so one pass
     // reports every problem in its rows.
     let subjectId = UNREGISTERED_SUBJECT_ID
-    if ('error' in found) {
+    if ('conflict' in found) {
+      errors.push({ ...subjectError, message: found.conflict })
+      registered.push(null)
+    } else if ('error' in found) {
+      hasValidationError = true
       errors.push({ ...subjectError, message: found.error })
       registered.push(null)
     } else {
@@ -176,6 +178,7 @@ async function registerSubjects(
         specimenTypeIds.set(spec.specimenTypeName, specimenTypeId)
       }
       if (!specimenTypeId) {
+        hasValidationError = true
         errors.push({
           subjectIndex,
           specimenIndex,
@@ -203,12 +206,14 @@ async function registerSubjects(
       // A subject with no record has its own error already; registration repeats it as a missing Source.
       .filter((e) => !(e.field === 'source' && registered[entryRefs[e.entryIndex].subjectIndex] === null))
       .map((e) => ({ ...entryRefs[e.entryIndex], message: e.message }))
-    if (error.status === 409) throw new BulkCombinedRejected(409, [...errors, ...mapped])
+    if (error.status === 400 && mapped.length > 0) hasValidationError = true
     errors.push(...mapped)
   }
   if (errors.length > 0 || !registration) {
     errors.sort((a, b) => a.subjectIndex - b.subjectIndex || (a.specimenIndex ?? 0) - (b.specimenIndex ?? 0))
-    throw new BulkCombinedRejected(400, errors)
+    // A constraint hit is a 409 only when it is all that is wrong; any validation problem makes
+    // the request a 400 listing every error (as registerBulkSpecimenRows does).
+    throw new BulkCombinedRejected(hasValidationError ? 400 : 409, errors)
   }
 
   const results: OneSubjectResult[] = registered.map((r) => {

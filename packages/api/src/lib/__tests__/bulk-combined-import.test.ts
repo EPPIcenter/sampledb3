@@ -518,6 +518,53 @@ describe('bulk-combined-import', () => {
 
         expect(validation.errors).toEqual([{ subjectIndex: 1, specimenIndex: 0, message: expect.stringContaining('already exists') }])
       })
+
+      it('replies 400 (ValidationError) listing every subject error when a validation error precedes a subject constraint hit', async () => {
+        const payload = {
+          studyShortCode: 'ST1',
+          atomicMode: 'full_file' as const,
+          subjects: [
+            { subjectName: 'BadFirst', studyShortCode: 'NOPE', specimens: [{ specimenTypeName: 'DNA', collectionDate: '2024-01-01' }] },
+            subject('Raced'),
+            { subjectName: 'BadLast', studyShortCode: 'ALSO-NOPE', specimens: [{ specimenTypeName: 'DNA', collectionDate: '2024-01-01' }] },
+          ],
+        }
+
+        const imported = await runBulkCombinedImport(testDb, payload, undefined).catch((e: unknown) => e)
+
+        expect(imported).toBeInstanceOf(ValidationError)
+        expect((imported as ValidationError).details).toEqual({
+          errors: [
+            { subjectIndex: 0, specimenIndex: 0, message: expect.stringContaining("Study short code 'NOPE' not found") },
+            { subjectIndex: 1, specimenIndex: 0, message: expect.stringContaining('already exists') },
+            { subjectIndex: 2, specimenIndex: 0, message: expect.stringContaining("Study short code 'ALSO-NOPE' not found") },
+          ],
+        })
+      })
+
+      it('replies 400 (ValidationError) when an earlier row failed validation and registration hits a constraint', async () => {
+        // Drop the study_subject trigger and put the race on specimen instead.
+        sqlite.exec('DROP TRIGGER test_constraint_race_study_subject')
+        failInsertsWithUniqueViolation(sqlite, 'specimen')
+        const payload = {
+          studyShortCode: 'ST1',
+          atomicMode: 'full_file' as const,
+          subjects: [
+            { subjectName: 'Existing', specimens: [{ specimenTypeName: 'MissingType', collectionDate: '2024-01-01' }] },
+            { subjectName: 'Existing', specimens: [{ specimenTypeName: 'DNA', collectionDate: '2024-03-01' }] },
+          ],
+        }
+
+        const imported = await runBulkCombinedImport(testDb, payload, undefined).catch((e: unknown) => e)
+
+        expect(imported).toBeInstanceOf(ValidationError)
+        expect((imported as ValidationError).details).toEqual({
+          errors: [
+            { subjectIndex: 0, specimenIndex: 0, message: "Specimen type 'MissingType' not found" },
+            { subjectIndex: 1, specimenIndex: 0, message: expect.stringContaining('already exists') },
+          ],
+        })
+      })
     })
 
     it('says a sublabel repeats in the file', async () => {
