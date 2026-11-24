@@ -1,7 +1,8 @@
 import type { RefObject } from 'react'
 import { useState } from 'react'
+import { useToast } from '../contexts/ToastContext'
 import { useUser } from '../contexts/UserContext'
-import { SkeletonTable } from '../ui'
+import { Button, Modal, SkeletonTable, getQueryErrorMessage } from '../ui'
 
 export interface Column<T> {
   key: keyof T
@@ -33,8 +34,11 @@ export default function ReferenceDataTable<T extends { id: number }>({
   searchInputRef,
 }: ReferenceDataTableProps<T>) {
   const { canManageReferenceData } = useUser()
+  const { error: showError } = useToast()
   const canEdit = !readOnly && canManageReferenceData
   const [search, setSearch] = useState('')
+  /** The item whose delete the user is asked to confirm. */
+  const [pendingDelete, setPendingDelete] = useState<T | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
   const filteredData = data.filter((item) => {
@@ -59,21 +63,22 @@ export default function ReferenceDataTable<T extends { id: number }>({
     })
   })
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this item?')) {
-      return
-    }
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete) return
 
-    setDeletingId(id)
+    setDeletingId(pendingDelete.id)
     try {
-      await onDelete(id)
+      await onDelete(pendingDelete.id)
     } catch (error) {
-      console.error('Failed to delete:', error)
-      alert('Failed to delete item. It may be in use.')
+      // The API says what still uses the item.
+      showError(getQueryErrorMessage(error, 'Failed to delete item'))
     } finally {
       setDeletingId(null)
+      setPendingDelete(null)
     }
   }
+
+  const pendingDeleteName = (pendingDelete as { name?: unknown } | null)?.name
 
   return (
     <div className="space-y-4">
@@ -129,7 +134,7 @@ export default function ReferenceDataTable<T extends { id: number }>({
                         Edit
                       </button>
                       <button
-                        onClick={() => handleDelete(item.id)}
+                        onClick={() => setPendingDelete(item)}
                         disabled={deletingId === item.id}
                         className="text-app-trend-down hover:opacity-90 disabled:opacity-50"
                       >
@@ -142,6 +147,37 @@ export default function ReferenceDataTable<T extends { id: number }>({
             </tbody>
           </table>
         </div>
+      )}
+
+      {pendingDelete && (
+        <Modal
+          isOpen
+          onClose={() => setPendingDelete(null)}
+          title="Delete item"
+          size="sm"
+          closeDisabled={deletingId !== null}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setPendingDelete(null)} disabled={deletingId !== null}>
+                Cancel
+              </Button>
+              <Button variant="danger" onClick={() => void handleConfirmDelete()} disabled={deletingId !== null}>
+                {deletingId !== null ? 'Deleting...' : 'Delete'}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-app-text">
+            Are you sure you want to delete{' '}
+            {typeof pendingDeleteName === 'string' && pendingDeleteName ? (
+              <strong>{pendingDeleteName}</strong>
+            ) : (
+              'this item'
+            )}
+            ?
+          </p>
+          <p className="mt-2 text-sm text-app-text-muted">This action cannot be undone.</p>
+        </Modal>
       )}
     </div>
   )

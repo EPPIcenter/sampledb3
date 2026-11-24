@@ -241,7 +241,6 @@ describe('ReferenceData Page', () => {
 
     it("invalidates other pages after a delete without refetching the deleted item's queries", async () => {
       const user = userEvent.setup()
-      vi.spyOn(window, 'confirm').mockReturnValue(true)
       const queryClient = createInvalidationTestClient()
       const tags = await observeQuery(queryClient, tagKeys.list())
       const deletedDetail = await observeQuery(queryClient, specimenTypeKeys.detail(3))
@@ -251,6 +250,9 @@ describe('ReferenceData Page', () => {
       await waitFor(() => expect(specimenTypesApi.getContainerTypes).toHaveBeenCalledTimes(1))
 
       await user.click(screen.getByRole('button', { name: 'Delete' }))
+      const dialog = await screen.findByRole('dialog', { name: 'Delete item' })
+      expect(dialog).toHaveTextContent('Are you sure you want to delete Plasma?')
+      await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
       await waitFor(() => expect(specimenTypesApi.delete).toHaveBeenCalledWith(3))
       await waitFor(() => expect(tags.queryFn).toHaveBeenCalledTimes(2))
@@ -259,6 +261,26 @@ describe('ReferenceData Page', () => {
       expect(specimenTypesApi.getContainerTypes).toHaveBeenCalledTimes(1)
       expect(queryClient.getQueryState(specimenTypeKeys.detail(3))?.isInvalidated).toBe(true)
       for (const observed of [tags, deletedDetail]) observed.unsubscribe()
+    })
+  })
+
+  describe('Deleting an item that is in use', () => {
+    it("shows the API's reason in a toast and keeps the Tag", async () => {
+      vi.mocked(tagsApi.delete).mockRejectedValue({
+        response: { data: { error: 'Cannot delete tag: it is in use by storage containers' } },
+      })
+      const user = userEvent.setup()
+      await renderPage('tags')
+
+      await user.click(await screen.findByRole('button', { name: 'Delete' }))
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Cannot delete tag: it is in use by storage containers',
+      )
+      expect(tagsApi.delete).toHaveBeenCalledWith(1)
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(screen.getByRole('cell', { name: 'Needs QC' })).toBeInTheDocument()
     })
   })
 
