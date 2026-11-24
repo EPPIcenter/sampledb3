@@ -54,6 +54,24 @@ describe('container-creation', () => {
         expect(result.error).toBe('Barcode is required for micronix tubes')
       })
 
+      it('returns error when barcode is only whitespace', () => {
+        const result = validateContainerWriteFields({
+          containerType: 'micronix_tube',
+          barcode: '   ',
+          collection: { type: 'micronix_plate', name: 'Plate1', position: 'A01' },
+        })
+        expect(result).toEqual({ valid: false, field: 'barcode', error: 'Barcode is required for micronix tubes' })
+      })
+
+      it('returns error when collection name and barcode are only whitespace', () => {
+        const result = validateContainerWriteFields({
+          containerType: 'micronix_tube',
+          barcode: 'MT001',
+          collection: { type: 'micronix_plate', name: '  ', barcode: ' ', position: 'A01' },
+        })
+        expect(result).toEqual({ valid: false, field: 'collection', error: 'Collection name or barcode is required' })
+      })
+
       it('returns error when collection name and barcode are missing', () => {
         const result = validateContainerWriteFields({
           containerType: 'micronix_tube',
@@ -110,6 +128,22 @@ describe('container-creation', () => {
         })
         expect(result.valid).toBe(false)
         expect(result.error).toBe('Sheet name is required for papers')
+      })
+
+      it('returns error when collection name is only whitespace', () => {
+        const result = validateContainerWriteFields({
+          containerType: 'paper',
+          collection: { type: 'sheet', name: 'L1', parent: { type: 'box', name: '   ' } },
+        })
+        expect(result).toEqual({ valid: false, field: 'collection', error: 'Collection name is required for papers' })
+      })
+
+      it('returns error when sheet name is only whitespace', () => {
+        const result = validateContainerWriteFields({
+          containerType: 'paper',
+          collection: { type: 'sheet', name: '   ', parent: { type: 'box', name: 'Box1' } },
+        })
+        expect(result).toEqual({ valid: false, field: 'collection', error: 'Sheet name is required for papers' })
       })
     })
 

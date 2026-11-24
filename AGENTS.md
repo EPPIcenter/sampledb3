@@ -9,10 +9,10 @@
 ## Running tests and checks
 
 - Web tests: `cd packages/web && bun run test -- <files>`. Bun's own runner (`bun test`) hangs on React component tests; Vitest exits on its own, so piping it to `tail` or `grep` is safe.
-- API tests: `cd packages/api && NODE_ENV=test bun test src/...`. The package's `test` script sets `NODE_ENV=test`, and `src/db/legacy-baseline.ts` branches on it.
+- API tests: `cd packages/api && NODE_ENV=test bun test src/...`. The package's `test` script sets `NODE_ENV=test`, and code under `src/` branches on that value. For example, `src/middleware/rate-limit.ts` skips rate limiting when `NODE_ENV` is `test`. Set it on a direct run so that a different `NODE_ENV` in your shell cannot change which branches the tests take.
 - Contract tests: `cd packages/contract && bun run test`. `bun run test` at the repo root runs the contract, API, and web suites.
 - The `Checks` workflow lints every PR, so a lint error comes from your change.
-- Run `bun run setup:hooks` once per clone to install the pre-commit hook (it typechecks and lints staged files, and refuses a source file that also has unstaged edits), and `bun run ci:verify` before pushing. The end of Build in `README.md` says what each checks.
+- Run `bun run setup:hooks` once per clone to install the pre-commit hook (it typechecks the packages your staged files touch, lints the staged API and web source files, and refuses the commit when one of those source files also has unstaged edits), and `bun run ci:verify` before pushing. The end of Build in `README.md` says what each checks.
 
 ## Where to look
 
