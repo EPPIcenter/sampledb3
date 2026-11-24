@@ -147,6 +147,40 @@ describe('Container export executors', () => {
       } satisfies MultiStudyExportSummary)
     })
 
+    it('groups interleaved entries by Study, in listed order', async () => {
+      await seedTwoStudies()
+
+      const result = await runMultiStudyContainerExportPost(db, {
+        entries: [
+          { study_short_code: 'BETA', subject_name: 'GHOST1' },
+          { study_short_code: 'ALPHA', subject_name: 'GHOST2' },
+          { study_short_code: 'BETA', subject_name: 'S01' },
+          { study_short_code: 'ALPHA', subject_name: 'S02' },
+          { study_short_code: 'BETA', subject_name: 'GHOST3' },
+          { study_short_code: 'ALPHA', subject_name: 'GHOST4' },
+        ],
+        filters: {},
+        format: 'json',
+        countOnly: true,
+      })
+
+      if (!('count' in result)) throw new Error('expected a count')
+      expect(result.summary.studies).toMatchObject([
+        {
+          study_code: 'BETA',
+          containers: 2,
+          subjects_with_results: [{ name: 'S01', count: 2 }],
+          subjects_not_found: ['GHOST1', 'GHOST3'],
+        },
+        {
+          study_code: 'ALPHA',
+          containers: 1,
+          subjects_with_results: [{ name: 'S02', count: 1 }],
+          subjects_not_found: ['GHOST2', 'GHOST4'],
+        },
+      ])
+    })
+
     it('applies the container type filter once and counts Subjects left without Containers', async () => {
       const { alphaJan, betaTube } = await seedTwoStudies()
 

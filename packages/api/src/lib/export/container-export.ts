@@ -386,7 +386,9 @@ export async function runMultiStudyContainerExportPost(
   const entriesByStudy = new Map<number, MultiStudyExportEntry[]>()
   for (const entry of entries) {
     const studyId = validation.valid.get(entry.study_short_code)!
-    entriesByStudy.set(studyId, [...(entriesByStudy.get(studyId) ?? []), entry])
+    const studyEntries = entriesByStudy.get(studyId)
+    if (studyEntries) studyEntries.push(entry)
+    else entriesByStudy.set(studyId, [entry])
   }
   const subjectsByStudy = await resolveSubjectsByStudyGrouped(
     database,
