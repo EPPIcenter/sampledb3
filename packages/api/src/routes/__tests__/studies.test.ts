@@ -79,6 +79,8 @@ describe('Studies API (list, get, create, update)', () => {
     it.each([
       ['created_from', 'yesterday'],
       ['created_to', '2024-13-01'],
+      ['created_from', '2024-01-01 99:99:99'],
+      ['created_to', '2024-01-01T24:00'],
     ])('returns 400 for %s=%s', async (param, value) => {
       const res = await ctx.request(`/api/studies?${param}=${encodeURIComponent(value)}`)
 

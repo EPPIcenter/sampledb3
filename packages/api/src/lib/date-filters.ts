@@ -9,8 +9,10 @@ import { parseCollectionDate } from './validation'
 import { parseStoredTimestamp } from './datetime'
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
-const TIMESTAMP = /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}(?::\d{2})?))?$/
-const DATE_OR_TIMESTAMP = /^(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?$/
+// A clock time is 00:00:00 to 23:59:59. Digit counts alone would pass `99:99:99`, and
+// `new Date` reads `24:00:00` as the next day's midnight.
+const TIMESTAMP = /^(\d{4}-\d{2}-\d{2})(?:[T ]((?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?))?$/
+const DATE_OR_TIMESTAMP = /^(\d{4}-\d{2}-\d{2})(?:[T ](?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?$/
 
 /** True when `value` is a real calendar date written YYYY-MM-DD. */
 export function isIsoCalendarDate(value: string): boolean {
@@ -44,8 +46,8 @@ export function collectionDateFilter(label: string, value: string | null | undef
 
 /**
  * A bound on a created timestamp (stored as `YYYY-MM-DD HH:MM:SS`): YYYY-MM-DD, optionally
- * followed by a time. The time is written as stored (space separator, seconds) so the bound
- * compares with stored values as text.
+ * followed by a clock time from 00:00:00 to 23:59:59. The time is written as stored (space
+ * separator, seconds) so the bound compares with stored values as text.
  * Empty or omitted means no bound; anything else throws a `ValidationError` naming `label`.
  */
 export function timestampFilter(label: string, value: string | null | undefined): string | undefined {
