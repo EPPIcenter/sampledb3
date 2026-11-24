@@ -49,7 +49,8 @@ export type RegistrationError = {
 const storedDataClashes = new WeakSet<RegistrationError>()
 
 /**
- * Record that this error is a clash with stored data: an occupied position or a barcode in use.
+ * Record that this error is a clash with stored data: an occupied position, a barcode or
+ * sublabel in use, or a new Collection whose barcode-as-name clashes with a stored Collection.
  * The mark is kept off the error object so a registration error's wire shape does not change.
  */
 export function markStoredDataClash(error: RegistrationError): RegistrationError {

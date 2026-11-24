@@ -23,7 +23,7 @@ import {
 } from '../validation'
 import { GRID_COLLECTION_OF } from './tables'
 import { findTubesUsingBarcode } from '../identifier-resolution'
-import { CollectionPlanner, targetKey, type CollectionTarget, type GridCollectionType, type PlannedCollection } from './collections'
+import { CollectionPlanner, targetKey, type CollectionTarget, type GridCollectionType, type PlannedCollection, type Resolution } from './collections'
 import { validateContainerWriteFields } from './container-fields'
 import {
   markStoredDataClash,
@@ -274,9 +274,11 @@ async function planContainer(
 
   if (input.containerType === 'paper') {
     // validateContainerWriteFields guarantees a collection.
-    const resolved = input.collection ? await planner.resolveSheet(input.collection) : { error: 'Collection is required for paper containers' }
+    const resolved: Resolution = input.collection
+      ? await planner.resolveSheet(input.collection)
+      : { error: 'Collection is required for paper containers' }
     if ('error' in resolved) {
-      problems.push({ field: 'collection', message: resolved.error })
+      problems.push({ field: 'collection', message: resolved.error, ...(resolved.clash && { clash: true as const }) })
     } else {
       collection = resolved.target
       const sublabel = input.sublabel?.trim()
@@ -287,7 +289,7 @@ async function planContainer(
             .from(paper)
             .where(and(eq(paper.sheetId, collection.existingId), eq(paper.sublabel, sublabel)))
             .get()
-          if (taken) problems.push({ field: 'sublabel', message: `Sublabel '${sublabel}' is already used on this sheet.` })
+          if (taken) problems.push({ field: 'sublabel', message: `Sublabel '${sublabel}' is already used on this sheet.`, clash: true })
         }
         if (!claims.take({ kind: 'sublabel', sheet: collection, sublabel })) {
           problems.push({ field: 'sublabel', message: `Sublabel '${sublabel}' is used more than once on this sheet in ${claims.inputName}.` })
@@ -296,11 +298,11 @@ async function planContainer(
     }
   } else {
     const gridType = GRID_COLLECTION_OF[input.containerType]
-    const resolved = input.collection
+    const resolved: Resolution = input.collection
       ? await planner.resolveGrid(gridType, input.collection)
       : { error: 'Collection name or barcode is required' }
     if ('error' in resolved) {
-      problems.push({ field: 'collection', message: resolved.error })
+      problems.push({ field: 'collection', message: resolved.error, ...(resolved.clash && { clash: true as const }) })
     } else {
       collection = resolved.target
       const rawPosition = input.collection?.position?.trim()

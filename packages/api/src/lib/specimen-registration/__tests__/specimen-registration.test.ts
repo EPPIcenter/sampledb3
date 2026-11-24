@@ -30,6 +30,7 @@ import {
 import { setContainerDefaults } from '../../settings'
 import {
   checkSpecimenRegistration,
+  isStoredDataClash,
   registerSpecimens,
   SpecimenRegistrationError,
   type RegistrationContainer,
@@ -269,6 +270,8 @@ describe('Specimen registration', () => {
         },
         expect.objectContaining({ entryIndex: 1, containerIndex: 0, field: 'collection' }),
       ])
+      expect(isStoredDataClash(error.errors[0])).toBe(true)
+      expect(isStoredDataClash(error.errors[1])).toBe(false)
       expect(await count(micronixPlate)).toBe(2)
     })
 
@@ -288,6 +291,7 @@ describe('Specimen registration', () => {
             "A new micronix plate with barcode 'NEW' and no name would be named 'NEW', but this request already creates a micronix plate with that name. Give the new micronix plate a name.",
         },
       ])
+      expect(isStoredDataClash(error.errors[0])).toBe(false)
     })
 
     it('creates a plate from a barcode alone, named after the barcode', async () => {
@@ -372,6 +376,8 @@ describe('Specimen registration', () => {
         [0, "Sublabel 's1' is already used on this sheet."],
         [2, "Sublabel 's2' is used more than once on this sheet in this request."],
       ])
+      expect(isStoredDataClash(error.errors[0])).toBe(true)
+      expect(isStoredDataClash(error.errors[1])).toBe(false)
     })
 
     it('does not create the box named beside a sheet id the sheet is not in', async () => {

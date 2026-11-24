@@ -49,7 +49,7 @@ async function seedMicronixBatchFixtures(db: Database) {
   const specimenType = await createTestSpecimenType(db, { name: 'DNA' })
   await db.insert(specimenTypeContainerType).values({ specimenTypeId: specimenType.id, containerType: 'micronix_tube', created: utcNow() })
   const storageType = await createTestStorageType(db, { name: 'Freezer' })
-  const location = await createTestLocation(db, { name: 'Loc', storageTypeId: String(storageType.id) })
+  const location = await createTestLocation(db, { name: 'Loc', storageTypeId: String(storageType.id), canContainCollections: true })
   const plate = await createTestMicronixPlate(db, { name: 'Plate1', locationId: location.id })
   const specimens = (barcode: string, position: string, specimenTypeName = 'DNA') => [
     {
@@ -61,7 +61,7 @@ async function seedMicronixBatchFixtures(db: Database) {
     batch: { controlDefinitionId, name },
     specimens: specimens(barcode, position, specimenTypeName),
   })
-  return { def100, def200, batch, specimens }
+  return { def100, def200, batch, specimens, location, unit, specimenType }
 }
 
 describe('Controls API', () => {
@@ -931,6 +931,91 @@ describe('Controls API', () => {
       }
       expect(await ctx.db.select().from(controlBatch).all()).toHaveLength(1)
       expect(await ctx.db.select().from(storageContainer).all()).toHaveLength(1)
+    })
+
+    it('returns 409 for a paper sublabel already used on an existing sheet and for a new plate barcode clashing with a stored plate name', async () => {
+      const { def100, def200, location, unit, specimenType } = await seedMicronixBatchFixtures(ctx.db)
+      await setContainerDefaults(ctx.db, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      await ctx.db.insert(containerTypeUnit).values({ containerType: 'paper', unitId: unit.id })
+      await ctx.db.insert(specimenTypeContainerType).values({
+        specimenTypeId: specimenType.id,
+        containerType: 'paper',
+        created: utcNow(),
+      })
+
+      // Seed a paper with sublabel 'S1' on Sheet-1 in PaperBox.
+      const seedPaper = await ctx.request(`${BASE}/batches/create-with-specimens`, {
+        method: 'POST',
+        json: {
+          batch: { controlDefinitionId: def100.id, name: 'B-Paper-1' },
+          specimens: [
+            {
+              specimenTypeName: 'DNA',
+              containers: [
+                {
+                  containerType: 'paper',
+                  sublabel: 'S1',
+                  collection: { type: 'sheet', name: 'Sheet-1', parent: { type: 'box', name: 'PaperBox', locationId: location.id } },
+                },
+              ],
+            },
+          ],
+        },
+      })
+      expect(seedPaper.status).toBe(201)
+
+      const dupSublabel = await ctx.request(`${BASE}/batches/create-with-specimens`, {
+        method: 'POST',
+        json: {
+          batch: { controlDefinitionId: def200.id, name: 'B-Paper-2' },
+          specimens: [
+            {
+              specimenTypeName: 'DNA',
+              containers: [
+                {
+                  containerType: 'paper',
+                  sublabel: 'S1',
+                  collection: { type: 'sheet', name: 'Sheet-1', parent: { type: 'box', name: 'PaperBox', locationId: location.id } },
+                },
+              ],
+            },
+          ],
+        },
+      })
+      expect(dupSublabel.status).toBe(409)
+      expect(await dupSublabel.json()).toMatchObject({
+        error: "Sublabel 'S1' is already used on this sheet.",
+        errorCode: 'CONFLICT',
+      })
+
+      // Plate1 already exists (seeded by seedMicronixBatchFixtures) with no barcode; creating a
+      // new plate given only barcode 'Plate1' clashes with that stored Collection name.
+      const plateNameClash = await ctx.request(`${BASE}/batches/create-with-specimens`, {
+        method: 'POST',
+        json: {
+          batch: { controlDefinitionId: def200.id, name: 'B-Plate-Clash' },
+          specimens: [
+            {
+              specimenTypeName: 'DNA',
+              containers: [
+                {
+                  containerType: 'micronix_tube',
+                  barcode: 'MT-CLASH',
+                  collection: { type: 'micronix_plate', barcode: 'Plate1', locationId: location.id, position: 'A01' },
+                },
+              ],
+            },
+          ],
+        },
+      })
+      expect(plateNameClash.status).toBe(409)
+      expect(await plateNameClash.json()).toMatchObject({
+        error: expect.stringContaining("would be named 'Plate1', but a micronix plate with that name already exists"),
+        errorCode: 'CONFLICT',
+      })
     })
 
     it('returns 400 for an unknown specimen type or control definition', async () => {
