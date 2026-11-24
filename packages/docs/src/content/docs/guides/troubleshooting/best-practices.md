@@ -27,7 +27,7 @@ These are constraints in the product, not optional style.
 
 ## Locations
 
-- Only administrators create and edit locations.
+- Members and administrators create locations and delete empty ones. Only administrators edit a location, which includes renaming it.
 - Only locations that can contain collections appear when you assign a plate, box, or bag.
 - You cannot delete a location that still has children or collections.
 

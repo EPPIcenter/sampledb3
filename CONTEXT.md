@@ -19,10 +19,10 @@ _Avoid_: Curator (unless that is your org's term)
 Every account has one role. The API enforces it on each route, and the web app hides actions the role cannot take.
 
 **Admin**:
-Can do everything a **Member** can, plus manage users, settings, **Reference data**, **Locations**, and every **Destructive action**.
+Can do everything a **Member** can, plus manage users, settings, and **Reference data**, edit a **Location** (rename it, move it, or change whether it can hold **Collections**), and take every **Destructive action**.
 
 **Member**:
-Lab staff who create and change **Operational data**: register, store, move, derive, and import. A member cannot take a **Destructive action**, except deleting a tutorial **Study** (short code starting with TUT).
+Lab staff who create and change **Operational data**: register, store, move, derive, and import. A member can also create a **Location**, delete an empty **Location**, and create a **Tag**. A member cannot edit a **Location**, rename or delete a **Tag**, or change any other **Reference data**. A member cannot take a **Destructive action**, except deleting a tutorial **Study** (short code starting with TUT).
 _Avoid_: User (every role is a user)
 
 **Viewer**:
@@ -36,13 +36,15 @@ An action that removes or rewrites recorded **Operational data** or configuratio
 - Deleting a **Control batch** (removes its **Specimens** and their **Containers**)
 - Editing or deleting a **Derivation** record
 - Deleting a non-tutorial **Study** (removes its **Subjects**, **Specimens**, and **Containers**)
-- Deleting **Reference data**, a **Location**, or a user account
+- Deleting **Reference data** or a user account
 
 Members may also take these actions, which cannot be undone but are part of everyday lab work, so they are not destructive actions:
 
 - Merging two **Subjects**
 - Deleting a qPCR experiment with its plate layout and results
 - Deleting one **Specimen** and its **Containers** from a **Control batch**
+
+Deleting a **Location** is not a destructive action either. Only an empty one can be deleted, with no child **Locations** and no **Collections**, so the delete removes nothing else. Members and admins may do it.
 
 _Avoid_: Calling an ordinary edit (renaming a **Collection**, changing a **Container**'s quantity, removing a **Tag** from a **Container**) a destructive action.
 
