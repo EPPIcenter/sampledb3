@@ -6,14 +6,55 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createControlsRoutes } from '../controls'
-import { controlDefinition } from '../../db/schema'
+import { containerTypeUnit, controlBatch, controlDefinition, specimenTypeContainerType, storageContainer } from '../../db/schema'
 import {
+  createTestControlBatch,
   createTestControlDefinition,
+  createTestLocation,
+  createTestMicronixPlate,
+  createTestSpecimenType,
+  createTestStorageType,
   createTestStrain,
   createTestUnit,
 } from '../../__tests__/helpers/factories'
+import type { Database } from '../../db/client'
+import { clearDefaultsCache } from '../../lib/defaults'
+import { utcNow } from '../../lib/datetime'
+import { clearSettingsCache, setContainerDefaults } from '../../lib/settings'
 
 const BASE = '/api/blood-controls'
+
+/**
+ * What a control batch with micronix tubes needs: two blood control definitions, a 'DNA'
+ * specimen type that allows micronix tubes, and an empty plate. `batch` builds one request batch.
+ */
+async function seedMicronixBatchFixtures(db: Database) {
+  clearSettingsCache()
+  clearDefaultsCache()
+  const unit = await createTestUnit(db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+  await setContainerDefaults(db, {
+    micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+  })
+  await db.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+  const def100 = await createTestControlDefinition(db, { name: 'D100', controlType: 'blood' })
+  const def200 = await createTestControlDefinition(db, { name: 'D200', controlType: 'blood' })
+  const specimenType = await createTestSpecimenType(db, { name: 'DNA' })
+  await db.insert(specimenTypeContainerType).values({ specimenTypeId: specimenType.id, containerType: 'micronix_tube', created: utcNow() })
+  const storageType = await createTestStorageType(db, { name: 'Freezer' })
+  const location = await createTestLocation(db, { name: 'Loc', storageTypeId: String(storageType.id) })
+  const plate = await createTestMicronixPlate(db, { name: 'Plate1', locationId: location.id })
+  const specimens = (barcode: string, position: string, specimenTypeName = 'DNA') => [
+    {
+      specimenTypeName,
+      containers: [{ containerType: 'micronix_tube', barcode, collection: { type: 'micronix_plate', id: plate.id, position } }],
+    },
+  ]
+  const batch = (controlDefinitionId: number, name: string, barcode: string, position: string, specimenTypeName?: string) => ({
+    batch: { controlDefinitionId, name },
+    specimens: specimens(barcode, position, specimenTypeName),
+  })
+  return { def100, def200, batch, specimens }
+}
 
 describe('Controls API', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -639,6 +680,57 @@ describe('Controls API', () => {
         json: { targetDensity: 1000, strains: [] },
       })
       expect(res.status).toBe(401)
+    })
+  })
+
+  describe(`POST ${BASE}/batches/create-with-specimens`, () => {
+    it('returns 409 for a duplicate batch name, a duplicate tube barcode, and an occupied position', async () => {
+      const { def100, def200, batch } = await seedMicronixBatchFixtures(ctx.db)
+      const first = await ctx.request(`${BASE}/batches/create-with-specimens`, {
+        method: 'POST',
+        json: batch(def100.id, 'B100', 'MT1', 'A01'),
+      })
+      expect(first.status).toBe(201)
+
+      const conflicts = [
+        { json: batch(def200.id, 'B100', 'MT2', 'A02'), error: "Batch name 'B100' already exists" },
+        { json: batch(def200.id, 'B200', 'MT1', 'A02'), error: "Barcode 'MT1' already exists" },
+        { json: batch(def200.id, 'B200', 'MT2', 'A01'), error: 'Position A01 is already used in this plate. Use a different position or plate.' },
+      ]
+      for (const { json, error } of conflicts) {
+        const res = await ctx.request(`${BASE}/batches/create-with-specimens`, { method: 'POST', json })
+        expect(res.status).toBe(409)
+        expect(await res.json()).toMatchObject({ error, errorCode: 'CONFLICT' })
+      }
+      expect(await ctx.db.select().from(controlBatch).all()).toHaveLength(1)
+      expect(await ctx.db.select().from(storageContainer).all()).toHaveLength(1)
+    })
+
+    it('returns 400 for an unknown specimen type or control definition', async () => {
+      const { def100, batch } = await seedMicronixBatchFixtures(ctx.db)
+
+      for (const json of [batch(def100.id, 'B100', 'MT1', 'A01', 'Nope'), batch(99999, 'B100', 'MT1', 'A01')]) {
+        const res = await ctx.request(`${BASE}/batches/create-with-specimens`, { method: 'POST', json })
+        expect(res.status).toBe(400)
+      }
+      expect(await ctx.db.select().from(controlBatch).all()).toHaveLength(0)
+    })
+  })
+
+  describe(`POST ${BASE}/batches/:id/specimens/bulk`, () => {
+    it('returns 409 for an occupied position and 400 for an unknown specimen type', async () => {
+      const { def100, specimens } = await seedMicronixBatchFixtures(ctx.db)
+      const existing = await createTestControlBatch(ctx.db, def100.id, { name: 'B100' })
+      const path = `${BASE}/batches/${existing.id}/specimens/bulk`
+      const first = await ctx.request(path, { method: 'POST', json: { specimens: specimens('MT1', 'A01') } })
+      expect(first.status).toBe(201)
+
+      const occupied = await ctx.request(path, { method: 'POST', json: { specimens: specimens('MT2', 'A01') } })
+      const unknownType = await ctx.request(path, { method: 'POST', json: { specimens: specimens('MT3', 'A03', 'Nope') } })
+
+      expect(occupied.status).toBe(409)
+      expect(unknownType.status).toBe(400)
+      expect(await ctx.db.select().from(storageContainer).all()).toHaveLength(1)
     })
   })
 })

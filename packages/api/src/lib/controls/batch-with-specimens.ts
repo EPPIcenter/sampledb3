@@ -55,6 +55,11 @@ export interface CreatedSpecimen {
   containerIds: number[]
 }
 
+/** A clash with stored data is a 409; any other refused input is a 400. */
+function batchInputError(message: string, conflict?: boolean): ConflictError | ValidationError {
+  return conflict ? new ConflictError(message) : new ValidationError(message)
+}
+
 async function getUnitIdBySymbol(
   database: Database,
   symbol: string,
@@ -81,7 +86,7 @@ async function prepareBatchContainer(
     input.containerType
   )
   if (!containerTypeValidation.valid) {
-    throw new Error(containerTypeValidation.error || 'Container type validation failed')
+    throw new ValidationError(containerTypeValidation.error || 'Container type validation failed')
   }
 
   const { quantity, unitSymbol, ...writeInput } = input
@@ -91,7 +96,7 @@ async function prepareBatchContainer(
     unitId = await getUnitIdBySymbol(database, unitSymbol, writeInput.containerType)
     const unitValidation = await validateUnitForContainerType(database, writeInput.containerType, unitId)
     if (!unitValidation.valid) {
-      throw new Error(unitValidation.error || 'Unit validation failed')
+      throw new ValidationError(unitValidation.error || 'Unit validation failed')
     }
   }
 
@@ -158,7 +163,7 @@ async function prepareSpecimensForBatch(
       .get()
 
     if (!specType) {
-      throw new Error(`Specimen type not found: ${specData.specimenTypeName}`)
+      throw new ValidationError(`Specimen type not found: ${specData.specimenTypeName}`)
     }
 
     const preparedContainers: PreparedBatchContainer[] = []
@@ -169,7 +174,7 @@ async function prepareSpecimensForBatch(
         )
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error)
-        throw new Error(`Failed to prepare container: ${message}`)
+        throw new ValidationError(`Failed to prepare container: ${message}`)
       }
     }
 
@@ -211,14 +216,14 @@ export async function createBatchWithSpecimens(
     .get()
 
   if (!definition) {
-    throw new Error(`Control definition with ID ${data.batch.controlDefinitionId} not found`)
+    throw new ValidationError(`Control definition with ID ${data.batch.controlDefinitionId} not found`)
   }
 
   let batchName: string
   if (data.batch.name) {
     const nameValidation = await validateControlBatchName(database, data.batch.name)
     if (!nameValidation.valid) {
-      throw new Error(nameValidation.error || 'Batch name must be unique')
+      throw batchInputError(nameValidation.error || 'Batch name must be unique', nameValidation.conflict)
     }
     batchName = data.batch.name
   } else {
@@ -269,7 +274,7 @@ export async function createBatchWithSpecimens(
           quantity: prepared.quantity,
         })
         if (!containerResult.success || containerResult.containerId == null) {
-          throw new Error(containerResult.error || 'Failed to create container')
+          throw batchInputError(containerResult.error || 'Failed to create container', containerResult.conflict)
         }
         containerIds.push(containerResult.containerId)
       }
@@ -360,7 +365,7 @@ export async function addSpecimensToBatch(
           quantity: prepared.quantity,
         })
         if (!containerResult.success || containerResult.containerId == null) {
-          throw new Error(containerResult.error || 'Failed to create container')
+          throw batchInputError(containerResult.error || 'Failed to create container', containerResult.conflict)
         }
         containerIds.push(containerResult.containerId)
       }
