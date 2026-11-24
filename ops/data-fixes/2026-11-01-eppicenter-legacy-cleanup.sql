@@ -2,12 +2,16 @@
 --
 -- DO NOT RUN THIS ON ANY OTHER DATABASE. It names rows by the ids they have in the EPPIcenter
 -- production database (snapshot arwen_2026-10-31) and carries out decisions that lab made about
--- its own legacy data. On another install it would abort or, worse, change unrelated rows.
+-- its own legacy data. Decisions 1 and 4 name no ids, so on another install they would clear
+-- that lab's placeholder dates and NA cryovial barcodes.
 --
 -- Decisions: eppicenter/sampledb3 issue #124, comment "Decisions (2026-11-01)"; work in #126.
 -- Run with `bun run data-fix` (packages/api/src/db/README.md, "One-time data fixes"). Every
--- step is guarded: if the database holds rows the lab did not review, the fix aborts and
--- changes nothing, so they can be reviewed first.
+-- step is guarded, and a guard that fails aborts the fix, changing nothing:
+--   - The first guard refuses any database but the EPPIcenter one. It identifies that database
+--     by two rows the decisions name and leave in place: Subject 66537, named 3D7_0.05 in the
+--     Study with short code CTRL, and micronix plate 1761, named EXVIVO-27.
+--   - The other guards refuse rows the lab did not review, so they can be reviewed first.
 --
 --   1. Placeholder collection dates (1970-01-01, 1999-09-09, 1899-12-30, 1111-01-01) become unknown.
 --   3. Containers commented "exhausted" with remaining quantity 1 get remaining quantity 0; the
@@ -23,6 +27,23 @@
 -- Decisions 2 (future dates) and 7 (duplicate Specimen identity) change no data; the integrity
 -- report lists them.
 
+-- Guard: table the database identity trigger fires on
+CREATE TEMP TABLE __fix_identity_guard (id INTEGER PRIMARY KEY);--> statement-breakpoint
+-- Guard: this is the EPPIcenter database
+CREATE TRIGGER __fix_identity_tr BEFORE INSERT ON __fix_identity_guard
+BEGIN
+  SELECT RAISE(ABORT, 'This is not the EPPIcenter database, so nothing was changed: Subject 66537 is not named 3D7_0.05 in the Study with short code CTRL, or micronix plate 1761 is not named EXVIVO-27. This fix names rows by the ids they have in that database. Do not run it on another one.')
+  WHERE NOT EXISTS (
+    SELECT 1 FROM study_subject s JOIN study st ON st.id = s.study_id
+    WHERE s.id = 66537 AND s.name = '3D7_0.05' AND st.short_code = 'CTRL'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM micronix_plate WHERE id = 1761 AND name = 'EXVIVO-27'
+  );
+END;--> statement-breakpoint
+-- Guard: refuse any database but the EPPIcenter one
+INSERT INTO __fix_identity_guard DEFAULT VALUES;--> statement-breakpoint
+DROP TRIGGER __fix_identity_tr;--> statement-breakpoint
+DROP TABLE __fix_identity_guard;--> statement-breakpoint
 -- Setup: list the exhausted Containers the lab reviewed (decision 3)
 CREATE TEMP TABLE __fix_exhausted (id INTEGER PRIMARY KEY);--> statement-breakpoint
 -- Setup: reviewed exhausted Container ids

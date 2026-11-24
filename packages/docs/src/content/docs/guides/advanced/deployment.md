@@ -102,7 +102,7 @@ The app must be running. Refresh the browser to see the demo data. See [Generati
 
 A **data fix** is a SQL file that changes your own data once, such as clearing placeholder values or merging two records your lab decided are the same. It is not a schema migration: migrations ship with SampleDB and run on every install at startup, while a data fix belongs to one install and runs only when an operator runs it by hand.
 
-**Data fix files are site-specific.** A fix names rows by the ids they have in the database it was written for and carries out that lab's decisions. The files in the repository's `ops/data-fixes/` directory are the EPPIcenter lab's fixes for its own database. Don't run them on yours: at best they abort, at worst they change unrelated rows. Write your own fix for your own data.
+**Data fix files are site-specific.** A fix names rows by the ids they have in the database it was written for and carries out that lab's decisions. The files in the repository's `ops/data-fixes/` directory are the EPPIcenter lab's fixes for its own database. Don't run them on yours. Each starts with a check that aborts on any other database; treat that check as a backstop, not as a reason to try. Write your own fix for your own data.
 
 The runner, `packages/api/src/scripts/data-fix.ts`:
 

@@ -34,7 +34,12 @@ bun run data-fix <fix.sql> [--db=path/to/database.sqlite] [--dry-run]
 
 `data_fix_log` belongs to the runner, not the operational schema: it is created on the first fix and is absent from `schema.ts`, `initial_schema.sql`, and databases no fix ran on.
 
-**Fix files are site-specific.** `ops/data-fixes/` holds the EPPIcenter lab's fixes for its own database; other installs must not run them. Start each file with a header naming the database it is for, the decision it carries out, and a warning not to run it elsewhere. Guard it: check that the rows it changes are the ones that were reviewed, and abort (for example with a temp trigger that `RAISE(ABORT, …)`s, as `2026-11-01-eppicenter-legacy-cleanup.sql` does) when they are not. A test under `__tests__/data-fixes/` runs the lab's fix against a database seeded in production's shape. The operator steps are in the deployment guide in `packages/docs` (One-time data fixes).
+**Fix files are site-specific.** `ops/data-fixes/` holds the EPPIcenter lab's fixes for its own database; other installs must not run them. Start each file with a header naming the database it is for, the decision it carries out, and a warning not to run it elsewhere. Guard it twice, aborting (for example with a temp trigger that `RAISE(ABORT, …)`s, as `2026-11-01-eppicenter-legacy-cleanup.sql` does) when a check fails:
+
+- First, check that the database is the one the file was written for: require rows only that database holds, by id and value, and abort when one is missing. A guard of the form "if row 123 exists, it must look like this" passes on a database without row 123, and a statement that names no ids then changes that database's rows.
+- Then check that the rows the file changes are the ones that were reviewed.
+
+A test under `__tests__/data-fixes/` runs the lab's fix against a database seeded in production's shape. The operator steps are in the deployment guide in `packages/docs` (One-time data fixes).
 
 ## How evolution works
 

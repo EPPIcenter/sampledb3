@@ -218,19 +218,72 @@ describe('data fix 2026-11-01-eppicenter-legacy-cleanup', () => {
     expect(column(sqlite, 'PRAGMA foreign_key_check')).toEqual([])
   })
 
-  it('changes nothing on a database without the legacy rows', () => {
-    addSubject(sqlite, 1, 3, 'A')
-    addSpecimen(sqlite, 1, 1, 2, '2020-01-01')
-    addContainer(sqlite, 1, 1, { comment: 'exhausted', remaining: 0 })
-    addCryovialTube(sqlite, 1, 'CV1')
+  /** Rows another lab could hold: placeholder dates and NA cryovial barcodes, under its own ids. */
+  function seedAnotherLabsRows(db: Database): void {
+    addSubject(db, 1, 3, 'A')
+    addSpecimen(db, 1, 1, 2, '1970-01-01')
+    addSpecimen(db, 2, 1, 21, '1999-09-09')
+    addSpecimen(db, 3, 1, 21, '2020-01-01')
+    addContainer(db, 1, 3, { comment: 'exhausted', remaining: 0 })
+    addCryovialTube(db, 1, 'NA')
+    addContainer(db, 2, 3)
+    addCryovialTube(db, 2, 'N/A')
+  }
+
+  it('aborts, changing nothing, on a database that is not the EPPIcenter one', () => {
+    seedAnotherLabsRows(sqlite)
+    const before = sqlite.serialize()
+
+    expect(() => applyFix(sqlite)).toThrow(/not the EPPIcenter database/)
+
+    expect(Buffer.from(sqlite.serialize()).equals(Buffer.from(before))).toBe(true)
+    expect(rows(sqlite, 'SELECT id, collection_date FROM specimen ORDER BY id')).toEqual([
+      { id: 1, collection_date: '1970-01-01' },
+      { id: 2, collection_date: '1999-09-09' },
+      { id: 3, collection_date: '2020-01-01' },
+    ])
+    expect(rows(sqlite, 'SELECT id, barcode FROM cryovial_tube ORDER BY id')).toEqual([
+      { id: 1, barcode: 'NA' },
+      { id: 2, barcode: 'N/A' },
+    ])
+    expect(column(sqlite, `SELECT name FROM sqlite_master WHERE name = 'data_fix_log'`)).toEqual([])
+  })
+
+  const notEppicenter: Array<[string, (sqlite: Database) => void]> = [
+    [
+      'Subject 66537 is missing',
+      (db) =>
+        db.exec(`DELETE FROM storage_container WHERE specimen_id IN (SELECT id FROM specimen WHERE study_subject_id = 66537);
+          DELETE FROM specimen WHERE study_subject_id = 66537;
+          DELETE FROM study_subject WHERE id = 66537`),
+    ],
+    ['Subject 66537 has another name', (db) => db.exec(`UPDATE study_subject SET name = 'Other' WHERE id = 66537`)],
+    ['Subject 66537 is in another Study', (db) => db.exec('UPDATE study_subject SET study_id = 8 WHERE id = 66537')],
+    ['plate 1761 is missing', (db) => db.exec('DELETE FROM micronix_tube WHERE collection_id = 1761; DELETE FROM micronix_plate WHERE id = 1761')],
+    ['plate 1761 has another name', (db) => db.exec(`UPDATE micronix_plate SET name = 'Other' WHERE id = 1761`)],
+  ]
+
+  for (const [situation, change] of notEppicenter) {
+    it(`aborts, changing nothing, when ${situation}`, () => {
+      seedProductionRows(sqlite)
+      change(sqlite)
+      const before = sqlite.serialize()
+
+      expect(() => applyFix(sqlite)).toThrow(/not the EPPIcenter database/)
+
+      expect(Buffer.from(sqlite.serialize()).equals(Buffer.from(before))).toBe(true)
+    })
+  }
+
+  it('applies on the EPPIcenter database when the rows a decision names are already gone', () => {
+    seedProductionRows(sqlite)
+    sqlite.exec('DELETE FROM storage_container WHERE id = 34513')
+    sqlite.exec('DELETE FROM micronix_plate WHERE id = 1760')
 
     applyFix(sqlite)
 
-    expect(rows(sqlite, 'SELECT id, study_subject_id, collection_date FROM specimen')).toEqual([{ id: 1, study_subject_id: 1, collection_date: '2020-01-01' }])
-    expect(rows(sqlite, 'SELECT id, remaining_quantity FROM storage_container')).toEqual([{ id: 1, remaining_quantity: 0 }])
-    expect(rows(sqlite, 'SELECT id, barcode FROM cryovial_tube')).toEqual([{ id: 1, barcode: 'CV1' }])
-    expect(column(sqlite, 'SELECT COUNT(*) FROM study_subject')).toEqual([1])
-    expect(column(sqlite, 'SELECT COUNT(*) FROM specimen_type_container_type')).toEqual([0])
+    expect(column(sqlite, 'SELECT collection_date FROM specimen WHERE id = 1')).toEqual([null])
+    expect(column(sqlite, 'SELECT id FROM study_subject WHERE study_id = 3 ORDER BY id')).toEqual([66537, 66543])
   })
 
   const aborts: Array<[string, (sqlite: Database) => void, RegExp]> = [
