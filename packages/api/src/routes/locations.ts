@@ -20,6 +20,7 @@ import { ConflictError, handleRouteError, NotFoundError, ValidationError } from 
 import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
+import { insertedRow } from '../lib/inserted-row'
 import { likeContains } from '../lib/sql-like'
 
 /**
@@ -125,7 +126,7 @@ locations.get('/:id', authMiddleware, async (c) => {
   const id = parseInt(requireParam(c, 'id'))
   
   if (isNaN(id)) {
-    return c.json({ error: 'Invalid location ID' }, 400)
+    throw new ValidationError('Invalid location ID')
   }
 
   const locationRecord = await database
@@ -338,20 +339,16 @@ locations.post('/', memberMiddleware, async (c) => {
       })
       .returning()
 
-    // Handle RunResult type - could be array or single result
-    const insertResult = Array.isArray(result) ? result : [result]
-    if (insertResult.length === 0) {
-      throw new Error('Failed to create location')
-    }
+    const inserted = insertedRow(result, 'location')
 
     // Update path for this location and descendants
-    await updateLocationPath(database, sqliteDatabase, insertResult[0].id)
+    await updateLocationPath(database, sqliteDatabase, inserted.id)
 
     // Fetch the created location with updated path
     const created = await database
       .select()
       .from(location)
-      .where(eq(location.id, insertResult[0].id))
+      .where(eq(location.id, inserted.id))
       .get()
 
     return c.json({ location: created }, 201)
@@ -363,12 +360,12 @@ locations.post('/', memberMiddleware, async (c) => {
 // Update location (admin only: renaming, moving, and canContainCollections reshape the hierarchy)
 locations.put('/:id', adminMiddleware, async (c) => {
   const id = parseInt(requireParam(c, 'id'))
-  
-  if (isNaN(id)) {
-    return c.json({ error: 'Invalid location ID' }, 400)
-  }
 
   try {
+    if (isNaN(id)) {
+      throw new ValidationError('Invalid location ID')
+    }
+
     const body = await c.req.json()
     // Only root locations (parentId is null) require storageTypeId
     const schema = z.object({
@@ -409,7 +406,8 @@ locations.put('/:id', adminMiddleware, async (c) => {
       .get()
 
     if (!existing) {
-      return c.json({ error: 'Location not found' }, 404)
+      // No id, so the message stays "Location not found", as the form shows it.
+      throw new NotFoundError('Location')
     }
 
     // A Location that holds Collections must keep holding them (#133).
@@ -426,7 +424,7 @@ locations.put('/:id', adminMiddleware, async (c) => {
     if (data.parentId !== undefined) {
       const validationError = await validateLocationHierarchy(database, sqliteDatabase, data.parentId ?? null, id)
       if (validationError) {
-        return c.json({ error: validationError }, 400)
+        throw new ValidationError(validationError)
       }
     }
 
@@ -437,15 +435,15 @@ locations.put('/:id', adminMiddleware, async (c) => {
     // Validate storageTypeId based on whether location is root or child
     if (data.storageTypeId !== undefined) {
       if (isRoot && (data.storageTypeId === null || data.storageTypeId === '')) {
-        return c.json({ error: 'Storage type ID is required for root locations' }, 400)
+        throw new ValidationError('Storage type ID is required for root locations')
       }
       if (!isRoot && data.storageTypeId !== null && data.storageTypeId !== '') {
-        return c.json({ error: 'Storage type ID must be null for child locations' }, 400)
+        throw new ValidationError('Storage type ID must be null for child locations')
       }
     }
     // A child moved to the root needs a storage type (the table CHECK requires it).
     if (isRoot && existing.parentId !== null && !data.storageTypeId) {
-      return c.json({ error: 'Storage type ID is required when moving a location to the root' }, 400)
+      throw new ValidationError('Storage type ID is required when moving a location to the root')
     }
 
     // Check for duplicate name if name or parent is being changed
@@ -466,7 +464,7 @@ locations.put('/:id', adminMiddleware, async (c) => {
         .get()
 
       if (duplicate) {
-        return c.json({ error: 'Location with this name already exists under the same parent' }, 400)
+        throw new ValidationError('Location with this name already exists under the same parent')
       }
     }
 
