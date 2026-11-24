@@ -45,6 +45,7 @@ import {
 } from '../lib/controls/control-read'
 import {
   strainCompositionEntrySchema,
+  normalizeStoredStrains,
   resolveStrainComposition,
   findBloodControlDefinitionByComposition,
   DuplicateControlCompositionError,
@@ -548,13 +549,25 @@ controls.patch('/:id', memberMiddleware, async (c) => {
     }
 
     const body = await c.req.json()
+    const storedStrainEntrySchema = z.object({
+      id: z.number().int(),
+      name: z.string().optional(),
+      percentage: z.number().min(0).max(100),
+    })
+    const propertiesSchema = z
+      .object({
+        strains: z.array(storedStrainEntrySchema).optional(),
+        targetDensity: z.number().optional(),
+        targetDensityUnitId: z.number().int().nullable().optional(),
+      })
+      .passthrough()
     const schema = z.object({
       name: z.string().min(1).optional(),
       controlType: z.string().optional(),
       targetDensity: z.number().optional(),
       targetDensityUnitId: z.number().int().nullable().optional(),
       strains: z.array(strainCompositionEntrySchema).optional(),
-      properties: z.record(z.string(), z.any()).optional(),
+      properties: propertiesSchema.optional(),
     })
 
     const data = schema.parse(body)
@@ -610,9 +623,10 @@ controls.patch('/:id', memberMiddleware, async (c) => {
       targetDensityUnitId !== undefined ||
       (properties !== undefined && compositionKeys.some((key) => key in properties))
     if (setsComposition) {
-      const storedStrains = Array.isArray(newProps.strains)
-        ? (newProps.strains as Array<{ id: number; percentage: number }>)
-        : []
+      const storedStrains = normalizeStoredStrains(newProps.strains).filter(
+        (strain): strain is { id: number; percentage: number } =>
+          typeof strain.id === 'number' && typeof strain.percentage === 'number',
+      )
       const duplicate = await findBloodControlDefinitionByComposition(
         dbInstance,
         {

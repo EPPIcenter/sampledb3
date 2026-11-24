@@ -642,6 +642,32 @@ describe('Controls API', () => {
       expect(res.status).toBe(409)
       expect(await res.json()).toMatchObject({ errorCode: 'CONFLICT', existingDefinition: { name: 'NoUnit' } })
     })
+
+    it('returns 400 for malformed strains or density fields inside properties', async () => {
+      const strain = await createTestStrain(ctx.db, { name: '3D7' })
+      const def = await createTestControlDefinition(ctx.db, {
+        name: 'ValidDef',
+        properties: { strains: [{ id: strain.id, name: '3D7', percentage: 100 }], targetDensity: 100 },
+      })
+
+      for (const badProperties of [
+        { strains: [null] },
+        { strains: [{}] },
+        { strains: [{ id: strain.id }] },
+        { strains: [{ id: strain.id, percentage: 150 }] },
+        { strains: 'not-an-array' },
+        { targetDensity: 'not-a-number' },
+        { targetDensityUnitId: 'not-an-int' },
+        { targetDensityUnitId: 1.5 },
+      ]) {
+        const res = await ctx.request(`${BASE}/${def.id}`, {
+          method: 'PATCH',
+          json: { properties: badProperties },
+        })
+        expect(res.status).toBe(400)
+        expect(await res.json()).toMatchObject({ errorCode: 'VALIDATION_ERROR' })
+      }
+    })
   })
 
   describe(`PATCH ${BASE}/batches/:id`, () => {
