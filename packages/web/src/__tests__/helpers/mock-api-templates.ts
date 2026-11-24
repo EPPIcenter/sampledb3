@@ -117,6 +117,7 @@ export function containerDetailPageMock(): MockApiOverrides {
     derivationsApi: {
       listFromContainer: vi.fn().mockResolvedValue({ derivations: [], count: 0 }),
       getSource: vi.fn().mockResolvedValue(null),
+      getChain: vi.fn().mockResolvedValue({ ancestors: [], descendants: [], current: null }),
     },
   }
 }

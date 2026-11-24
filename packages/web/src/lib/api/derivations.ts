@@ -1,7 +1,12 @@
-import type { EnrichedContainerWire } from '@sampledb/contract/wire'
+import type { EnrichedContainerWire, SpecimenSummaryWire } from '@sampledb/contract/wire'
 import { api } from './client'
 import type { CreateDerivationRequestPayload } from '../derivation-payload'
-import type { Specimen } from './types'
+import {
+  parseContainerSource,
+  parseCreateDerivation,
+  parseDerivationChain,
+  type ParsedContainerSource,
+} from './parse-response'
 interface DerivationProperties {
   [key: string]: unknown
 }
@@ -21,11 +26,13 @@ export type CreateDerivationPayload = CreateDerivationRequestPayload
 
 export interface CreateDerivationResponse {
   derivation: Derivation
-  parentContainer: any
-  childContainer: any
-  specimen: Specimen
+  parentContainer: EnrichedContainerWire
+  childContainer: EnrichedContainerWire
+  specimen: SpecimenSummaryWire | null
   warnings: string[]
 }
+
+export type ContainerSourceResponse = ParsedContainerSource
 
 export interface DerivationCsvImportResultRow {
   index: number
@@ -84,25 +91,30 @@ export interface ValidationResult {
 }
 
 export const derivationsApi = {
-  createFromContainer: (parentContainerId: number, payload: CreateDerivationPayload) =>
-    api.post<CreateDerivationResponse>(`/derivations/containers/${parentContainerId}/derive`, payload),
+  createFromContainer: async (
+    parentContainerId: number,
+    payload: CreateDerivationPayload,
+  ): Promise<CreateDerivationResponse> => {
+    const body = await api.post<unknown>(`/derivations/containers/${parentContainerId}/derive`, payload)
+    return parseCreateDerivation(body)
+  },
   listFromContainer: (containerId: number, params?: { derivation_type?: string }) =>
     api.get<{ derivations: Derivation[]; count: number }>(`/derivations/containers/${containerId}/derivations`, {
       params,
     }),
-  getSource: (containerId: number) =>
-    // Containers that were not derived get { type: 'original', source, ... } with no derivation.
-    api.get<{
-      derivation?: Derivation
-      parentContainer?: any
-      parentSpecimen?: Specimen
-    }>(`/derivations/containers/${containerId}/source`),
-  getChain: (containerId: number) =>
-    api.get<{
-      ancestors: Array<{ container: EnrichedContainerWire | null; derivation: Derivation }>
-      descendants: Array<{ container: EnrichedContainerWire | null; derivation: Derivation }>
-      current: EnrichedContainerWire | null
-    }>(`/derivations/containers/${containerId}/derivation-chain`),
+  getSource: async (containerId: number): Promise<ContainerSourceResponse> => {
+    // Containers that were not derived get { type: 'original', source, container, specimen }.
+    const body = await api.get<unknown>(`/derivations/containers/${containerId}/source`)
+    return parseContainerSource(body)
+  },
+  getChain: async (containerId: number): Promise<{
+    ancestors: Array<{ container: EnrichedContainerWire | null; derivation: Derivation }>
+    descendants: Array<{ container: EnrichedContainerWire | null; derivation: Derivation }>
+    current: EnrichedContainerWire | null
+  }> => {
+    const body = await api.get<unknown>(`/derivations/containers/${containerId}/derivation-chain`)
+    return parseDerivationChain(body)
+  },
   update: (id: number, patch: Partial<Pick<Derivation, 'derivationDate' | 'protocol' | 'notes' | 'properties'>>) =>
     api.patch<{ derivation: Derivation }>(`/derivations/derivations/${id}`, patch),
   delete: (id: number) =>

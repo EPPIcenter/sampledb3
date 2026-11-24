@@ -4,8 +4,9 @@ import type {
   BulkCombinedValidateResponse,
   BulkCombinedImportResponse,
 } from '@sampledb/contract'
+import type { SpecimenSummaryWire } from '@sampledb/contract/wire'
 import { api } from './client'
-import type { StudySubject, Specimen } from './types'
+import type { StudySubject } from './types'
 
 export type BulkCombinedAtomicMode = BulkCombinedRequest['atomicMode']
 
@@ -16,7 +17,7 @@ export const importsApi = {
         results: Array<{
           subject: StudySubject
           subjectCreated: boolean
-          specimens: Array<{ specimen: Specimen; containerCreated: boolean; containerId?: number }>
+          specimens: Array<{ specimen: SpecimenSummaryWire; containerCreated: boolean; containerId?: number }>
         }>
       }
     >('/imports/bulk-combined', data),

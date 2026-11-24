@@ -3,8 +3,10 @@ import {
   parseContainerDetailWire as parseContainerDetailWireSchema,
   parseContainersListWire,
   enrichedContainerWireSchema,
+  specimenSummaryWireSchema,
   type ContainerDetailWire,
   type EnrichedContainerWire,
+  type SpecimenSummaryWire,
 } from '@sampledb/contract/wire'
 
 /** Thrown when a response body does not match the expected API contract. */
@@ -113,4 +115,140 @@ export function parseContainersList(body: unknown): ContainersListResult {
     }
     throw error
   }
+}
+
+const derivationRecordWireSchema = z
+  .object({
+    id: z.number(),
+    parentContainerId: z.number(),
+    childContainerId: z.number(),
+    derivationType: z.string(),
+    derivationDate: z.string().optional(),
+    protocol: z.string().optional(),
+    notes: z.string().optional(),
+    properties: z.record(z.string(), z.unknown()).nullable().optional(),
+  })
+  .passthrough()
+
+export type ParsedDerivationRecord = z.infer<typeof derivationRecordWireSchema>
+
+const derivationChainItemWireSchema = z.object({
+  container: enrichedContainerWireSchema.nullable().optional(),
+  derivation: derivationRecordWireSchema,
+})
+
+const derivationChainWireSchema = z.object({
+  ancestors: z.array(derivationChainItemWireSchema),
+  descendants: z.array(derivationChainItemWireSchema),
+  current: enrichedContainerWireSchema.nullable().optional(),
+})
+
+export interface ParsedDerivationChain {
+  ancestors: Array<{ container: EnrichedContainerWire | null; derivation: ParsedDerivationRecord }>
+  descendants: Array<{ container: EnrichedContainerWire | null; derivation: ParsedDerivationRecord }>
+  current: EnrichedContainerWire | null
+}
+
+/** Parse GET /derivations/containers/:id/derivation-chain body at runtime. */
+export function parseDerivationChain(body: unknown): ParsedDerivationChain {
+  const parsed = parseWithSchema(
+    derivationChainWireSchema,
+    body,
+    'GET /derivations/containers/:id/derivation-chain',
+  )
+  return {
+    ancestors: parsed.ancestors.map((row) => ({
+      container: row.container ?? null,
+      derivation: row.derivation,
+    })),
+    descendants: parsed.descendants.map((row) => ({
+      container: row.container ?? null,
+      derivation: row.derivation,
+    })),
+    current: parsed.current ?? null,
+  }
+}
+
+const derivationWarningWireSchema = z.union([
+  z.string(),
+  z.object({ code: z.string(), message: z.string() }),
+])
+
+const createDerivationWireSchema = z.object({
+  derivation: derivationRecordWireSchema,
+  parentContainer: enrichedContainerWireSchema,
+  childContainer: enrichedContainerWireSchema,
+  specimen: specimenSummaryWireSchema.nullable().optional(),
+  warnings: z.array(derivationWarningWireSchema).optional(),
+})
+
+export interface ParsedCreateDerivation {
+  derivation: ParsedDerivationRecord
+  parentContainer: EnrichedContainerWire
+  childContainer: EnrichedContainerWire
+  specimen: SpecimenSummaryWire | null
+  warnings: string[]
+}
+
+/** Parse POST /derivations/containers/:id/derive body at runtime. */
+export function parseCreateDerivation(body: unknown): ParsedCreateDerivation {
+  const parsed = parseWithSchema(
+    createDerivationWireSchema,
+    body,
+    'POST /derivations/containers/:id/derive',
+  )
+  return {
+    derivation: parsed.derivation,
+    parentContainer: parsed.parentContainer,
+    childContainer: parsed.childContainer,
+    specimen: parsed.specimen ?? null,
+    warnings: (parsed.warnings ?? []).map((w) => (typeof w === 'string' ? w : w.message)),
+  }
+}
+
+const containerSourceWireSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('derivation'),
+    derivation: derivationRecordWireSchema,
+    parentContainer: enrichedContainerWireSchema,
+    parentSpecimen: specimenSummaryWireSchema.nullable().optional(),
+  }),
+  z.object({
+    type: z.literal('original'),
+    source: z.unknown(),
+    container: enrichedContainerWireSchema,
+    specimen: specimenSummaryWireSchema,
+  }),
+])
+
+export type ParsedContainerSource =
+  | {
+      type: 'derivation'
+      derivation: ParsedDerivationRecord
+      parentContainer: EnrichedContainerWire
+      parentSpecimen: SpecimenSummaryWire | null
+    }
+  | {
+      type: 'original'
+      source: unknown
+      container: EnrichedContainerWire
+      specimen: SpecimenSummaryWire
+    }
+
+/** Parse GET /derivations/containers/:id/source body at runtime. */
+export function parseContainerSource(body: unknown): ParsedContainerSource {
+  const parsed = parseWithSchema(
+    containerSourceWireSchema,
+    body,
+    'GET /derivations/containers/:id/source',
+  )
+  if (parsed.type === 'derivation') {
+    return {
+      type: 'derivation',
+      derivation: parsed.derivation,
+      parentContainer: parsed.parentContainer,
+      parentSpecimen: parsed.parentSpecimen ?? null,
+    }
+  }
+  return parsed
 }

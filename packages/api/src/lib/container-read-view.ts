@@ -22,6 +22,7 @@ import {
   type StaticWellSubtypeDetails,
 } from './container-placement'
 import { projectContainerCollection } from './container-projection'
+import { toSpecimenSummaryWire } from './container-wire-mapper'
 import { resolveSpecimenSources, type SpecimenSource } from './specimens/provenance'
 import type { CollectionInfo } from '../types/collections'
 
@@ -112,16 +113,7 @@ export async function loadContainerReadViews(
     const locationInfo = placement.location ? locationById.get(placement.location.id) ?? null : null
 
     const specimenSummary: SpecimenSummaryWire | null = spec
-      ? {
-          id: spec.id,
-          studySubjectId: spec.studySubjectId,
-          controlBatchId: spec.controlBatchId,
-          specimenTypeId: spec.specimenTypeId,
-          collectionDate: spec.collectionDate,
-          created: spec.created,
-          lastUpdated: spec.lastUpdated,
-          ...(type ? { specimenType: { id: type.id, name: type.name } } : {}),
-        }
+      ? toSpecimenSummaryWire(spec, type)
       : null
 
     return {

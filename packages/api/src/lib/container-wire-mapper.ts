@@ -1,4 +1,5 @@
-import type { EnrichedContainerWire } from '@sampledb/contract/wire'
+import type { EnrichedContainerWire, SpecimenSummaryWire } from '@sampledb/contract/wire'
+import type { Specimen } from '../db/schema'
 import type { EnrichedContainerApi } from './container-api-enrichment'
 import {
   mapCollectionInfoToWire,
@@ -76,4 +77,21 @@ export function mapEnrichedContainerToWire(enriched: EnrichedContainerApi): Enri
 
 export function mapEnrichedContainersToWire(enriched: EnrichedContainerApi[]): EnrichedContainerWire[] {
   return enriched.map(mapEnrichedContainerToWire)
+}
+
+/** Map a Specimen row to SpecimenSummaryWire so audit columns (createdBy, updatedBy) stay off the wire. */
+export function toSpecimenSummaryWire(
+  spec: Specimen,
+  specimenTypeInfo?: { id: number; name: string },
+): SpecimenSummaryWire {
+  return {
+    id: spec.id,
+    studySubjectId: spec.studySubjectId,
+    controlBatchId: spec.controlBatchId,
+    specimenTypeId: spec.specimenTypeId,
+    collectionDate: spec.collectionDate,
+    created: spec.created,
+    lastUpdated: spec.lastUpdated,
+    ...(specimenTypeInfo ? { specimenType: { id: specimenTypeInfo.id, name: specimenTypeInfo.name } } : {}),
+  }
 }

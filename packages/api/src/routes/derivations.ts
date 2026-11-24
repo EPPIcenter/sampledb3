@@ -4,16 +4,15 @@ import type { Database } from '../db/client'
 import {
   containerDerivation,
   storageContainer,
-  specimen,
 } from '../db/schema'
 import { and, eq } from 'drizzle-orm'
 import { createDerivation } from '../lib/derivations'
-import { resolveSpecimenSource } from '../lib/specimens/provenance'
 import { createDerivationRequestSchema, derivationDateSchema } from '../lib/derivation-schemas'
 import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { requireParam, setsNoField } from '../lib/common-validators'
 import { handleRouteError, ValidationError } from '../lib/error-handler'
-import { enrichContainersForApi } from '../lib/container-api-enrichment'
+import { enrichContainersForApi, toEnrichedContainerApi } from '../lib/container-api-enrichment'
+import { loadContainerReadViews, loadContainerReadViewsByIds } from '../lib/container-read-view'
 import { mapEnrichedContainerToWire } from '../lib/container-wire-mapper'
 
 /**
@@ -42,7 +41,21 @@ derivations.post('/containers/:id/derive', memberMiddleware, async (c) => {
       ...input,
     })
 
-    return c.json(result)
+    const views = await loadContainerReadViews(database, [result.parentContainer, result.childContainer])
+    const viewById = new Map(views.map((view) => [view.container.id, view]))
+    const parentView = viewById.get(result.parentContainer.id)
+    const childView = viewById.get(result.childContainer.id)
+    if (!parentView || !childView) {
+      throw new Error('Derived containers could not be loaded after creation')
+    }
+
+    return c.json({
+      derivation: result.derivation,
+      parentContainer: mapEnrichedContainerToWire(toEnrichedContainerApi(parentView)),
+      childContainer: mapEnrichedContainerToWire(toEnrichedContainerApi(childView)),
+      specimen: childView.specimen,
+      warnings: result.warnings,
+    })
   } catch (error) {
     return handleRouteError(error, c)
   }
@@ -96,62 +109,42 @@ derivations.get('/containers/:id/source', authMiddleware, async (c) => {
 
     if (record) {
       // Container is derived - return derivation source
-      const parent = await database
-        .select()
-        .from(storageContainer)
-        .where(eq(storageContainer.id, record.parentContainerId))
-        .get()
+      const views = await loadContainerReadViewsByIds(database, [record.parentContainerId])
+      const parentView = views.get(record.parentContainerId)
 
-      if (!parent) {
+      if (!parentView) {
         return c.json({ error: 'Parent container not found' }, 404)
       }
-
-      const parentSpecimen = await database
-        .select()
-        .from(specimen)
-        .where(eq(specimen.id, parent.specimenId))
-        .get()
 
       return c.json({
         type: 'derivation',
         derivation: record,
-        parentContainer: parent,
-        parentSpecimen,
+        parentContainer: mapEnrichedContainerToWire(toEnrichedContainerApi(parentView)),
+        parentSpecimen: parentView.specimen,
       })
     }
 
     // Container is not derived - return original source (subject or control)
-    const container = await database
-      .select()
-      .from(storageContainer)
-      .where(eq(storageContainer.id, id))
-      .get()
+    const views = await loadContainerReadViewsByIds(database, [id])
+    const view = views.get(id)
 
-    if (!container) {
+    if (!view) {
       return c.json({ error: 'Container not found' }, 404)
     }
 
-    const spec = await database
-      .select()
-      .from(specimen)
-      .where(eq(specimen.id, container.specimenId))
-      .get()
-
-    if (!spec) {
+    if (!view.specimen) {
       return c.json({ error: 'Specimen not found for container' }, 404)
     }
 
-    const sourceInfo = await resolveSpecimenSource(database, container.specimenId)
-
-    if (!sourceInfo) {
+    if (!view.source) {
       return c.json({ error: 'Source not found for container' }, 404)
     }
 
     return c.json({
       type: 'original',
-      source: sourceInfo,
-      container,
-      specimen: spec,
+      source: view.source,
+      container: mapEnrichedContainerToWire(toEnrichedContainerApi(view)),
+      specimen: view.specimen,
     })
   } catch (error) {
     return handleRouteError(error, c)

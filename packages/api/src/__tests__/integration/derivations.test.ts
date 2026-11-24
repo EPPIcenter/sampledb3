@@ -13,10 +13,12 @@ import {
 } from '../helpers/factories'
 import { createDerivationsRoutes } from '../../routes/derivations'
 import { setContainerDefaults } from '../../lib/settings'
-import { specimenTypeContainerType, containerTypeUnit, storageContainer, micronixTube } from '../../db/schema'
+import { specimen as specimenTable, specimenTypeContainerType, containerTypeUnit, storageContainer, micronixTube, users } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { utcNow } from '../../lib/datetime'
 import { failInsertsWithUniqueViolation } from '../helpers/constraint-race'
+import { enrichedContainerWireSchema, specimenSummaryWireSchema } from '@sampledb/contract/wire'
+import { eq } from 'drizzle-orm'
 
 const BASE = '/api/derivations'
 
@@ -186,5 +188,88 @@ describe('Derivation Workflow Integration Tests', () => {
     expect(source.type).toBe('derivation')
     expect(source.derivation.derivationType).toBe('aliquot')
     expect(source.derivation.childContainerId).toBe(derived.childContainer.id)
+  })
+
+  it('returns wire DTOs without audit columns from derive and source endpoints', async () => {
+    const { parentContainerId, targetPlateId } = await createParentContainerFixture(ctx.db)
+    const [testUser] = await ctx.db.select().from(users)
+    const [parentRow] = await ctx.db
+      .select()
+      .from(storageContainer)
+      .where(eq(storageContainer.id, parentContainerId))
+    await ctx.db
+      .update(storageContainer)
+      .set({ createdBy: testUser!.id, updatedBy: testUser!.id })
+      .where(eq(storageContainer.id, parentContainerId))
+    await ctx.db
+      .update(specimenTable)
+      .set({ createdBy: testUser!.id, updatedBy: testUser!.id })
+      .where(eq(specimenTable.id, parentRow!.specimenId))
+
+    // 1. GET /source for a non-derived (original) container
+    const originalSourceRes = await ctx.request(`${BASE}/containers/${parentContainerId}/source`, {
+      method: 'GET',
+    })
+    expect(originalSourceRes.status).toBe(200)
+    const originalSource = (await originalSourceRes.json()) as {
+      type: string
+      container: Record<string, unknown>
+      specimen: Record<string, unknown>
+      source: Record<string, unknown>
+    }
+    expect(originalSource.type).toBe('original')
+    expect(originalSource.container).not.toHaveProperty('createdBy')
+    expect(originalSource.container).not.toHaveProperty('updatedBy')
+    expect(enrichedContainerWireSchema.safeParse(originalSource.container).success).toBe(true)
+    expect(originalSource.specimen).not.toHaveProperty('createdBy')
+    expect(originalSource.specimen).not.toHaveProperty('updatedBy')
+    expect(specimenSummaryWireSchema.safeParse(originalSource.specimen).success).toBe(true)
+
+    // 2. POST /derive
+    const deriveRes = await ctx.request(`${BASE}/containers/${parentContainerId}/derive`, {
+      method: 'POST',
+      json: {
+        derivationType: 'aliquot',
+        specimenTypeName: 'DNA',
+        container: {
+          containerType: 'micronix_tube',
+          barcode: 'MT-WIRE-CHILD',
+          collection: { type: 'micronix_plate', id: targetPlateId, position: 'A03' },
+        },
+      },
+    })
+    expect(deriveRes.status).toBe(200)
+    const derived = (await deriveRes.json()) as {
+      parentContainer: Record<string, unknown>
+      childContainer: Record<string, unknown> & { id: number }
+      specimen: Record<string, unknown>
+    }
+    expect(derived.parentContainer).not.toHaveProperty('createdBy')
+    expect(derived.parentContainer).not.toHaveProperty('updatedBy')
+    expect(enrichedContainerWireSchema.safeParse(derived.parentContainer).success).toBe(true)
+    expect(derived.childContainer).not.toHaveProperty('createdBy')
+    expect(derived.childContainer).not.toHaveProperty('updatedBy')
+    expect(enrichedContainerWireSchema.safeParse(derived.childContainer).success).toBe(true)
+    expect(derived.specimen).not.toHaveProperty('createdBy')
+    expect(derived.specimen).not.toHaveProperty('updatedBy')
+    expect(specimenSummaryWireSchema.safeParse(derived.specimen).success).toBe(true)
+
+    // 3. GET /source for a derived container
+    const derivedSourceRes = await ctx.request(`${BASE}/containers/${derived.childContainer.id}/source`, {
+      method: 'GET',
+    })
+    expect(derivedSourceRes.status).toBe(200)
+    const derivedSource = (await derivedSourceRes.json()) as {
+      type: string
+      parentContainer: Record<string, unknown>
+      parentSpecimen: Record<string, unknown>
+    }
+    expect(derivedSource.type).toBe('derivation')
+    expect(derivedSource.parentContainer).not.toHaveProperty('createdBy')
+    expect(derivedSource.parentContainer).not.toHaveProperty('updatedBy')
+    expect(enrichedContainerWireSchema.safeParse(derivedSource.parentContainer).success).toBe(true)
+    expect(derivedSource.parentSpecimen).not.toHaveProperty('createdBy')
+    expect(derivedSource.parentSpecimen).not.toHaveProperty('updatedBy')
+    expect(specimenSummaryWireSchema.safeParse(derivedSource.parentSpecimen).success).toBe(true)
   })
 })

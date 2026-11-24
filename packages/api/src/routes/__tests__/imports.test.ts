@@ -17,6 +17,7 @@ import { studySubject, specimen, specimenTypeContainerType, containerTypeUnit, m
 import { setContainerDefaults } from '../../lib/settings'
 import { eq } from 'drizzle-orm'
 import { failInsertsWithUniqueViolation } from '../../__tests__/helpers/constraint-race'
+import { specimenSummaryWireSchema } from '@sampledb/contract/wire'
 
 describe('Imports API', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -431,6 +432,44 @@ describe('Imports API', () => {
       expect(res.status).toBe(409)
       const body = (await res.json()) as { details?: { errors?: unknown[] } }
       expect(body.details?.errors).toEqual([expect.objectContaining({ subjectIndex: 0, specimenIndex: 0 })])
+    })
+
+    it('returns wire DTOs without audit columns (createdBy, updatedBy)', async () => {
+      await createTestStudy(ctx.db, { title: 'Wire Study', shortCode: 'WIRE' })
+      await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+
+      const res = await ctx.request('/api/imports/bulk-combined', {
+        method: 'POST',
+        json: {
+          studyShortCode: 'WIRE',
+          atomicMode: 'full_file',
+          subjects: [
+            {
+              subjectName: 'WIRE-SUBJ',
+              specimens: [{ specimenTypeName: 'Whole Blood', collectionDate: '2025-01-01' }],
+            },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(201)
+      const body = (await res.json()) as {
+        results: Array<{
+          subject: Record<string, unknown>
+          specimens: Array<{ specimen?: Record<string, unknown>; containerCreated: boolean; createdBy?: unknown; updatedBy?: unknown }>
+        }>
+      }
+      const subjectResult = body.results[0]
+      expect(subjectResult.subject).not.toHaveProperty('createdBy')
+      expect(subjectResult.subject).not.toHaveProperty('updatedBy')
+
+      const specimenEntry = subjectResult.specimens[0]
+      expect(specimenEntry).not.toHaveProperty('createdBy')
+      expect(specimenEntry).not.toHaveProperty('updatedBy')
+      expect(specimenEntry.specimen).toBeDefined()
+      expect(specimenEntry.specimen).not.toHaveProperty('createdBy')
+      expect(specimenEntry.specimen).not.toHaveProperty('updatedBy')
+      expect(specimenSummaryWireSchema.safeParse(specimenEntry.specimen).success).toBe(true)
     })
   })
 

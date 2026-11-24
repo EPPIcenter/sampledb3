@@ -5,6 +5,7 @@ import { importDerivationsFromCsv, validateDerivationsCsv, type BulkDerivationSe
 import { runBulkCombinedImport, validateBulkCombinedPayload } from '../lib/bulk-combined-import'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
+import { toSpecimenSummaryWire } from '../lib/container-wire-mapper'
 import { derivationDateSchema } from '../lib/derivation-schemas'
 import {
   bulkCombinedRequestSchema,
@@ -90,10 +91,16 @@ imports.post('/bulk-combined', memberMiddleware, async (c) => {
     return c.json({
       summary: result.summary,
       results: result.results.map((r) => ({
-        subject: r.subject,
+        subject: {
+          id: r.subject.id,
+          studyId: r.subject.studyId,
+          name: r.subject.name,
+          created: r.subject.created,
+          lastUpdated: r.subject.lastUpdated,
+        },
         subjectCreated: r.subjectCreated,
         specimens: r.specimens.map((s) => ({
-          ...s.specimen,
+          specimen: toSpecimenSummaryWire(s.specimen),
           containerCreated: s.containerCreated,
           containerId: s.containerId,
         })),

@@ -46,14 +46,15 @@ export default function ContainerDetail() {
   const childContainers =
     derivationsQuery.data?.childContainers ?? new Map<number, ContainerDetailData>()
   const loadingDerivations = derivationsQuery.isPending
-  const sourceDerivation = sourceQuery.data
-    ? {
-        type: 'derivation' as const,
-        derivation: sourceQuery.data.derivation,
-        parentContainer: sourceQuery.data.parentContainer,
-        parentSpecimen: sourceQuery.data.parentSpecimen,
-      }
-    : null
+  const sourceDerivation =
+    sourceQuery.data?.type === 'derivation'
+      ? {
+          type: 'derivation' as const,
+          derivation: sourceQuery.data.derivation,
+          parentContainer: sourceQuery.data.parentContainer,
+          parentSpecimen: sourceQuery.data.parentSpecimen,
+        }
+      : null
   const [showDerivationModal, setShowDerivationModal] = useState(false)
   const [derivationModalKey, setDerivationModalKey] = useState(0)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -455,19 +456,17 @@ export default function ContainerDetail() {
       {/* Derivation Sections */}
       <div className="mt-6 space-y-4">
         {/* Source Derivation Information (if this container is a child via derivation) */}
-        {sourceDerivation?.derivation && (
+        {sourceDerivation && (
           <div className="storage-card storage-reveal storage-reveal-3">
             <div className="storage-card-divider px-6 py-4 border-b">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold storage-section-title">Source Derivation</h3>
-                {sourceDerivation.parentContainer && (
-                  <button
-                    onClick={() => navigate(`/containers/${sourceDerivation.parentContainer.id}`)}
-                    className="dashboard-link text-sm hover:underline font-medium"
-                  >
-                    View Parent Container →
-                  </button>
-                )}
+                <button
+                  onClick={() => navigate(`/containers/${sourceDerivation.parentContainer.id}`)}
+                  className="dashboard-link text-sm hover:underline font-medium"
+                >
+                  View Parent Container →
+                </button>
               </div>
             </div>
             <div className="px-6 py-5">
@@ -701,7 +700,7 @@ export default function ContainerDetail() {
 
       {/* Derivation Chain View - Always show when there's derivation data */}
       {id &&
-        (sourceDerivation?.derivation ||
+        (sourceDerivation ||
           derivations.length > 0) && (
           <div className="mt-6">
             <DerivationChainView containerId={parseInt(id)} />
