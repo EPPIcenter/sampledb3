@@ -1,15 +1,20 @@
 import type { ContainerWriteInput } from '@sampledb/contract'
 
+/** True for a missing value and for one that is empty once trimmed: `'   '` names nothing. */
+function isBlank(value: string | undefined): boolean {
+  return !value?.trim()
+}
+
 function hasGridCollection(collection: { id?: number; name?: string; barcode?: string } | undefined): boolean {
   if (!collection) return false
-  return collection.id != null || Boolean(collection.name) || Boolean(collection.barcode)
+  return collection.id != null || !isBlank(collection.name) || !isBlank(collection.barcode)
 }
 
 /** The input field a missing or misplaced value belongs to. */
 export type ContainerWriteField = 'barcode' | 'sublabel' | 'collection' | 'position'
 
 function hasPosition(collection: { position?: string } | undefined): boolean {
-  return Boolean(collection?.position?.trim())
+  return !isBlank(collection?.position)
 }
 
 function positionRequired(containers: string) {
@@ -23,7 +28,7 @@ export function validateContainerWriteFields(
   input: ContainerWriteInput
 ): { valid: true } | { valid: false; field: ContainerWriteField; error: string } {
   if (input.containerType === 'micronix_tube') {
-    if (!input.barcode) {
+    if (isBlank(input.barcode)) {
       return { valid: false, field: 'barcode', error: 'Barcode is required for micronix tubes' }
     }
     if (!hasGridCollection(input.collection)) {
@@ -41,10 +46,10 @@ export function validateContainerWriteFields(
       return { valid: false, field: 'collection', error: 'Collection is required for paper containers' }
     }
     if (collection.id == null) {
-      if (!collection.parent || (collection.parent.id == null && !collection.parent.name)) {
+      if (!collection.parent || (collection.parent.id == null && isBlank(collection.parent.name))) {
         return { valid: false, field: 'collection', error: 'Collection name is required for papers' }
       }
-      if (!collection.name) {
+      if (isBlank(collection.name)) {
         return { valid: false, field: 'collection', error: 'Sheet name is required for papers' }
       }
     }

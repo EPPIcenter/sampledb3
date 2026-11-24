@@ -45,7 +45,22 @@ bun run build
 bun run start
 ```
 
-Before pushing, run `bun run ci:verify`, the same checks the `Checks` workflow runs on every PR. Install the pre-commit hook with `bun run setup:hooks`; it typechecks the packages your staged files touch and lints the staged API and web files.
+Before pushing, run `bun run ci:verify`. The `Checks` workflow runs the same command on every PR. It runs these steps in order and stops at the first one that fails:
+
+1. `bun run typecheck` typechecks the contract, API, and web packages.
+2. `bun run lint` runs ESLint on `src` in the API and web packages.
+3. `bun run build` builds the API, web, and docs packages.
+4. `bun run test` runs the contract, API, and web unit tests.
+5. `packages/docs/scripts/check-stale-claims.sh` fails if the user guide in `packages/docs` contains a string from the script's list of known-wrong claims.
+
+Install the pre-commit hook once per clone with `bun run setup:hooks`. On each commit, `.githooks/pre-commit-checks.sh` reads the staged files, skipping staged deletions, and does the following:
+
+- It typechecks the API package when a staged file is under `packages/api/`, and the web package when one is under `packages/web/`.
+- It typechecks the contract, API, and web packages when a staged file is under `packages/contract/`, or is `Dockerfile`, `.dockerignore`, `bun.lock`, the root `package.json`, or a `package.json` or `tsconfig*.json` in any other package under `packages/`.
+- It runs ESLint on the staged `.ts` files under `packages/api/src/` and the staged `.ts` and `.tsx` files under `packages/web/src/`.
+- It refuses the commit when one of the files it would lint also has unstaged edits, because ESLint reads the file on disk and not the staged copy.
+
+The hook does not build, run tests, or run the stale-claims check.
 
 ## Project Structure
 
@@ -70,7 +85,7 @@ Put local overrides in **`.env.local`** (gitignored) at the repo root. Bun’s a
 
 ## Testing
 
-- **Unit tests (API + web)**: `bun run test`
+- **Unit tests (contract, API, and web)**: `bun run test`
 - **End-to-end (Playwright)**: `bun run test:e2e`
 - **API**: `bun --filter @sampledb/api test` (Bun). Coverage: `bun --filter @sampledb/api test:coverage` (report in `packages/api/coverage/`). Test helpers: `packages/api/src/__tests__/README.md`.
 - **Web**: `bun --filter @sampledb/web test` (Vitest). Coverage: `bun --filter @sampledb/web test:coverage`. Test helpers: `packages/web/src/__tests__/README.md`.

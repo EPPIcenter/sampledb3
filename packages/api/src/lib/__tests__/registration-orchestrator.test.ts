@@ -12,7 +12,7 @@ import {
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
 import { createBulkSpecimenRows, validateBulkSpecimenRows, type BulkSpecimenValidateRow } from '../registration-orchestrator'
-import { specimenTypeContainerType, containerTypeUnit, micronixTube, staticWell } from '../../db/schema'
+import { specimen, specimenTypeContainerType, containerTypeUnit, micronixTube, staticWell } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { utcNow } from '../datetime'
 
@@ -285,5 +285,33 @@ describe('registration-orchestrator', () => {
         expect(created).toBe(validation.valid)
       })
     }
+
+    it('reports the same errors from create as from validate', async () => {
+      const rows = (): BulkSpecimenValidateRow[] => [
+        { ...row(), subjectName: 'Nobody' },
+        row(tube('T1', { name: 'P1', barcode: 'UNKNOWN', position: 'A01' }), '2024-02-01'),
+        { ...row(undefined, '2024-03-01'), specimenTypeName: 'Nope' },
+        row(tube('T2', { name: 'MISSING', position: 'A02' }), '2024-04-01'),
+      ]
+
+      const validation = await validateBulkSpecimenRows(testDb, rows())
+      const created = await createBulkSpecimenRows(testDb, rows())
+
+      expect(validation.errors.map((e) => e.index)).toEqual([0, 1, 2, 3])
+      expect(validation.errors[1].message).toBe("Micronix plate 'P1' has barcode 'P1-BC', not 'UNKNOWN'.")
+      expect(validation.errors[3].message).toBe('Collection not found and no location provided')
+      expect(created).toEqual({ success: false, errors: validation.errors })
+    })
+
+    it('creates nothing when one row has no Source, though the other rows register', async () => {
+      const created = await createBulkSpecimenRows(testDb, [
+        row(tube('T1', { name: 'P1', position: 'A01' })),
+        { ...row(undefined, '2024-02-01'), subjectName: 'Nobody' },
+      ])
+
+      expect(created).toEqual({ success: false, errors: [{ index: 1, message: expect.any(String) }] })
+      expect(await testDb.select().from(specimen)).toEqual([])
+      expect(await testDb.select().from(micronixTube)).toEqual([])
+    })
   })
 })

@@ -22,6 +22,8 @@ import { studySubject, specimen } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { withWriteTransaction } from '../../db/write-transaction'
+import { ConflictError, ValidationError } from '../error-handler'
+import { failInsertsWithUniqueViolation } from '../../__tests__/helpers/constraint-race'
 
 describe('bulk-combined-import', () => {
   let testDb: Database
@@ -414,6 +416,108 @@ describe('bulk-combined-import', () => {
       })
 
       expect(validation.errors).toEqual([{ subjectIndex: 1, specimenIndex: 0, rowIndex: 7, message: "Specimen type 'NOPE' not found" }])
+    })
+
+    describe('a subject that cannot be found or created', () => {
+      // Subject 0 has no Subject record to register under, and its rows have problems of their own.
+      const withFailedSubject = (failed: Pick<BulkCombinedSubjectInput, 'subjectName' | 'studyShortCode'>): BulkCombinedSubjectInput[] => [
+        {
+          ...failed,
+          specimens: [
+            { specimenTypeName: 'DNA', collectionDate: '2024-01-15', container: tube('TAKEN', { name: 'P1', position: 'B01' }), rowIndex: 2 },
+            { specimenTypeName: 'DNA', collectionDate: 'not-a-date', rowIndex: 3 },
+            { specimenTypeName: 'NOPE', rowIndex: 4 },
+          ],
+        },
+        subject('B', tube('T2', { name: 'P1', position: 'A01' })),
+      ]
+      const rowErrors = [
+        { subjectIndex: 0, specimenIndex: 0, rowIndex: 2, message: "Barcode 'TAKEN' already exists. Use a different barcode." },
+        { subjectIndex: 0, specimenIndex: 1, rowIndex: 3, message: expect.stringContaining('date') },
+        { subjectIndex: 0, specimenIndex: 2, rowIndex: 4, message: "Specimen type 'NOPE' not found" },
+        { subjectIndex: 1, specimenIndex: 0, message: expect.stringContaining('Position A01 is already used') },
+      ]
+
+      it('still reports its specimens and containers when its study is not found', async () => {
+        const payload = { studyShortCode: 'ST1', atomicMode: 'full_file' as const, subjects: withFailedSubject({ subjectName: 'A', studyShortCode: 'NOPE' }) }
+
+        const validation = await validateBulkCombinedPayload(testDb, payload)
+        const imported = await runBulkCombinedImport(testDb, payload, undefined).catch((e: unknown) => e)
+
+        expect(validation.errors).toEqual([
+          { subjectIndex: 0, specimenIndex: 0, rowIndex: 2, message: "Study short code 'NOPE' not found" },
+          ...rowErrors,
+        ])
+        expect(imported).toBeInstanceOf(ValidationError)
+        expect((imported as ValidationError).details).toEqual({ errors: validation.errors })
+      })
+
+      it('still reports its specimens and containers when its name is not valid', async () => {
+        const validation = await validateBulkCombinedPayload(testDb, {
+          studyShortCode: 'ST1',
+          atomicMode: 'full_file',
+          subjects: withFailedSubject({ subjectName: '   ' }),
+        })
+
+        expect(validation.errors).toEqual([
+          { subjectIndex: 0, specimenIndex: 0, rowIndex: 2, message: 'Subject name cannot be empty' },
+          ...rowErrors,
+        ])
+      })
+
+      it('lists them with the subject\'s own error in per_subject mode, and imports the other subjects', async () => {
+        const payload = {
+          studyShortCode: 'ST1',
+          atomicMode: 'per_subject' as const,
+          subjects: [...withFailedSubject({ subjectName: 'A', studyShortCode: 'NOPE' }).slice(0, 1), subject('B', tube('T2', { name: 'P1', position: 'A02' }))],
+        }
+
+        const validation = await validateBulkCombinedPayload(testDb, payload)
+        const imported = await runBulkCombinedImport(testDb, payload, undefined)
+
+        expect(validation.errors.map((e) => [e.subjectIndex, e.specimenIndex])).toEqual([[0, 0], [0, 0], [0, 1], [0, 2]])
+        expect(imported.results.map((r) => r.subject.name)).toEqual(['B'])
+        expect(imported.errors).toEqual([
+          { index: 0, error: expect.stringContaining("Study short code 'NOPE' not found; Barcode 'TAKEN' already exists") },
+        ])
+      })
+    })
+
+    describe('a constraint hit while creating a subject', () => {
+      // 'Existing' is found, so only the new subject is inserted, and that insert is refused.
+      const subjects = (): BulkCombinedSubjectInput[] => [
+        subject('Existing', tube('T1', { name: 'P1', position: 'B01' })),
+        subject('Raced'),
+        { subjectName: 'Existing', specimens: [{ specimenTypeName: 'DNA', collectionDate: '2024-03-01' }] },
+      ]
+
+      beforeEach(() => failInsertsWithUniqueViolation(sqlite, 'study_subject'))
+
+      it('is that subject\'s error in per_subject mode, and the import goes on to the next subject', async () => {
+        const imported = await runBulkCombinedImport(testDb, { studyShortCode: 'ST1', atomicMode: 'per_subject', subjects: subjects() }, undefined)
+
+        expect(imported.errors).toEqual([{ index: 1, error: expect.stringMatching(/^Subject 'Raced': A record with this .* already exists\.$/) }])
+        expect(imported.results.map((r) => r.subject.name)).toEqual(['Existing', 'Existing'])
+        expect(imported.summary).toMatchObject({ subjectsCreated: 0, specimensCreated: 1, containersCreated: 1 })
+      })
+
+      it('is a conflict in full_file mode, and nothing is written', async () => {
+        const before = (await testDb.select().from(specimen)).length
+
+        const imported = await runBulkCombinedImport(testDb, { studyShortCode: 'ST1', atomicMode: 'full_file', subjects: subjects() }, undefined).catch(
+          (e: unknown) => e
+        )
+
+        expect(imported).toBeInstanceOf(ConflictError)
+        expect((imported as ConflictError).details).toEqual({ errors: [{ subjectIndex: 1, specimenIndex: 0, message: expect.stringContaining('already exists') }] })
+        expect((await testDb.select().from(specimen)).length).toBe(before)
+      })
+
+      it('is reported by validate for that subject', async () => {
+        const validation = await validateBulkCombinedPayload(testDb, { studyShortCode: 'ST1', atomicMode: 'per_subject', subjects: subjects() })
+
+        expect(validation.errors).toEqual([{ subjectIndex: 1, specimenIndex: 0, message: expect.stringContaining('already exists') }])
+      })
     })
 
     it('says a sublabel repeats in the file', async () => {
