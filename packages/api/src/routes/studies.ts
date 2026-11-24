@@ -20,7 +20,7 @@ import { validatePage, validateLimit } from '../lib/constants'
 import { handleRouteError, NotFoundError, ConflictError, ValidationError } from '../lib/error-handler'
 import { getStudySummaries, listStudies } from '../lib/studies/study-read'
 import { createAuthMiddleware, createMemberMiddleware, createAdminMiddleware } from '../middleware/auth'
-import { utcNow } from '../lib/datetime'
+import { calendarDaysBetween, utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { withWriteTransaction } from '../db/write-transaction'
 import { assertNotUsedInQpcr } from '../lib/qpcr-usage'
@@ -392,11 +392,7 @@ studies.get('/:id/summary', authMiddleware, async (c) => {
 
     // Study duration in days
     const studyDurationDays = collectionDateRange
-      ? Math.ceil(
-          (new Date(collectionDateRange.latest).getTime() -
-            new Date(collectionDateRange.earliest).getTime()) /
-            (1000 * 60 * 60 * 24)
-        )
+      ? calendarDaysBetween(collectionDateRange.earliest, collectionDateRange.latest)
       : null
 
     // Collection timeline (daily counts)
@@ -476,9 +472,7 @@ studies.get('/:id/timeline', authMiddleware, async (c) => {
       .where(eq(studySubject.studyId, id))
       .orderBy(studySubject.name)
 
-    const subjectIds = subjects.map(s => s.id)
-
-    if (subjectIds.length === 0) {
+    if (subjects.length === 0) {
       return c.json({
         subjects: [],
         specimenTypes: [],
@@ -486,8 +480,8 @@ studies.get('/:id/timeline', authMiddleware, async (c) => {
       })
     }
 
-    // Get all specimens for these subjects with collection dates
-    const placeholders = subjectIds.map(() => '?').join(',')
+    // Get all specimens for these subjects with collection dates. A subquery (not an id
+    // list) keeps large studies under SQLite's bound-parameter limit.
     const specimensQuery = `
       SELECT 
         s.id,
@@ -495,11 +489,11 @@ studies.get('/:id/timeline', authMiddleware, async (c) => {
         s.specimen_type_id as specimenTypeId,
         s.collection_date as collectionDate
       FROM specimen s
-      WHERE s.study_subject_id IN (${placeholders})
+      WHERE s.study_subject_id IN (SELECT id FROM study_subject WHERE study_id = ?)
       ORDER BY s.collection_date
     `
     const stmt = sqliteDatabase.prepare(specimensQuery)
-    const specimens = stmt.all(...subjectIds) as Array<{
+    const specimens = stmt.all(id) as Array<{
       id: number
       studySubjectId: number
       specimenTypeId: number

@@ -3,7 +3,7 @@ import type { StudySummary, StudyTimelineData } from '../lib/api/studies';
 import StatCard from './StatCard'
 import StatChart from './StatChart'
 import { useDateFilter, defaultMinDate } from '../contexts/DateFilterContext'
-import { formatDate, parseDisplayDate } from '../lib/date-utils'
+import { calendarDaysBetween, formatDate, parseDisplayDate } from '../lib/date-utils'
 
 interface StudyStatsProps {
   summary: StudySummary['summary']
@@ -151,11 +151,7 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
       : null
 
     const studyDurationDays = collectionDateRange
-      ? Math.ceil(
-          (parseDisplayDate(collectionDateRange.latest).getTime() -
-            parseDisplayDate(collectionDateRange.earliest).getTime()) /
-            (1000 * 60 * 60 * 24)
-        )
+      ? calendarDaysBetween(collectionDateRange.earliest, collectionDateRange.latest)
       : null
 
     // Collection timeline - keep as daily (will be binned later in collectionTimelineData)

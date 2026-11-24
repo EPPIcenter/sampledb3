@@ -1,7 +1,7 @@
 import type { Database } from '../db/client'
 import type { ContainerWriteInput } from '@sampledb/contract'
 import type { DatabaseOrTransaction } from './db-types'
-import { registerSpecimens, SpecimenRegistrationError } from './specimen-registration'
+import { isStoredDataClash, registerSpecimens, SpecimenRegistrationError } from './specimen-registration'
 import { ConflictError } from './error-handler'
 import type { ContainerSubtype } from './container-placement'
 
@@ -23,6 +23,9 @@ export function pickContainerQuantity(src: ContainerQuantity): ContainerQuantity
   return Object.keys(quantity).length > 0 ? quantity : undefined
 }
 
+/** `conflict` marks a failure that clashes with stored data: an occupied position or a barcode in use. */
+export type CreateContainerResult = { success: boolean; containerId?: number; error?: string; conflict?: true }
+
 export type CreateContainerForSpecimenOptions = {
   userId?: number
   quantity?: ContainerQuantity
@@ -38,7 +41,7 @@ export async function createContainerForSpecimen(
   data: ContainerWriteInput,
   database: DatabaseOrTransaction,
   options?: CreateContainerForSpecimenOptions | number
-): Promise<{ success: boolean; containerId?: number; error?: string }> {
+): Promise<CreateContainerResult> {
   const opts: CreateContainerForSpecimenOptions =
     typeof options === 'number' ? { userId: options } : (options ?? {})
   try {
@@ -51,7 +54,8 @@ export async function createContainerForSpecimen(
   } catch (error) {
     if (error instanceof SpecimenRegistrationError) {
       if (error.status === 409) throw new ConflictError(error.message, { errors: error.errors })
-      return { success: false, error: error.message }
+      // error.message is the first problem's, so the clash mark is read from the same problem.
+      return { success: false, error: error.message, ...(isStoredDataClash(error.errors[0]) && { conflict: true as const }) }
     }
     throw error
   }

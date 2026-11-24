@@ -2,7 +2,10 @@ import { useState } from 'react'
 
 function shallowEqual<T extends object>(a: T, b: T): boolean {
   const aKeys = Object.keys(a) as (keyof T)[]
-  return aKeys.length === Object.keys(b).length && aKeys.every((key) => Object.is(a[key], b[key]))
+  return (
+    aKeys.length === Object.keys(b).length &&
+    aKeys.every((key) => Object.prototype.hasOwnProperty.call(b, key) && Object.is(a[key], b[key]))
+  )
 }
 
 /**
