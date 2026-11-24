@@ -405,6 +405,21 @@ describe('Specimen registration', () => {
     expect(error.errors[0]).toMatchObject({ field: 'unitId', message: expect.stringContaining("Unit 'mg' is not allowed") })
   })
 
+  it('rejects a quantity that is not finite and keys it to its own field', async () => {
+    const error = await rejection([
+      entry([
+        { ...tube('T1', { name: 'P1', position: 'A01' }), totalQuantity: Infinity },
+        { ...tube('T2', { name: 'P1', position: 'A02' }), totalQuantity: 5, remainingQuantity: Infinity },
+      ]),
+    ])
+
+    expect(error.errors).toEqual([
+      { entryIndex: 0, containerIndex: 0, field: 'totalQuantity', message: 'Total quantity must be a finite number (got Infinity).' },
+      { entryIndex: 0, containerIndex: 1, field: 'remainingQuantity', message: 'Remaining quantity must be a finite number (got Infinity).' },
+    ])
+    expect(await count(storageContainer)).toBe(0)
+  })
+
   describe('checkSpecimenRegistration', () => {
     it('writes nothing and reports no errors for a registration that would succeed', async () => {
       const entries = [entry([tube('T1', { name: 'NEW', locationId, position: 'A01' }), paperOn('Sheet-1')])]

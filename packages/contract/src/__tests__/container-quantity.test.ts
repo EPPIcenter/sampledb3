@@ -32,6 +32,29 @@ describe('containerQuantityBoundsError', () => {
   it('rejects NaN', () => {
     expect(containerQuantityBoundsError({ remainingQuantity: Number.NaN })).not.toBeNull()
   })
+
+  it('rejects an infinite total', () => {
+    expect(containerQuantityBoundsError({ totalQuantity: Infinity })).toBe('Total quantity must be a finite number (got Infinity).')
+    expect(containerQuantityBoundsError({ totalQuantity: Infinity, remainingQuantity: 5 })).toBe(
+      'Total quantity must be a finite number (got Infinity).',
+    )
+    expect(containerQuantityBoundsError({ totalQuantity: -Infinity })).toBe('Total quantity must be a finite number (got -Infinity).')
+  })
+
+  it('rejects an infinite remaining', () => {
+    expect(containerQuantityBoundsError({ remainingQuantity: Infinity })).toBe(
+      'Remaining quantity must be a finite number (got Infinity).',
+    )
+    expect(containerQuantityBoundsError({ totalQuantity: 10, remainingQuantity: Infinity })).toBe(
+      'Remaining quantity must be a finite number (got Infinity).',
+    )
+  })
+
+  it('rejects an infinite total and remaining together', () => {
+    expect(containerQuantityBoundsError({ totalQuantity: Infinity, remainingQuantity: Infinity })).toBe(
+      'Total quantity must be a finite number (got Infinity).',
+    )
+  })
 })
 
 describe('quantityUsedError', () => {
@@ -42,6 +65,12 @@ describe('quantityUsedError', () => {
 
   it('accepts a positive quantity', () => {
     expect(quantityUsedError(0.5)).toBeNull()
+  })
+
+  it('rejects a quantity that is not finite', () => {
+    expect(quantityUsedError(Infinity)).toBe('Quantity used must be a finite number (got Infinity).')
+    expect(quantityUsedError(-Infinity)).toBe('Quantity used must be a finite number (got -Infinity).')
+    expect(quantityUsedError(Number.NaN)).toBe('Quantity used must be a finite number (got NaN).')
   })
 })
 
@@ -62,5 +91,11 @@ describe('quantityDrawError', () => {
 
   it('does not bound a Parent container with no remaining quantity', () => {
     expect(quantityDrawError(5, null)).toBeNull()
+  })
+
+  it('rejects an infinite quantity used, whatever the Parent container holds', () => {
+    expect(quantityDrawError(Infinity, null)).toBe('Quantity used must be a finite number (got Infinity).')
+    expect(quantityDrawError(Infinity, 5)).toBe('Quantity used must be a finite number (got Infinity).')
+    expect(quantityDrawError(Infinity, Infinity)).toBe('Quantity used must be a finite number (got Infinity).')
   })
 })

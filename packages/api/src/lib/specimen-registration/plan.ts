@@ -251,7 +251,9 @@ async function planContainer(
       input.remainingQuantity ?? input.totalQuantity ?? (await getDefaultRemainingQuantity(database, containerType))
     const quantityError = containerQuantityBoundsError({ totalQuantity, remainingQuantity })
     if (quantityError) {
-      problems.push({ field: totalQuantity < 0 ? 'totalQuantity' : 'remainingQuantity', message: quantityError })
+      // The rule checks the total first, so an error is about the total when the total is out of bounds.
+      const totalOutOfBounds = !Number.isFinite(totalQuantity) || totalQuantity < 0
+      problems.push({ field: totalOutOfBounds ? 'totalQuantity' : 'remainingQuantity', message: quantityError })
     }
   } catch (error) {
     problems.push({ field: 'unitId', message: error instanceof Error ? error.message : 'Container defaults are not configured' })
