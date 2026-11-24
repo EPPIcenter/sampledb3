@@ -30,11 +30,12 @@ import { resolveParentContainerId } from './derivations/parent-container-resolve
 import { findTubesUsingBarcode } from './identifier-resolution'
 import { checkGridPositionOccupancy } from './container-occupancy'
 import { CollectionPlanner } from './specimen-registration/collections'
+import { ConflictError, sqliteConstraintConflict, ValidationError } from './error-handler'
 
 /**
  * Map technical DB/constraint errors to messages that are clear for non-technical users.
  */
-function toUserFriendlyDerivationError(rawMessage: string): string {
+function toUserFriendlyDerivationError(rawMessage: string, fallback: string): string {
   const m = rawMessage
   if (
     m.includes('UNIQUE constraint failed') &&
@@ -49,7 +50,7 @@ function toUserFriendlyDerivationError(rawMessage: string): string {
   if (m.includes('FOREIGN KEY constraint failed') || m.includes('NOT NULL constraint failed')) {
     return 'A required value is missing or does not match existing data (e.g. parent container, collection, or specimen type). Check your CSV and try again.'
   }
-  return rawMessage
+  return fallback
 }
 
 /** A CSV value conflicts only with a shared setting that is set; '' means "In CSV (per row)". */
@@ -673,9 +674,12 @@ export async function validateDerivationsCsv(
       validationRow.valid = true
       validCount++
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      validationRow.error = errorMessage
-      invalidCount++
+      if (error instanceof ValidationError || error instanceof ConflictError) {
+        validationRow.error = error.message
+        invalidCount++
+      } else {
+        throw error
+      }
     }
 
     validationRows.push(validationRow)
@@ -706,19 +710,19 @@ export async function importDerivationsFromCsv(
   if (settings) {
     for (const row of rows) {
       if (conflictsWithSetting(row.derivation_type, settings.derivationType)) {
-        throw new Error(`Row ${rows.indexOf(row) + 1}: derivation_type in CSV conflicts with shared settings. Remove derivation_type from CSV.`)
+        throw new ValidationError(`Row ${rows.indexOf(row) + 1}: derivation_type in CSV conflicts with shared settings. Remove derivation_type from CSV.`)
       }
       if (conflictsWithSetting(row.specimen_type_name, settings.specimenTypeName)) {
-        throw new Error(`Row ${rows.indexOf(row) + 1}: specimen_type_name in CSV conflicts with shared settings. Remove specimen_type_name from CSV.`)
+        throw new ValidationError(`Row ${rows.indexOf(row) + 1}: specimen_type_name in CSV conflicts with shared settings. Remove specimen_type_name from CSV.`)
       }
       if (conflictsWithSetting(row.container_type, settings.containerType)) {
-        throw new Error(`Row ${rows.indexOf(row) + 1}: container_type in CSV conflicts with shared settings. Remove container_type from CSV.`)
+        throw new ValidationError(`Row ${rows.indexOf(row) + 1}: container_type in CSV conflicts with shared settings. Remove container_type from CSV.`)
       }
       if (conflictsWithSetting(row.protocol, settings.protocol)) {
-        throw new Error(`Row ${rows.indexOf(row) + 1}: protocol in CSV conflicts with shared settings. Remove protocol from CSV.`)
+        throw new ValidationError(`Row ${rows.indexOf(row) + 1}: protocol in CSV conflicts with shared settings. Remove protocol from CSV.`)
       }
       if (conflictsWithSetting(row.derivation_date, settings.derivationDate)) {
-        throw new Error(`Row ${rows.indexOf(row) + 1}: derivation_date in CSV conflicts with shared settings. Remove derivation_date from CSV.`)
+        throw new ValidationError(`Row ${rows.indexOf(row) + 1}: derivation_date in CSV conflicts with shared settings. Remove derivation_date from CSV.`)
       }
     }
   }
@@ -737,12 +741,12 @@ export async function importDerivationsFromCsv(
           const row = rows[i]
           try {
             const valueError = rowValueError(row)
-            if (valueError) throw new Error(valueError)
+            if (valueError) throw new ValidationError(valueError)
             const parentContainerId = await resolveParentContainerId(tx, row)
             const childContainerType = (settings?.containerType || row.container_type!) as 'micronix_tube' | 'cryovial_tube' | 'paper'
             const containerParsed = derivationCsvRowToContainerWrite(row, childContainerType)
             if (!containerParsed.success) {
-              throw new Error(containerParsed.error)
+              throw new ValidationError(containerParsed.error)
             }
             const collectionInfo = await resolveCollectionId(
               tx,
@@ -791,15 +795,20 @@ export async function importDerivationsFromCsv(
         }
       })
     } catch (error: unknown) {
-      // Transaction failed and rolled back - return error for failed row
-      // All other rows are marked as not processed (transaction rolled back)
-      // failedRowIndex is set in the inner catch before rethrow; control flow narrows it to number here
+      // Transaction failed and rolled back - return error for failed row only on known input or
+      // constraint failures; rethrow unexpected internal errors so they become logged 500s.
       const idx = failedRowIndex as number | null
       if (idx !== null) {
-        const transactionErrorMessage = transactionError instanceof Error ? transactionError.message : String(transactionError || 'Unknown error')
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        const rawMessage = transactionErrorMessage !== 'null' && transactionErrorMessage !== 'Unknown error' ? transactionErrorMessage : errorMessage
-        const friendlyMessage = toUserFriendlyDerivationError(rawMessage)
+        const cause = transactionError ?? error
+        const constraint = cause instanceof Error ? sqliteConstraintConflict(cause) : null
+        if (!(cause instanceof ValidationError) && !(cause instanceof ConflictError) && constraint === null) {
+          throw error
+        }
+        const rawMessage = cause instanceof Error ? cause.message : String(cause)
+        const friendlyMessage =
+          cause instanceof ValidationError || cause instanceof ConflictError
+            ? rawMessage
+            : toUserFriendlyDerivationError(rawMessage, constraint!)
         results.push({
           index: idx,
           success: false,
@@ -853,12 +862,15 @@ export async function importDerivationsFromCsv(
           collectionStatus: collectionInfo.status,
         })
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        results.push({
-          index: i,
-          success: false,
-          error: errorMessage,
-        })
+        if (error instanceof ValidationError || error instanceof ConflictError) {
+          results.push({
+            index: i,
+            success: false,
+            error: error.message,
+          })
+        } else {
+          throw error
+        }
       }
     }
   }

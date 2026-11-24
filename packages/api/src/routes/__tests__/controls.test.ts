@@ -949,5 +949,16 @@ describe('Controls API', () => {
       expect(unknownType.status).toBe(400)
       expect(await ctx.db.select().from(storageContainer).all()).toHaveLength(1)
     })
+
+    it('returns 404 when the control batch does not exist', async () => {
+      const { specimens } = await seedMicronixBatchFixtures(ctx.db)
+      const res = await ctx.request(`${BASE}/batches/999999/specimens/bulk`, {
+        method: 'POST',
+        json: { specimens: specimens('MT1', 'A01') },
+      })
+
+      expect(res.status).toBe(404)
+      expect(await res.json()).toMatchObject({ errorCode: 'NOT_FOUND' })
+    })
   })
 })

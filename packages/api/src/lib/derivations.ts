@@ -18,7 +18,7 @@ import { isDateOrTimestamp, isIsoCalendarDate } from './date-filters'
 import { createContainerForSpecimen, pickContainerQuantity } from './container-creation'
 import { withWriteTransaction } from '../db/write-transaction'
 import { insertedRow } from './inserted-row'
-import { ValidationError } from './error-handler'
+import { ConflictError, ValidationError } from './error-handler'
 
 export type DerivationType = string
 
@@ -73,7 +73,7 @@ async function findOrCreateDerivedSpecimen(
   // The child is the same collection event, so it takes the parent's date as stored. Refuse to
   // copy a date that isn't YYYY-MM-DD rather than spread it to another Specimen (issue #104).
   if (parentSpecimen.collectionDate != null && !isIsoCalendarDate(parentSpecimen.collectionDate)) {
-    throw new Error(
+    throw new ValidationError(
       `Parent specimen ${parentSpecimen.id} has collection date '${parentSpecimen.collectionDate}', which is not YYYY-MM-DD. Correct it before deriving from it.`,
     )
   }
@@ -85,7 +85,7 @@ async function findOrCreateDerivedSpecimen(
     .get()
 
   if (!type) {
-    throw new Error(`Specimen type '${specimenTypeName}' not found`)
+    throw new ValidationError(`Specimen type '${specimenTypeName}' not found`)
   }
 
   let where = eq(specimen.specimenTypeId, type.id) as ReturnType<typeof and>
@@ -149,7 +149,7 @@ async function resolveUnitIdForChild(
       .where(eq(unit.symbol, unitSymbol))
       .get()
     if (!u) {
-      throw new Error(`Unit with symbol '${unitSymbol}' not found`)
+      throw new ValidationError(`Unit with symbol '${unitSymbol}' not found`)
     }
     return u.id
   }
@@ -219,7 +219,7 @@ async function createDerivationInTx(
     .get()
 
   if (!parent) {
-    throw new Error('Parent container not found')
+    throw new ValidationError('Parent container not found')
   }
 
   if (input.derivationDate !== undefined && !isDateOrTimestamp(input.derivationDate)) {
@@ -240,7 +240,7 @@ async function createDerivationInTx(
     .get()
 
   if (!specType) {
-    throw new Error(`Specimen type '${input.specimenTypeName}' not found`)
+    throw new ValidationError(`Specimen type '${input.specimenTypeName}' not found`)
   }
 
   const containerTypeValidation = await validateContainerTypeForSpecimenType(
@@ -250,7 +250,7 @@ async function createDerivationInTx(
   )
 
   if (!containerTypeValidation.valid) {
-    throw new Error(containerTypeValidation.error || 'Container type not allowed for this specimen type')
+    throw new ValidationError(containerTypeValidation.error || 'Container type not allowed for this specimen type')
   }
 
   const unitId = await resolveUnitIdForChild(database, input.container.containerType, input.unitSymbol)
@@ -261,7 +261,8 @@ async function createDerivationInTx(
   })
 
   if (!containerResult.success || containerResult.containerId == null) {
-    throw new Error(containerResult.error || 'Failed to create child container')
+    const message = containerResult.error || 'Failed to create child container'
+    throw containerResult.conflict ? new ConflictError(message) : new ValidationError(message)
   }
 
   const child = await database

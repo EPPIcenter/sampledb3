@@ -1,4 +1,4 @@
-import { ConflictError, ValidationError } from '../../error-handler'
+import { ConflictError, NotFoundError, ValidationError } from '../../error-handler'
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { setupTestDatabase, cleanupTestDatabase } from '../../../__tests__/helpers/db-setup'
 import {
@@ -542,6 +542,14 @@ describe('batch-with-specimens', () => {
         addSpecimensToBatch(testDb, batch.id, { specimens: [{ ...dna('MT1', 'A01')[0], specimenTypeName: 'Nope' }] }),
       ).rejects.toBeInstanceOf(ValidationError)
     })
+
+    it('throws NotFoundError when the control batch does not exist', async () => {
+      const { dna } = await seedMicronixBatchFixtures()
+
+      await expect(addSpecimensToBatch(testDb, 999999, { specimens: dna('MT1', 'A01') })).rejects.toBeInstanceOf(
+        NotFoundError,
+      )
+    })
   })
 
   describe('createBatchesWithSpecimens', () => {
@@ -702,6 +710,46 @@ describe('batch-with-specimens', () => {
       await expect(attempt).rejects.toBeInstanceOf(ConflictError)
       await expect(attempt).rejects.toThrow(/^Control batch 2 \('B200'\): .*No control batches were created\.$/)
       expect(await testDb.select().from(controlBatch).all()).toHaveLength(0)
+    })
+
+    it('rethrows unexpected internal errors instead of wrapping them in ValidationError', async () => {
+      const { def100, def200, dna } = await seedMicronixBatchFixtures()
+      // Drop a table read during container preparation/creation so an internal DB error occurs.
+      sqlite.exec('DROP TABLE micronix_tube')
+
+      let caught: unknown
+      try {
+        await createBatchesWithSpecimens(testDb, [
+          { batch: { controlDefinitionId: def100.id, name: 'B100' }, specimens: dna('MT1', 'A01') },
+          { batch: { controlDefinitionId: def200.id, name: 'B200' }, specimens: dna('MT2', 'A02') },
+        ])
+      } catch (err) {
+        caught = err
+      }
+
+      expect(caught).toBeInstanceOf(Error)
+      expect(caught).not.toBeInstanceOf(ValidationError)
+      expect(caught).not.toBeInstanceOf(ConflictError)
+      expect(await testDb.select().from(controlBatch).all()).toHaveLength(0)
+    })
+
+    it('rethrows unexpected errors during container preparation instead of wrapping them in ValidationError', async () => {
+      const { def100, dna } = await seedMicronixBatchFixtures()
+      sqlite.exec('DROP TABLE specimen_type_container_type')
+
+      let caught: unknown
+      try {
+        await createBatchWithSpecimens(testDb, {
+          batch: { controlDefinitionId: def100.id, name: 'B100' },
+          specimens: dna('MT1', 'A01'),
+        })
+      } catch (err) {
+        caught = err
+      }
+
+      expect(caught).toBeInstanceOf(Error)
+      expect(caught).not.toBeInstanceOf(ValidationError)
+      expect(caught).not.toBeInstanceOf(ConflictError)
     })
   })
 })

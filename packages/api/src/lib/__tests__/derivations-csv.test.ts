@@ -763,4 +763,28 @@ describe('derivations-csv', () => {
       expect(tubes.map((t) => t.position).sort()).toEqual(['A01', 'A02', 'A03'])
     })
   })
+
+  describe('unexpected internal errors', () => {
+    let testDb: Database
+    let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
+
+    beforeEach(async () => {
+      const setup = await setupTestDatabase()
+      testDb = setup.db
+      sqlite = setup.sqlite
+    })
+
+    afterEach(() => {
+      if (sqlite) cleanupTestDatabase(sqlite)
+    })
+
+    it('rethrows unexpected database errors instead of turning them into per-row messages', async () => {
+      const csv = 'parent_container_id,derivation_type,specimen_type_name,container_type,plate_name,position,container_barcode\n1,Extraction,Blood,micronix_tube,P1,A01,BC1'
+      sqlite.exec('DROP TABLE storage_container')
+
+      await expect(validateDerivationsCsv(testDb, csv)).rejects.toThrow(/storage_container/)
+      await expect(importDerivationsFromCsv(testDb, csv)).rejects.toThrow(/storage_container/)
+      await expect(importDerivationsFromCsv(testDb, csv, { dryRun: true })).rejects.toThrow(/storage_container/)
+    })
+  })
 })
