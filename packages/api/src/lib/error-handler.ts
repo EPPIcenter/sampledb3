@@ -29,6 +29,13 @@ function isZodError(error: unknown): error is z.ZodError {
   return 'issues' in obj && Array.isArray(obj.issues)
 }
 
+/** True when `c.req.json()` rejected a malformed JSON request body. */
+export function isMalformedJsonError(error: unknown): boolean {
+  if (error instanceof SyntaxError) return true
+  if (error instanceof Error && error.cause instanceof SyntaxError) return true
+  return false
+}
+
 /** Readable message for a SQLite UNIQUE / FOREIGN KEY violation, or null for other errors. */
 export function sqliteConstraintConflict(error: Error): string | null {
   const code = (error as { code?: unknown }).code
@@ -94,6 +101,15 @@ export function handleRouteError(error: unknown, c: Context): Response {
       logBackendError(database, error, errorContext).catch(logPersistFailure)
     }
     return c.json(error.body, error.status as ContentfulStatusCode)
+  }
+
+  // Handle malformed JSON request bodies (e.g. c.req.json() SyntaxError)
+  if (isMalformedJsonError(error)) {
+    logError(database, 'backend', 'warning', 'Invalid JSON in request body', error, errorContext).catch(logPersistFailure)
+    return c.json({
+      error: 'Invalid JSON in request body',
+      errorCode: 'VALIDATION_ERROR',
+    }, 400)
   }
 
   // Handle Zod validation errors

@@ -157,6 +157,31 @@ describe('error-handler', () => {
       expect(data.details).toEqual({ field: 'name' })
     })
 
+    it('returns 400 without logging an error row when a request body is malformed JSON', async () => {
+      const app = new Hono()
+      app.use('*', (c, next) => {
+        c.set('db', testDb)
+        return next()
+      })
+      app.post('/json', async (c) => {
+        await c.req.json()
+        return c.json({ ok: true })
+      })
+      app.onError((err, c) => handleRouteError(err, c))
+
+      const res = await app.request('http://localhost/json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{not valid json',
+      })
+
+      expect(res.status).toBe(400)
+      const data = await getJson(res)
+      expect(data.errorCode).toBe('VALIDATION_ERROR')
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(await testDb.select().from(errorLogs)).toHaveLength(0)
+    })
+
     it('returns 500 for generic Error', async () => {
       const app = createAppWithError(new Error('Something broke'))
       const res = await app.request('http://localhost/test')

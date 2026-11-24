@@ -771,6 +771,20 @@ describe('Export API', () => {
       spy.mockRestore()
     })
 
+    it('returns 400 instead of 500 when a POST export body is malformed JSON', async () => {
+      const res = await ctx.request('/api/export/containers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{not valid json',
+      })
+
+      expect(res.status).toBe(400)
+      const data = (await res.json()) as { errorCode?: string }
+      expect(data.errorCode).toBe('VALIDATION_ERROR')
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(await ctx.db.select().from(errorLogs)).toHaveLength(0)
+    })
+
     describe('with NODE_ENV=production', () => {
       let previousNodeEnv: string | undefined
       let previousLogFormat: string | undefined

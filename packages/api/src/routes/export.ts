@@ -3,6 +3,7 @@ import type { Context } from 'hono'
 import type { Database } from '../db/client'
 import {
   handleRouteError,
+  isMalformedJsonError,
   ExpectedNotFoundError,
   RouteError,
   ValidationError,
@@ -65,7 +66,8 @@ function handleExportFailure(c: Context, message: string, error: unknown): Respo
     error instanceof ExpectedNotFoundError ||
     error instanceof RouteError ||
     error instanceof ValidationError ||
-    error instanceof z.ZodError
+    error instanceof z.ZodError ||
+    isMalformedJsonError(error)
   ) {
     return handleRouteError(error, c)
   }
