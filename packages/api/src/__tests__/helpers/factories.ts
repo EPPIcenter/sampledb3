@@ -1,3 +1,4 @@
+import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import type { Database } from '../../db/client'
 import {
   tag,
@@ -340,6 +341,34 @@ export async function createTestStudySubject(db: Database, data: { studyId: numb
     lastUpdated: now,
   }).returning()
   return result
+}
+
+/**
+ * Give a study `count` subjects, each with one specimen (collected 2024-01-01) in one container.
+ * Raw statements in one transaction keep tens of thousands of rows fast. A count above 65,535
+ * is more ids than one statement can bind, which is what a large-study test needs.
+ */
+export function seedLargeTestStudy(
+  sqlite: SQLiteDatabase,
+  ids: { studyId: number; specimenTypeId: number; unitId: number },
+  count: number,
+): void {
+  sqlite.exec('BEGIN')
+  const addSubject = sqlite.prepare(
+    "INSERT INTO study_subject (study_id, name, created, last_updated) VALUES (?, ?, '2024-01-01', '2024-01-01')",
+  )
+  const addSpecimen = sqlite.prepare(
+    "INSERT INTO specimen (study_subject_id, specimen_type_id, collection_date, created, last_updated) VALUES (?, ?, '2024-01-01', '2024-01-01', '2024-01-01')",
+  )
+  const addContainer = sqlite.prepare(
+    "INSERT INTO storage_container (specimen_id, unit_id, total_quantity, remaining_quantity, created, last_updated) VALUES (?, ?, 1, 1, '2024-01-01', '2024-01-01')",
+  )
+  for (let i = 0; i < count; i++) {
+    const subject = addSubject.run(ids.studyId, `S${i}`)
+    const spec = addSpecimen.run(subject.lastInsertRowid, ids.specimenTypeId)
+    addContainer.run(spec.lastInsertRowid, ids.unitId)
+  }
+  sqlite.exec('COMMIT')
 }
 
 /**
