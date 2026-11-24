@@ -17,7 +17,7 @@ while IFS= read -r file; do
   [[ -z "$file" ]] && continue
   has_staged=true
   case "$file" in
-    packages/contract/*)
+    packages/contract/*|Dockerfile|.dockerignore|package.json|bun.lock|packages/*/package.json|packages/*/tsconfig*.json)
       needs_contract=true
       needs_api=true
       needs_web=true
@@ -29,11 +29,6 @@ while IFS= read -r file; do
     packages/web/*)
       needs_web=true
       [[ "$file" == packages/web/src/*.ts || "$file" == packages/web/src/*.tsx ]] && web_lint_files+=("${file#packages/web/}")
-      ;;
-    Dockerfile|.dockerignore|package.json|bun.lock|packages/*/package.json|packages/*/tsconfig*.json)
-      needs_contract=true
-      needs_api=true
-      needs_web=true
       ;;
   esac
 done < <(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
