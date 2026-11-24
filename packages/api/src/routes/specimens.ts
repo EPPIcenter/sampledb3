@@ -7,7 +7,7 @@ import { listSpecimens } from '../lib/specimens/specimen-read'
 import { validateSpecimenData } from '../lib/validation'
 import { createContainerForSpecimen, pickContainerQuantity } from '../lib/container-creation'
 import type { RegistrationContainer } from '../lib/specimen-registration'
-import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
+import { ConflictError, handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import { containerSchema, containerSchemaWithLocation } from '../lib/schemas'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
@@ -121,7 +121,8 @@ specimens.post('/:id/containers', memberMiddleware, async (c) => {
     })
 
     if (!result.success) {
-      return c.json({ error: result.error || 'Failed to create container' }, 400)
+      const message = result.error || 'Failed to create container'
+      throw result.conflict ? new ConflictError(message) : new ValidationError(message)
     }
 
     return c.json({ containerId: result.containerId }, 201)
@@ -195,7 +196,8 @@ specimens.post('/', memberMiddleware, async (c) => {
           quantity: pickContainerQuantity(container),
         })
         if (!result.success) {
-          throw new ValidationError(result.error || 'Failed to create container')
+          const message = result.error || 'Failed to create container'
+          throw result.conflict ? new ConflictError(message) : new ValidationError(message)
         }
         containerResult = result
       } catch (err) {

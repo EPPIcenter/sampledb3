@@ -430,6 +430,63 @@ describe('Specimens API', () => {
       expect(await ctx.db.select().from(specimen).where(eq(specimen.collectionDate, '2024-06-03'))).toEqual([])
     })
 
+    it('POST /api/specimens returns 409 for an occupied position or duplicate barcode and rolls back the specimen', async () => {
+      const first = await ctx.request('/api/specimens', {
+        method: 'POST',
+        json: {
+          sourceType: 'subject',
+          studyShortCode: 'BLK01',
+          subjectName: 'BULK-SUBJ',
+          specimenTypeName: 'Whole Blood',
+          collectionDate: '2024-06-05',
+          container: {
+            containerType: 'micronix_tube',
+            barcode: 'CLASH-001',
+            collection: { type: 'micronix_plate', name: 'BULK-PLATE', position: 'D01' },
+          },
+        },
+      })
+      expect(first.status).toBe(201)
+
+      const posClash = await ctx.request('/api/specimens', {
+        method: 'POST',
+        json: {
+          sourceType: 'subject',
+          studyShortCode: 'BLK01',
+          subjectName: 'BULK-SUBJ',
+          specimenTypeName: 'Whole Blood',
+          collectionDate: '2024-06-06',
+          container: {
+            containerType: 'micronix_tube',
+            barcode: 'CLASH-002',
+            collection: { type: 'micronix_plate', name: 'BULK-PLATE', position: 'D01' },
+          },
+        },
+      })
+      expect(posClash.status).toBe(409)
+      expect(await posClash.json()).toMatchObject({ errorCode: 'CONFLICT' })
+      expect(await ctx.db.select().from(specimen).where(eq(specimen.collectionDate, '2024-06-06'))).toEqual([])
+
+      const barcodeClash = await ctx.request('/api/specimens', {
+        method: 'POST',
+        json: {
+          sourceType: 'subject',
+          studyShortCode: 'BLK01',
+          subjectName: 'BULK-SUBJ',
+          specimenTypeName: 'Whole Blood',
+          collectionDate: '2024-06-07',
+          container: {
+            containerType: 'micronix_tube',
+            barcode: 'CLASH-001',
+            collection: { type: 'micronix_plate', name: 'BULK-PLATE', position: 'D02' },
+          },
+        },
+      })
+      expect(barcodeClash.status).toBe(409)
+      expect(await barcodeClash.json()).toMatchObject({ errorCode: 'CONFLICT' })
+      expect(await ctx.db.select().from(specimen).where(eq(specimen.collectionDate, '2024-06-07'))).toEqual([])
+    })
+
     it('POST /api/specimens/bulk returns 409 when the container write hits a constraint', async () => {
       failInsertsWithUniqueViolation(ctx.sqlite, 'micronix_tube')
 
@@ -641,6 +698,40 @@ describe('Specimens API', () => {
 
       expect(res.status).toBe(409)
       expect(await ctx.db.select().from(storageContainer).where(eq(storageContainer.specimenId, testSpecimen.id))).toEqual([])
+    })
+
+    it('returns 409 for an occupied position or duplicate barcode', async () => {
+      const first = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {
+        method: 'POST',
+        json: {
+          containerType: 'micronix_tube',
+          barcode: 'ADD-CLASH-001',
+          collection: { type: 'micronix_plate', name: 'ADD-PLATE', position: 'B02' },
+        },
+      })
+      expect(first.status).toBe(201)
+
+      const posClash = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {
+        method: 'POST',
+        json: {
+          containerType: 'micronix_tube',
+          barcode: 'ADD-CLASH-002',
+          collection: { type: 'micronix_plate', name: 'ADD-PLATE', position: 'B02' },
+        },
+      })
+      expect(posClash.status).toBe(409)
+      expect(await posClash.json()).toMatchObject({ errorCode: 'CONFLICT' })
+
+      const barcodeClash = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {
+        method: 'POST',
+        json: {
+          containerType: 'micronix_tube',
+          barcode: 'ADD-CLASH-001',
+          collection: { type: 'micronix_plate', name: 'ADD-PLATE', position: 'B03' },
+        },
+      })
+      expect(barcodeClash.status).toBe(409)
+      expect(await barcodeClash.json()).toMatchObject({ errorCode: 'CONFLICT' })
     })
 
     it('returns 400 when a micronix tube barcode is only whitespace', async () => {
