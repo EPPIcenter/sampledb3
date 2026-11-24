@@ -7,13 +7,15 @@ import type { Database } from '../db/client'
 import type { specimen } from '../db/schema'
 import { ConflictError } from './error-handler'
 import { validateSpecimenData } from './validation'
+import { withRolledBackTransaction, withWriteTransaction } from '../db/write-transaction'
 import {
-  checkSpecimenRegistration,
+  RefusedWithErrors,
   registerSpecimens,
   SpecimenRegistrationError,
   type RegistrationContainer,
   type RegistrationEntry,
   type RegistrationError,
+  type RegistrationResult,
 } from './specimen-registration'
 
 export type BulkSpecimenContainerInput = Omit<RegistrationContainer, 'containerType'> & {
@@ -106,6 +108,40 @@ function rowErrors(errors: RegistrationError[], rowOfEntry: number[]): BulkSpeci
   return errors.map((error) => ({ index: rowOfEntry[error.entryIndex], message: error.message }))
 }
 
+/** The rows could not all be registered; errors are keyed to the rows. */
+class BulkSpecimensRejected extends RefusedWithErrors<BulkSpecimenValidateError> {}
+
+/**
+ * Resolve every row, then register the rows that resolved. Runs inside the caller's transaction,
+ * so the Source and specimen type reads see what the registration sees, and throws
+ * BulkSpecimensRejected with every row's problems: the ones found resolving the rows and the
+ * ones registration finds in the rest. The caller's transaction then rolls back.
+ */
+async function registerBulkSpecimenRows(
+  database: Database,
+  rows: BulkSpecimenValidateRow[],
+  userId: number | undefined,
+): Promise<RegistrationResult> {
+  const { entries, rowOfEntry, errors } = await toRegistrationEntries(database, rows)
+
+  let registration: RegistrationResult | null = null
+  try {
+    registration = await registerSpecimens(database, entries, { userId })
+  } catch (error) {
+    if (!(error instanceof SpecimenRegistrationError)) throw error
+    const mapped = rowErrors(error.errors, rowOfEntry)
+    // A constraint hit is a conflict only when it is all that is wrong; rows that did not
+    // resolve make the input invalid, and the constraint is listed with them.
+    if (error.status === 409 && errors.length === 0) throw new BulkSpecimensRejected(409, mapped)
+    errors.push(...mapped)
+  }
+  if (errors.length > 0 || !registration) {
+    errors.sort((a, b) => a.index - b.index)
+    throw new BulkSpecimensRejected(400, errors)
+  }
+  return registration
+}
+
 /**
  * Validate bulk specimen rows without creating records: the registration POST /specimens/bulk
  * would run, rolled back. Used by POST /specimens/bulk/validate.
@@ -114,14 +150,21 @@ export async function validateBulkSpecimenRows(
   database: Database,
   rows: BulkSpecimenValidateRow[],
 ): Promise<BulkSpecimenValidateResult> {
-  const { entries, rowOfEntry, errors } = await toRegistrationEntries(database, rows)
-  errors.push(...rowErrors(await checkSpecimenRegistration(database, entries), rowOfEntry))
-  errors.sort((a, b) => a.index - b.index)
+  const errors = await withRolledBackTransaction(database, async (tx) => {
+    try {
+      await registerBulkSpecimenRows(tx, rows, undefined)
+      return []
+    } catch (error) {
+      if (error instanceof BulkSpecimensRejected) return error.errors
+      throw error
+    }
+  })
   return { valid: errors.length === 0, errors }
 }
 
 /**
  * Register bulk specimen rows, all or nothing. Used by POST /specimens/bulk.
+ * Reports the errors validateBulkSpecimenRows reports for the same rows.
  * Throws ConflictError when a write hits a database constraint.
  */
 export async function createBulkSpecimenRows(
@@ -132,13 +175,8 @@ export async function createBulkSpecimenRows(
   | { success: true; result: BulkSpecimenCreateResult }
   | { success: false; errors: BulkSpecimenValidateError[] }
 > {
-  const { entries, rowOfEntry, errors } = await toRegistrationEntries(database, rows)
-  if (errors.length > 0) {
-    return { success: false, errors }
-  }
-
   try {
-    const result = await registerSpecimens(database, entries, { userId })
+    const result = await withWriteTransaction(database, (tx) => registerBulkSpecimenRows(tx, rows, userId))
     return {
       success: true,
       result: {
@@ -148,9 +186,8 @@ export async function createBulkSpecimenRows(
       },
     }
   } catch (error) {
-    if (!(error instanceof SpecimenRegistrationError)) throw error
-    const mapped = rowErrors(error.errors, rowOfEntry)
-    if (error.status === 409) throw new ConflictError(error.message, { errors: mapped })
-    return { success: false, errors: mapped }
+    if (!(error instanceof BulkSpecimensRejected)) throw error
+    if (error.status === 409) throw new ConflictError(error.message, { errors: error.errors })
+    return { success: false, errors: error.errors }
   }
 }
