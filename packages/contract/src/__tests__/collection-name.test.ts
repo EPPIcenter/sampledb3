@@ -16,4 +16,11 @@ describe('newCollectionName', () => {
     expect(newCollectionName({})).toBeUndefined()
     expect(newCollectionName({ name: '', barcode: '' })).toBeUndefined()
   })
+
+  it('trims surrounding whitespace and treats blank values as omitted', () => {
+    expect(newCollectionName({ name: '  PLATE-001  ', barcode: 'BC1' })).toBe('PLATE-001')
+    expect(newCollectionName({ name: '   ', barcode: '  BC1  ' })).toBe('BC1')
+    expect(newCollectionName({ name: '   ', barcode: ' \t ' })).toBeUndefined()
+    expect(newCollectionName({ name: null, barcode: '   ' })).toBeUndefined()
+  })
 })

@@ -14,5 +14,9 @@ export type NewCollectionIdentifiers = {
 
 /** The new Collection's name, or undefined when it has neither a name nor a barcode. */
 export function newCollectionName({ name, barcode }: NewCollectionIdentifiers): string | undefined {
-  return name || barcode || undefined
+  const trimmedName = name?.trim()
+  if (trimmedName) return trimmedName
+  const trimmedBarcode = barcode?.trim()
+  if (trimmedBarcode) return trimmedBarcode
+  return undefined
 }
