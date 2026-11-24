@@ -12,6 +12,7 @@ import {
   createTestSpecimenType,
   createTestUnit,
   createTestStorageContainer,
+  seedLargeTestStudy,
 } from '../../__tests__/helpers/factories'
 import { eq } from 'drizzle-orm'
 import {
@@ -300,6 +301,26 @@ describe('Studies DELETE (cascade)', () => {
     })
     expect(adminRes.status).toBe(200)
   })
+
+  it('deletes a study with more subjects than SQLite allows as bound parameters', async () => {
+    const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })
+    const unit = await createTestUnit(ctx.db, { symbol: 'spots', name: 'spots', category: 'count' })
+    // A second study whose rows must survive the delete.
+    const keptStudy = await createTestStudy(ctx.db, { title: 'Kept Study', shortCode: 'KEEP01' })
+    const keptSubject = await createTestStudySubject(ctx.db, { studyId: keptStudy.id, name: 'Kept' })
+    const keptSpecimen = await createTestSpecimen(ctx.db, type.id, { studySubjectId: keptSubject.id })
+    await createTestStorageContainer(ctx.db, { specimenId: keptSpecimen.id, unitId: unit.id })
+    const bigStudy = await createTestStudy(ctx.db, { title: 'Big Study', shortCode: 'BIG01' })
+    seedLargeTestStudy(ctx.sqlite, { studyId: bigStudy.id, specimenTypeId: type.id, unitId: unit.id }, 70_000)
+
+    const res = await ctx.request(`/api/studies/${bigStudy.id}`, { method: 'DELETE' })
+
+    expect(res.status).toBe(200)
+    expect(await ctx.db.select().from(study)).toMatchObject([{ id: keptStudy.id }])
+    expect(await ctx.db.select().from(studySubject)).toMatchObject([{ id: keptSubject.id }])
+    expect(await ctx.db.select().from(specimen)).toMatchObject([{ id: keptSpecimen.id }])
+    expect(await ctx.db.select().from(storageContainer)).toHaveLength(1)
+  }, 60_000)
 
   it('returns 400 when study ID is invalid', async () => {
     const res = await ctx.request('/api/studies/not-a-number', {

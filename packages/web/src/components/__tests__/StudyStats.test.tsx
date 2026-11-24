@@ -81,4 +81,31 @@ describe('StudyStats', () => {
     expect(within(totalCard).getByText('0')).toBeInTheDocument()
     expect(within(totalCard).getByText(/Total: 1 \(filtered by date range\)/)).toBeInTheDocument()
   })
+
+  // 2024-11-03 is 25 hours long in America/Los_Angeles (DST ends), so local midnights are 25 hours apart.
+  it('counts one day of study duration across a DST fall-back', async () => {
+    const acrossFallBack: StudyTimelineData = {
+      subjects: [
+        {
+          id: 1,
+          name: 'S1',
+          specimens: [
+            { id: 10, collectionDate: '2024-11-03', specimenTypeId: 1, specimenTypeName: 'DBS' },
+            { id: 11, collectionDate: '2024-11-04', specimenTypeId: 1, specimenTypeName: 'DBS' },
+          ],
+        },
+      ],
+      specimenTypes: [{ id: 1, name: 'DBS' }],
+      dateRange: { earliest: '2024-11-03', latest: '2024-11-04' },
+    }
+
+    await render(
+      <DateFilterProvider>
+        <StudyStats summary={summary} timelineData={acrossFallBack} />
+      </DateFilterProvider>
+    )
+
+    const durationCard = screen.getByText('Study Duration').parentElement!
+    expect(within(durationCard).getByText('1 day')).toBeInTheDocument()
+  })
 })

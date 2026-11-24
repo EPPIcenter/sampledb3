@@ -386,6 +386,66 @@ describe('derivations-csv', () => {
       expect(result.rows[0].error).toBe("quantity_used '3x' is not a number")
     })
 
+    it('rejects Infinity as a quantity when validating', async () => {
+      const { parent } = await seedParent()
+      const csv = [
+        `${header},quantity,quantity_used`,
+        `${parent.id},PlateDef,B01,C1,Infinity,1`,
+        `${parent.id},PlateDef,B02,C2,1,-Infinity`,
+      ].join('\n')
+
+      const result = await validateDerivationsCsv(testDb, csv, settings)
+
+      expect(result.rows.map((row) => row.error)).toEqual([
+        "quantity 'Infinity' is not a number",
+        "quantity_used '-Infinity' is not a number",
+      ])
+    })
+
+    it('rejects Infinity as a quantity when importing, and creates nothing', async () => {
+      const { parent } = await seedParent()
+      const csv = [`${header},quantity`, `${parent.id},PlateDef,B01,C1,Infinity`].join('\n')
+
+      const result = await importDerivationsFromCsv(testDb, csv, { settings })
+
+      expect(result.rows[0].success).toBe(false)
+      expect(result.rows[0].error).toContain("quantity 'Infinity' is not a number")
+      expect(await testDb.select().from(containerDerivation)).toHaveLength(0)
+    })
+
+    it('reports a bad quantity in a dry run, as the import does', async () => {
+      const { parent } = await seedParent()
+      const csv = [`${header},quantity_used`, `${parent.id},PlateDef,B01,C1,3x`, `${parent.id},PlateDef,B02,C2,3`].join('\n')
+
+      const result = await importDerivationsFromCsv(testDb, csv, { dryRun: true, settings })
+
+      expect(result.rows[0]).toMatchObject({ success: false, error: "quantity_used '3x' is not a number" })
+      expect(result.rows[1].success).toBe(true)
+    })
+
+    it('reports a paper row whose box or bag does not exist in a dry run', async () => {
+      const { parent, loc } = await seedParent()
+      await createTestBag(testDb, { name: 'Bag-1', locationId: loc.id })
+      const csv = [
+        'parent_container_id,container_type,box_name,bag_name,sheet_name,sublabel',
+        `${parent.id},paper,No Such Box,,Sheet-1,S1`,
+        `${parent.id},paper,,No Such Bag,Sheet-1,S2`,
+        `${parent.id},paper,,Bag-1,Sheet-1,S3`,
+      ].join('\n')
+
+      const result = await importDerivationsFromCsv(testDb, csv, { dryRun: true, settings: { ...settings, containerType: '' } })
+
+      expect(result.rows[0]).toMatchObject({
+        success: false,
+        error: "Box 'No Such Box' not found. Create it before importing paper derivations.",
+      })
+      expect(result.rows[1]).toMatchObject({
+        success: false,
+        error: "Bag 'No Such Bag' not found. Create it before importing paper derivations.",
+      })
+      expect(result.rows[2]).toMatchObject({ success: true, collectionStatus: 'existing' })
+    })
+
     it('uses the shared reduce-parent setting when the cell is blank', async () => {
       const { parent } = await seedParent()
       const csv = [`${header},quantity_used,reduce_parent_quantity`, `${parent.id},PlateDef,B01,C1,3,`].join('\n')
