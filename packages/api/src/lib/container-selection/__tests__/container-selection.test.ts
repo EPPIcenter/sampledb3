@@ -278,6 +278,27 @@ describe('selectContainers', () => {
       expect(result.containers).toEqual([])
     })
 
+    it('treats an empty Tag list as no Tag filter, unlike an empty container type list', async () => {
+      const study = await createTestStudy(db, { title: 'Study', shortCode: 'S1' })
+      const subject = await seedSubject(study.id, 'P1')
+      const red = (await createTestTag(db, { name: 'red' })).id
+      const stored = await seedSpecimen({ studySubjectId: subject.id })
+      const tagged = await seedContainer(stored.id)
+      await createTestContainerTags(db, tagged.id, [red])
+      const untagged = await seedContainer(stored.id)
+      const unstored = await seedSpecimen({ studySubjectId: subject.id })
+
+      const noTags = await selectContainers(db, select(study.id, subject.id, { tagIds: [] }))
+      const omitted = await selectContainers(db, select(study.id, subject.id, {}))
+      const noTypes = await selectContainers(db, select(study.id, subject.id, { containerTypes: [] }))
+
+      expect(noTags).toEqual(omitted)
+      expect(ids(noTags.containers)).toEqual([tagged.id, untagged.id])
+      expect(ids(noTags.specimens)).toEqual([stored.id, unstored.id])
+      expect(noTags.hasContainerLevelFilter).toBe(false)
+      expect(noTypes).toEqual({ containers: [], specimens: [], containerTypes: new Map(), hasContainerLevelFilter: true })
+    })
+
     it('keeps Containers stored in the Location or any Location under it, and only their Specimens', async () => {
       const study = await createTestStudy(db, { title: 'Study', shortCode: 'S1' })
       const subject = await seedSubject(study.id, 'P1')
@@ -547,6 +568,43 @@ describe('selectContainers', () => {
 
       expect(ids(subjects.specimens)).toEqual([subjectSpecimen.id])
       expect(ids(controls.specimens)).toEqual([controlSpecimen.id])
+    })
+
+    const containerLevelFilters: Array<[string, (seeded: { tagId: number; locationId: number }) => ContainerSelectionFilters]> = [
+      ['container type', () => ({ containerTypes: ['cryovial_tube'] })],
+      ['Tag', ({ tagId }) => ({ tagIds: [tagId] })],
+      ['Location', ({ locationId }) => ({ locationId })],
+      ['Container created', () => ({ containerCreated: { from: '2024-01-01', to: '2024-01-31' } })],
+    ]
+
+    it.each(containerLevelFilters)('applies the %s filter to a Control-batch-only selection', async (_filter, filtersFor) => {
+      const study = await createTestStudy(db, { title: 'Study', shortCode: 'S1' })
+      const subjectSpecimen = await seedSpecimen({ studySubjectId: (await seedSubject(study.id, 'P1')).id })
+      const batch = await createTestControlBatch(db, (await createTestControlDefinition(db)).id)
+      const controlSpecimen = await seedSpecimen({ controlBatchId: batch.id })
+      const otherControlSpecimen = await seedSpecimen({ controlBatchId: batch.id })
+      const tagId = (await createTestTag(db, { name: 'red' })).id
+      const rack = await createTestLocation(db, { name: 'Rack', storageTypeId, canContainCollections: true })
+      const rackBox = (await createTestCryovialBox(db, { name: 'Rack box', locationId: rack.id })).id
+      // A vial that passes each of the four filters, and a tube that passes none.
+      const seedMatchingVial = async (specimenId: number) => {
+        const vial = await seedContainer(specimenId, { kind: 'cryovial_tube', collectionId: rackBox, created: '2024-01-15 10:00:00' })
+        await createTestContainerTags(db, vial.id, [tagId])
+        return vial
+      }
+      const controlVial = await seedMatchingVial(controlSpecimen.id)
+      const subjectVial = await seedMatchingVial(subjectSpecimen.id)
+      await seedContainer(controlSpecimen.id, { created: '2024-06-01 09:00:00' })
+      await seedContainer(otherControlSpecimen.id, { created: '2024-06-01 09:00:00' })
+      const filters = filtersFor({ tagId, locationId: rack.id })
+
+      const controls = await selectContainers(db, { kind: 'database', sourceType: 'control', filters })
+      const anySource = await selectContainers(db, { kind: 'database', filters })
+
+      expect(ids(controls.containers)).toEqual([controlVial.id])
+      expect(ids(controls.specimens)).toEqual([controlSpecimen.id])
+      expect(controls.hasContainerLevelFilter).toBe(true)
+      expect(ids(anySource.containers)).toEqual([controlVial.id, subjectVial.id])
     })
   })
 
