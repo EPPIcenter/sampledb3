@@ -171,7 +171,7 @@ export function parseContainerCSV(csvText: string, filename: string): ParsedCSVF
 
     if (quantityIdx >= 0 && row[quantityIdx]) {
       const quantity = parseFloat(row[quantityIdx].trim())
-      if (isNaN(quantity)) {
+      if (!Number.isFinite(quantity)) {
         errors.push({ row: i + 1, field: 'quantity', error: 'Quantity must be a number' })
       } else {
         parsedRow.quantity = quantity
@@ -188,7 +188,7 @@ export function parseContainerCSV(csvText: string, filename: string): ParsedCSVF
         parsedRow.density = undefined
       } else {
         const densityNum = parseFloat(densityVal)
-        if (Number.isNaN(densityNum)) {
+        if (!Number.isFinite(densityNum)) {
           errors.push({ row: i + 1, field: 'density', error: 'Density must be a number' })
           continue
         }

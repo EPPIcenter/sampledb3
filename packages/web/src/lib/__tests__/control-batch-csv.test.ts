@@ -114,6 +114,28 @@ describe('control-batch-csv', () => {
       const result = parseContainerCSV(csv, 'test.csv')
       expect(result.errors.some((e) => e.field === 'density' && e.error.toLowerCase().includes('number'))).toBe(true)
     })
+
+    it('rejects non-finite quantity values such as Infinity and -Infinity', () => {
+      const csv = 'specimen_type_name,quantity\nWhole Blood,Infinity\nPlasma,-Infinity\nSerum,1e999'
+      const result = parseContainerCSV(csv, 'test.csv')
+      expect(result.errors).toEqual([
+        { row: 2, field: 'quantity', error: 'Quantity must be a number' },
+        { row: 3, field: 'quantity', error: 'Quantity must be a number' },
+        { row: 4, field: 'quantity', error: 'Quantity must be a number' },
+      ])
+      expect(result.rows.every((r) => r.quantity === undefined)).toBe(true)
+    })
+
+    it('rejects non-finite density values such as Infinity and -Infinity', () => {
+      const csv = 'specimen_type_name,position,density\nWhole Blood,A01,Infinity\nPlasma,A02,-Infinity\nSerum,A03,1e999'
+      const result = parseContainerCSV(csv, 'test.csv')
+      expect(result.errors).toEqual([
+        { row: 2, field: 'density', error: 'Density must be a number' },
+        { row: 3, field: 'density', error: 'Density must be a number' },
+        { row: 4, field: 'density', error: 'Density must be a number' },
+      ])
+      expect(result.rows).toHaveLength(0)
+    })
   })
 
   describe('groupRowsByDensity', () => {
