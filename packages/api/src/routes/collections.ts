@@ -4,7 +4,7 @@ import { executeMoves, type BatchMoveRequest, type ContainerInfo } from '../lib/
 import type { BarcodeMatch } from '../lib/identifier-resolution'
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
 import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
-import { handleRouteError } from '../lib/error-handler'
+import { handleRouteError, RouteError } from '../lib/error-handler'
 import { deleteCollectionWithContents, preflightCollectionDelete } from '../lib/collection-delete-cascade'
 import { validatePlateScan, inferPlateOrGetReport } from '../lib/plate-scan-validation'
 import { requireParam } from '../lib/common-validators'
@@ -59,14 +59,15 @@ function mapCreateCollectionError(error: unknown, c: { json: (body: unknown, sta
 /**
  * Respond with a move's result. A move that moved anything returns 200, because those moves
  * are committed: `success` is false and `errors` lists the rows a best-effort move skipped.
- * A move that moved nothing returns 400 with the errors.
+ * A move that moved nothing throws a `RouteError` for the caller's `handleRouteError`: a 400
+ * whose body (`error`, `moved`, `errors`) the web's move workflows read.
  */
 function moveResultResponse(
   c: Context,
   result: { success: boolean; moved: number; errors?: Array<{ row: number; error: string }> },
 ) {
   if (result.moved === 0 && !result.success) {
-    return c.json({ error: 'Move operation failed', moved: 0, errors: result.errors }, 400)
+    throw new RouteError(400, { error: 'Move operation failed', moved: 0, errors: result.errors })
   }
   return c.json({ success: result.success, moved: result.moved, errors: result.errors })
 }

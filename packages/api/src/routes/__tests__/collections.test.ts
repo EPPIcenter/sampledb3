@@ -40,6 +40,7 @@ import {
   containerDerivation,
   studySubject,
   users,
+  errorLogs,
 } from '../../db/schema'
 
 describe('Collections API', () => {
@@ -442,6 +443,29 @@ describe('Collections API', () => {
       expect(body.errors).toEqual([{ row: 2, error: expect.stringContaining('ID 999999') }])
       const after = ctx.db.select().from(micronixPlate).where(eq(micronixPlate.id, plate.id)).get()
       expect(after?.locationId).toBe(src.id)
+    })
+
+    it('answers a move that moved nothing with the same 400 body and records it in error_logs', async () => {
+      const { dst } = await setupPlateAndBox()
+
+      const res = await ctx.request('/api/collections/move', {
+        method: 'POST',
+        json: {
+          moves: [{ collectionType: 'cryovial_box', identifier: { type: 'id', id: 999_999 }, targetLocationId: dst.id }],
+        },
+      })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({
+        error: 'Move operation failed',
+        moved: 0,
+        errors: [{ row: 1, error: expect.stringContaining('ID 999999') }],
+      })
+      // The handler writes the log without awaiting it.
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const logged = await ctx.db.select().from(errorLogs).where(eq(errorLogs.message, 'Move operation failed'))
+      expect(logged).toHaveLength(1)
+      expect(logged[0].errorCode).toBe('RouteError')
     })
 
     it('returns 200 with moved and errors when a best-effort move moves some Collections', async () => {
