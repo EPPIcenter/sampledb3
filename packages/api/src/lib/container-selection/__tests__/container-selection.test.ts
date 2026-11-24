@@ -606,6 +606,36 @@ describe('selectContainers', () => {
       expect(controls.hasContainerLevelFilter).toBe(true)
       expect(ids(anySource.containers)).toEqual([controlVial.id, subjectVial.id])
     })
+
+    const specimenLevelFilters: Array<[string, (seeded: { plasmaTypeId: number }) => ContainerSelectionFilters]> = [
+      ['specimen type', ({ plasmaTypeId }) => ({ specimenTypeIds: [plasmaTypeId] })],
+      ['collection date', () => ({ collectionDate: { from: '2024-02-01', to: '2024-02-29' } })],
+      ['Specimen created', () => ({ specimenCreated: { from: '2024-01-01', to: '2024-01-31' } })],
+    ]
+
+    it.each(specimenLevelFilters)('applies the %s filter to a Control-batch-only selection', async (_filter, filtersFor) => {
+      const study = await createTestStudy(db, { title: 'Study', shortCode: 'S1' })
+      const plasmaTypeId = (await createTestSpecimenType(db, { name: 'Plasma' })).id
+      const batch = await createTestControlBatch(db, (await createTestControlDefinition(db)).id)
+      // Matching control and subject Specimens (with a Container created outside the Specimen created window).
+      const matchingFields = { specimenTypeId: plasmaTypeId, collectionDate: '2024-02-15', created: '2024-01-15 10:00:00' }
+      const matchingControl = await seedSpecimen({ controlBatchId: batch.id }, matchingFields)
+      const matchingControlTube = await seedContainer(matchingControl.id, { created: '2024-06-01 09:00:00' })
+      const matchingSubject = await seedSpecimen({ studySubjectId: (await seedSubject(study.id, 'P1')).id }, matchingFields)
+      await seedContainer(matchingSubject.id, { created: '2024-06-01 09:00:00' })
+      // Non-matching control Specimen (different type, date, and created, with a Container created inside the window).
+      const otherControl = await seedSpecimen({ controlBatchId: batch.id }, { collectionDate: '2024-05-01', created: '2024-06-01 09:00:00' })
+      await seedContainer(otherControl.id, { created: '2024-01-15 10:00:00' })
+      const filters = filtersFor({ plasmaTypeId })
+
+      const controls = await selectContainers(db, { kind: 'database', sourceType: 'control', filters })
+      const anySource = await selectContainers(db, { kind: 'database', filters })
+
+      expect(ids(controls.specimens)).toEqual([matchingControl.id])
+      expect(ids(controls.containers)).toEqual([matchingControlTube.id])
+      expect(controls.hasContainerLevelFilter).toBe(false)
+      expect(ids(anySource.specimens)).toEqual([matchingControl.id, matchingSubject.id])
+    })
   })
 
   describe('micronix barcode selection', () => {
