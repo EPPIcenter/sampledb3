@@ -26,4 +26,14 @@ describe('useShallowStable', () => {
     rerender({ value: added })
     expect(result.current).toBe(added)
   })
+
+  it('returns the new object when a key is replaced by another whose value is also undefined', () => {
+    const initial: Record<string, undefined> = { a: undefined }
+    const { result, rerender } = renderHook(({ value }) => useShallowStable(value), {
+      initialProps: { value: initial },
+    })
+    const renamed = { b: undefined }
+    rerender({ value: renamed })
+    expect(result.current).toBe(renamed)
+  })
 })
