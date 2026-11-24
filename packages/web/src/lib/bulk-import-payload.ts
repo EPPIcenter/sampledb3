@@ -8,10 +8,12 @@ import type {
   ContainerWriteInput,
 } from '@sampledb/contract'
 import type { BulkCombinedAtomicMode } from './api/imports'
+import type { BulkImportCollectionType } from './bulk-import-validation'
 import type { ContainerType } from './container-types'
 
 export interface MissingCollectionForPayload {
   name: string
+  collectionType?: BulkImportCollectionType
   barcode?: string
   locationId: number | null
   collectionBarcode?: string
@@ -31,16 +33,43 @@ export interface FlatBulkImportContainer {
   collectionLocationId?: number
 }
 
+function collectionLookupKey(
+  type: BulkImportCollectionType,
+  kind: 'name' | 'barcode',
+  value: string,
+): string {
+  return `${type}:${kind}:${value}`
+}
+
+function collectionTypeOfFlat(flat: FlatBulkImportContainer): BulkImportCollectionType {
+  switch (flat.containerType) {
+    case 'micronix_tube':
+    case 'static_well':
+      return 'micronix_plate'
+    case 'cryovial_tube':
+      return 'cryovial_box'
+    case 'paper':
+      return flat.parentCollectionType ?? 'box'
+  }
+}
+
 export function buildCollectionLocationMap(
   missingCollections: MissingCollectionForPayload[]
 ): Map<string, number> {
   const collectionLocationMap = new Map<string, number>()
   for (const coll of missingCollections) {
-    if (coll.locationId != null && coll.name) {
-      collectionLocationMap.set(coll.name, coll.locationId)
+    if (coll.locationId == null) continue
+    if (coll.name) {
+      const key = coll.collectionType
+        ? collectionLookupKey(coll.collectionType, 'name', coll.name)
+        : coll.name
+      collectionLocationMap.set(key, coll.locationId)
     }
-    if (coll.locationId != null && coll.barcode) {
-      collectionLocationMap.set(coll.barcode, coll.locationId)
+    if (coll.barcode) {
+      const key = coll.collectionType
+        ? collectionLookupKey(coll.collectionType, 'barcode', coll.barcode)
+        : coll.barcode
+      collectionLocationMap.set(key, coll.locationId)
     }
   }
   return collectionLocationMap
@@ -53,7 +82,10 @@ export function buildCollectionBarcodeMap(
   for (const coll of missingCollections) {
     const barcode = coll.collectionBarcode?.trim() || coll.barcode?.trim()
     if (barcode && coll.name) {
-      collectionBarcodeMap.set(coll.name, barcode)
+      const key = coll.collectionType
+        ? collectionLookupKey(coll.collectionType, 'name', coll.name)
+        : coll.name
+      collectionBarcodeMap.set(key, barcode)
     }
   }
   return collectionBarcodeMap
@@ -66,11 +98,16 @@ function resolveCollectionLocationId(
   if (flat.collectionLocationId != null) {
     return flat.collectionLocationId
   }
+  const type = collectionTypeOfFlat(flat)
   if (flat.collectionName) {
+    const byTypedName = collectionLocationMap.get(collectionLookupKey(type, 'name', flat.collectionName))
+    if (byTypedName != null) return byTypedName
     const byName = collectionLocationMap.get(flat.collectionName)
     if (byName != null) return byName
   }
   if (flat.collectionBarcode) {
+    const byTypedBarcode = collectionLocationMap.get(collectionLookupKey(type, 'barcode', flat.collectionBarcode))
+    if (byTypedBarcode != null) return byTypedBarcode
     const byBarcode = collectionLocationMap.get(flat.collectionBarcode)
     if (byBarcode != null) return byBarcode
   }
@@ -82,7 +119,13 @@ function resolveCollectionBarcode(
   collectionBarcodeMap?: Map<string, string>
 ): string | undefined {
   if (flat.collectionBarcode) return flat.collectionBarcode
-  if (flat.collectionName) return collectionBarcodeMap?.get(flat.collectionName)
+  if (flat.collectionName) {
+    const type = collectionTypeOfFlat(flat)
+    return (
+      collectionBarcodeMap?.get(collectionLookupKey(type, 'name', flat.collectionName)) ??
+      collectionBarcodeMap?.get(flat.collectionName)
+    )
+  }
   return undefined
 }
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  buildCollectionBarcodeMap,
   buildCollectionLocationMap,
   buildSpecimensWithLocationIds,
   buildBulkCombinedRequestPayload,
@@ -358,5 +359,145 @@ describe('bulk-import-payload', () => {
         },
       },
     ])
+  })
+
+  it('keeps distinct Locations for a missing box and a missing bag with the same name', () => {
+    const p = buildBulkCombinedRequestPayload(
+      [
+        {
+          studyShortCode: 'S',
+          subjectName: 'Sub1',
+          specimenTypeName: 'DBS',
+          container: {
+            containerType: 'paper',
+            parentCollectionType: 'box',
+            collectionName: 'Archive-1',
+            sheetName: 'Sheet-1',
+          },
+        },
+        {
+          studyShortCode: 'S',
+          subjectName: 'Sub2',
+          specimenTypeName: 'DBS',
+          container: {
+            containerType: 'paper',
+            parentCollectionType: 'bag',
+            collectionName: 'Archive-1',
+            sheetName: 'Sheet-2',
+          },
+        },
+      ],
+      {
+        containerType: 'paper',
+        fixedStudyShortCode: 'S',
+        missingCollections: [
+          { name: 'Archive-1', collectionType: 'box', locationId: 10 },
+          { name: 'Archive-1', collectionType: 'bag', locationId: 20 },
+        ],
+        atomicMode: 'full_file',
+      }
+    )
+    expect(p.subjects[0]!.specimens[0]!.container).toEqual({
+      containerType: 'paper',
+      collection: {
+        type: 'sheet',
+        name: 'Sheet-1',
+        parent: { type: 'box', name: 'Archive-1', locationId: 10 },
+      },
+    })
+    expect(p.subjects[1]!.specimens[0]!.container).toEqual({
+      containerType: 'paper',
+      collection: {
+        type: 'sheet',
+        name: 'Sheet-2',
+        parent: { type: 'bag', name: 'Archive-1', locationId: 20 },
+      },
+    })
+  })
+
+  it('does not apply a missing bag Location to an existing box with the same name', () => {
+    const p = buildBulkCombinedRequestPayload(
+      [
+        {
+          studyShortCode: 'S',
+          subjectName: 'Sub1',
+          specimenTypeName: 'DBS',
+          container: {
+            containerType: 'paper',
+            parentCollectionType: 'box',
+            collectionName: 'Archive-1',
+            sheetName: 'Sheet-1',
+          },
+        },
+        {
+          studyShortCode: 'S',
+          subjectName: 'Sub2',
+          specimenTypeName: 'DBS',
+          container: {
+            containerType: 'paper',
+            parentCollectionType: 'bag',
+            collectionName: 'Archive-1',
+            sheetName: 'Sheet-2',
+          },
+        },
+      ],
+      {
+        containerType: 'paper',
+        fixedStudyShortCode: 'S',
+        missingCollections: [{ name: 'Archive-1', collectionType: 'bag', locationId: 20 }],
+        atomicMode: 'full_file',
+      }
+    )
+    expect(p.subjects[0]!.specimens[0]!.container).toEqual({
+      containerType: 'paper',
+      collection: {
+        type: 'sheet',
+        name: 'Sheet-1',
+        parent: { type: 'box', name: 'Archive-1' },
+      },
+    })
+    expect(p.subjects[1]!.specimens[0]!.container).toEqual({
+      containerType: 'paper',
+      collection: {
+        type: 'sheet',
+        name: 'Sheet-2',
+        parent: { type: 'bag', name: 'Archive-1', locationId: 20 },
+      },
+    })
+  })
+
+  it('keys Collection barcode maps by Collection type as well as name', () => {
+    const locationMap = buildCollectionLocationMap([
+      { name: 'Shared-1', collectionType: 'micronix_plate', locationId: 10 },
+      { name: 'Shared-1', collectionType: 'cryovial_box', locationId: 20 },
+    ])
+    const barcodeMap = buildCollectionBarcodeMap([
+      { name: 'Shared-1', collectionType: 'micronix_plate', barcode: 'PB-1', locationId: 10 },
+      { name: 'Shared-1', collectionType: 'cryovial_box', barcode: 'CB-1', locationId: 20 },
+    ])
+
+    const plateContainer = flatBulkContainerToWriteInput(
+      { containerType: 'micronix_tube', collectionName: 'Shared-1', barcode: 'T1', position: 'A01' },
+      locationMap,
+      barcodeMap
+    )
+    const boxContainer = flatBulkContainerToWriteInput(
+      { containerType: 'cryovial_tube', collectionName: 'Shared-1', position: 'A01' },
+      locationMap,
+      barcodeMap
+    )
+
+    expect(plateContainer!.collection).toMatchObject({
+      type: 'micronix_plate',
+      name: 'Shared-1',
+      barcode: 'PB-1',
+      locationId: 10,
+    })
+    expect(boxContainer!.collection).toMatchObject({
+      type: 'cryovial_box',
+      name: 'Shared-1',
+      barcode: 'CB-1',
+      locationId: 20,
+    })
   })
 })
