@@ -5,7 +5,7 @@ import { createAuthRoutes } from '../auth'
 import { handleRouteError } from '../../lib/error-handler'
 import { utcNow } from '../../lib/datetime'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
-import { users, sessions } from '../../db/schema'
+import { users, sessions, errorLogs, settings } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { BCRYPT_COST, hashSessionToken } from '../../lib/auth/auth-service'
@@ -1019,6 +1019,60 @@ describe('Auth API', () => {
       expect(res.status).toBe(200)
       const row = await testDb.select().from(users).where(eq(users.id, deletedUser.id)).get()
       expect(row?.deletedAt).toBeNull()
+    })
+  })
+
+  describe('500 error logging through handleRouteError', () => {
+    it('logs unexpected 500s from PATCH /me/password, PATCH /users/:id/password, POST /switch, and DELETE /users/:id', async () => {
+      const target = await createTestUser(testDb, {
+        email: 'target500@example.com',
+        name: 'Target',
+        password: 'password123',
+        role: 'member',
+      })
+      // Remove password and session settings so the missing-configuration 500s trigger.
+      await testDb.delete(settings).where(eq(settings.key, 'password_requirements'))
+      await testDb.delete(settings).where(eq(settings.key, 'session_settings'))
+      const { clearSettingsCache } = await import('../../lib/settings')
+      clearSettingsCache(testDb)
+
+      const mePwd = await authenticatedRequest(app, '/api/auth/me/password', {
+        method: 'PATCH',
+        cookie: adminCookieHeader,
+        json: { currentPassword: 'password123', newPassword: 'newpassword123' },
+      })
+      expect(mePwd.status).toBe(500)
+
+      const resetPwd = await authenticatedRequest(app, `/api/auth/users/${target.id}/password`, {
+        method: 'PATCH',
+        cookie: adminCookieHeader,
+        json: { password: 'newpassword123' },
+      })
+      expect(resetPwd.status).toBe(500)
+
+      const sw = await authenticatedRequest(app, '/api/auth/switch', {
+        method: 'POST',
+        cookie: adminCookieHeader,
+        json: { userId: target.id, password: 'password123' },
+      })
+      expect(sw.status).toBe(500)
+
+      // Trigger a DB failure inside DELETE /users/:id after auth middleware passes.
+      sqlite.exec(`
+        CREATE TRIGGER fail_user_soft_delete BEFORE UPDATE OF deleted_at ON users
+        BEGIN SELECT RAISE(ABORT, 'simulated delete failure'); END;
+      `)
+      const del = await authenticatedRequest(app, `/api/auth/users/${target.id}`, {
+        method: 'DELETE',
+        cookie: adminCookieHeader,
+      })
+      expect(del.status).toBe(500)
+
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const logged = await testDb.select().from(errorLogs)
+      expect(logged.filter((r) => r.level === 'error' && r.message.includes('Password requirements'))).toHaveLength(2)
+      expect(logged.some((r) => r.level === 'error' && r.message.includes('Session settings'))).toBe(true)
+      expect(logged.some((r) => r.level === 'error' && r.message.includes('simulated delete failure'))).toBe(true)
     })
   })
 })

@@ -785,4 +785,25 @@ describe('Containers API', () => {
       expect(await remainingOf(id)).toBe(10)
     })
   })
+
+  describe('POST /api/containers/:id/tags error logging', () => {
+    it('routes unexpected 500 errors through handleRouteError and logs them to error_logs', async () => {
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'Blood' })
+      const spec = await createTestSpecimen(ctx.db, specimenType.id)
+      const container = await createTestStorageContainer(ctx.db, { specimenId: spec.id })
+      const tagRow = await createTestTag(ctx.db, { name: 'Hold' })
+      // Trigger a database error on insert so the outer catch runs.
+      ctx.sqlite.exec('DROP TABLE storage_container_tag')
+
+      const res = await ctx.request(`/api/containers/${container.id}/tags`, {
+        method: 'POST',
+        json: { tagId: tagRow.id },
+      })
+
+      expect(res.status).toBe(500)
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const rows = await ctx.db.select().from(errorLogs)
+      expect(rows.some((row) => row.level === 'error' && row.message.includes('storage_container_tag'))).toBe(true)
+    })
+  })
 })

@@ -17,7 +17,7 @@ import {
 } from '../lib/settings'
 import type { Database } from '../db/client'
 import { utcNow } from '../lib/datetime'
-import { handleRouteError } from '../lib/error-handler'
+import { handleRouteError, RouteError } from '../lib/error-handler'
 import { withWriteTransaction } from '../db/write-transaction'
 // Note: Defaults are only used in the frontend Setup.tsx
 // Backend requires all data to be provided via the API
@@ -432,7 +432,8 @@ const initSchema = z.object({
       return c.json({ success: true, message: 'System initialized successfully' })
     } catch (error) {
       if (error instanceof SetupRejectedError) {
-        return c.json(error.details ? { error: error.message, details: error.details } : { error: error.message }, error.status)
+        const body = error.details ? { error: error.message, details: error.details } : { error: error.message }
+        return handleRouteError(new RouteError(error.status, body, error.status >= 500 ? error : undefined), c)
       }
       return handleRouteError(error, c)
     }

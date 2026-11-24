@@ -340,7 +340,7 @@ locations.post('/', adminMiddleware, async (c) => {
     // Handle RunResult type - could be array or single result
     const insertResult = Array.isArray(result) ? result : [result]
     if (insertResult.length === 0) {
-      return c.json({ error: 'Failed to create location' }, 500)
+      throw new Error('Failed to create location')
     }
 
     // Update path for this location and descendants

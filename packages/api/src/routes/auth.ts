@@ -302,7 +302,7 @@ auth.patch('/me/password', authMiddleware, async (c) => {
     // Get password requirements
     const passwordRequirements = await getPasswordRequirementsFromDb()
     if (!passwordRequirements) {
-      return c.json({ error: 'Password requirements are not configured' }, 500)
+      throw new Error('Password requirements are not configured')
     }
 
     if (newPassword.length < passwordRequirements.minLength) {
@@ -345,7 +345,7 @@ auth.patch('/me/password', authMiddleware, async (c) => {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -377,7 +377,7 @@ auth.get('/users', adminMiddleware, async (c) => {
     
     return c.json({ users: allUsers })
   } catch (error) {
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -418,7 +418,7 @@ auth.post('/switch', rateLimit(10, 60 * 1000), authMiddleware, async (c) => {
     // Get session settings
     const sessionSettings = await getSessionSettingsFromDb()
     if (!sessionSettings) {
-      return c.json({ error: 'Session settings are not configured. Please run database initialization.' }, 500)
+      throw new Error('Session settings are not configured. Please run database initialization.')
     }
 
     // Delete old session
@@ -457,7 +457,7 @@ auth.post('/switch', rateLimit(10, 60 * 1000), authMiddleware, async (c) => {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -600,7 +600,7 @@ auth.patch('/users/:id/password', adminMiddleware, async (c) => {
     // Get password requirements
     const passwordRequirements = await getPasswordRequirementsFromDb()
     if (!passwordRequirements) {
-      return c.json({ error: 'Password requirements are not configured' }, 500)
+      throw new Error('Password requirements are not configured')
     }
 
     if (password.length < passwordRequirements.minLength) {
@@ -636,7 +636,7 @@ auth.patch('/users/:id/password', adminMiddleware, async (c) => {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -694,7 +694,7 @@ auth.delete('/users/:id', adminMiddleware, async (c) => {
 
     return c.json({ message: 'User deleted successfully' })
   } catch (error) {
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
