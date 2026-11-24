@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { setupTestDatabase, cleanupTestDatabase } from '../../../__tests__/helpers/db-setup'
 import {
+  createTestBox,
   createTestLocation,
   createTestMicronixPlate,
+  createTestSheet,
   createTestSpecimenType,
   createTestStorageType,
   createTestStudy,
@@ -337,6 +339,32 @@ describe('Specimen registration', () => {
       expect(error.errors.map((e) => [e.containerIndex, e.message])).toEqual([
         [0, "Sublabel 's1' is already used on this sheet."],
         [2, "Sublabel 's2' is used more than once on this sheet in this request."],
+      ])
+    })
+
+    it('does not create the box named beside a sheet id the sheet is not in', async () => {
+      const storageType = await createTestStorageType(db, { name: 'Fridge' })
+      const other = await createTestLocation(db, { name: 'Other', storageTypeId: String(storageType.id), canContainCollections: true })
+      const box = await createTestBox(db, { name: 'RealBox', locationId })
+      const existing = await createTestSheet(db, { name: 'Sheet-1', boxId: box.id })
+      const paperIn = (collection: Extract<RegistrationContainer, { containerType: 'paper' }>['collection']): RegistrationContainer => ({
+        containerType: 'paper',
+        collection,
+      })
+
+      const error = await rejection([
+        entry([
+          // Rejected: the sheet is in RealBox. The box it names must not count as planned afterwards.
+          paperIn({ type: 'sheet', id: existing.id, parent: { type: 'box', name: 'GhostBox', locationId } }),
+          paperIn({ type: 'sheet', name: 'Sheet-2', parent: { type: 'box', name: 'GhostBox' } }),
+          paperIn({ type: 'sheet', name: 'Sheet-3', parent: { type: 'box', name: 'GhostBox', locationId: other.id } }),
+        ]),
+      ])
+
+      expect(error.status).toBe(400)
+      expect(error.errors).toEqual([
+        { entryIndex: 0, containerIndex: 0, field: 'collection', message: `Sheet id ${existing.id} is not in that box.` },
+        { entryIndex: 0, containerIndex: 1, field: 'collection', message: 'Collection (box) not found: GhostBox' },
       ])
     })
   })

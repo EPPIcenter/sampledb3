@@ -245,10 +245,14 @@ export class CollectionPlanner {
         return { error: `Sheet id ${collection.id} is named '${row.name}', not '${collection.name}'.` }
       }
       if (collection.parent) {
+        const plannedBefore = this.planned.length
         const parent = await this.resolveParent(collection.parent)
         if ('error' in parent) return parent
         const parentId = collection.parent.type === 'box' ? row.boxId : row.bagId
         if (!('existingId' in parent.target) || parent.target.existingId !== parentId) {
+          // resolveParent may have planned a new box or bag for this row. The row is refused, so
+          // drop it: a later container naming that box or bag must not find it planned.
+          this.planned.length = plannedBefore
           return { error: `Sheet id ${collection.id} is not in that ${collection.parent.type}.` }
         }
       }
