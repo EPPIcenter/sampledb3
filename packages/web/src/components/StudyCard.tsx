@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { formatDate, parseDisplayDate } from '../lib/date-utils'
+import { calendarDaysBetween, formatDate, parseDisplayDate } from '../lib/date-utils'
 import type { Study, StudySummaryBasic } from '../lib/api/studies';interface StudySummaryData extends StudySummaryBasic {
   averageSpecimensPerSubject?: number
   studyDurationDays?: number | null
@@ -19,10 +19,7 @@ interface StudyCardProps {
 // Calculate study duration from date range
 const calculateDuration = (range: { earliest: string; latest: string } | null): number | null => {
   if (!range) return null
-  const start = parseDisplayDate(range.earliest)
-  const end = parseDisplayDate(range.latest)
-  const diffTime = Math.abs(end.getTime() - start.getTime())
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  return calendarDaysBetween(range.earliest, range.latest)
 }
 
 // Simple icon components
