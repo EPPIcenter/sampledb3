@@ -389,24 +389,29 @@ export default function Locations() {
     setMutationLoading(true)
     setSuccessMessage(null)
     try {
-      await locationsApi.delete(deletingLocationId)
-      setSuccessMessage('Location deleted successfully')
-      setDeletingLocationId(null)
-      // Clear location details cache
-      setLocationDetailsCache({})
-      // Clear selection if deleted location was selected
-      if (selectedNode?.locationId === deletingLocationId) {
-        setSelectedNode(null)
+      const deleted = await locationsApi.delete(deletingLocationId).then(
+        () => true,
+        (error: unknown) => {
+          showError(getQueryErrorMessage(error, 'Failed to delete location'))
+          return false
+        },
+      )
+      if (deleted) {
+        setSuccessMessage('Location deleted successfully')
+        // Clear selection if deleted location was selected
+        if (selectedNode?.locationId === deletingLocationId) {
+          setSelectedNode(null)
+        }
       }
-      await reloadLocations(true)
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccessMessage(null), 3000)
-    } catch (error) {
-      showError(getQueryErrorMessage(error, 'Failed to delete location'))
-      // The API refused what the dialog offered, so the tree is out of date: close the dialog and reload.
+      // Deleted or refused, the dialog closes and the tree reloads. The dialog offers Delete only
+      // for a Location the page believes is empty, so a refusal means the tree is out of date.
       setDeletingLocationId(null)
       setLocationDetailsCache({})
       await reloadLocations(true)
+      if (deleted) {
+        // Clear success message after 3 seconds
+        setTimeout(() => setSuccessMessage(null), 3000)
+      }
     } finally {
       setMutationLoading(false)
     }
