@@ -13,6 +13,8 @@ export interface ExportFilters {
   created_to?: string
   /** Containers must have every selected tag (AND semantics). */
   tag_ids?: number[]
+  /** Containers stored in this Location or any Location under it. */
+  location_id?: number
   subject_ids?: number[]
   /** Global tolerance for exact subject collection dates (defaults to 0). */
   date_tolerance?: number

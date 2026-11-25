@@ -5,7 +5,9 @@ import {
   type SubjectDateFilter,
   type SubjectDateSelection,
 } from '@sampledb/contract'
+import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
+import { location } from '../../db/schema'
 import {
   containerTypesFilter,
   selectContainers,
@@ -99,6 +101,19 @@ export function buildPostExportEnvelope(params: {
   }
 }
 
+/** Refuse an unknown Location id with 404 so an export never answers a bad Location with an empty file. */
+async function requireLocationExists(database: Database, locationId: number | undefined): Promise<void> {
+  if (locationId === undefined) return
+  const found = await database
+    .select({ id: location.id })
+    .from(location)
+    .where(eq(location.id, locationId))
+    .get()
+  if (!found) {
+    throw new ExpectedNotFoundError(`Location with id ${locationId} not found`)
+  }
+}
+
 /**
  * Container selection filters for an export request (ADR 0011). Export's
  * `created_from`/`created_to` mean Container created.
@@ -110,6 +125,7 @@ function exportSelectionFilters(filters: Omit<ExportFilters, 'study'>): Containe
     containerCreated: { from: filters.created_from, to: filters.created_to },
     containerTypes: containerTypesFilter(filters.container_types),
     tagIds: filters.tag_ids,
+    locationId: filters.location_id,
   }
 }
 
@@ -206,6 +222,7 @@ export async function runSingleStudyContainerExportGet(
   if (!studyRecord) {
     throw new ExpectedNotFoundError(`Study with short code '${filters.study}' not found`)
   }
+  await requireLocationExists(database, filters.location_id)
 
   const selectionFilters = exportSelectionFilters(filters)
   const selection: ContainerSelection = filters.subject_ids?.length
@@ -275,6 +292,7 @@ export async function runSingleStudyContainerExportPost(
   if (!studyRecord) {
     throw new ExpectedNotFoundError('Study not found')
   }
+  await requireLocationExists(database, filters.location_id)
 
   const subjectNameToId = await resolveSubjectNamesByStudy(database, subjectNames, studyRecord.id)
   const subjectIdToName = subjectNamesById(subjectNameToId)
@@ -366,6 +384,8 @@ export async function runMultiStudyContainerExportPost(
 ): Promise<PostExportEnvelope | { count: number; summary: MultiStudyExportSummary }> {
   const { entries, filters, format, columns, csvOptions, userId, countOnly, dateTolerance = 0 } = params
   const filenameBase = `multi_study_export_${formatExportTimestamp()}`
+
+  await requireLocationExists(database, filters.location_id)
 
   const validation = await validateStudyCodes(
     database,
