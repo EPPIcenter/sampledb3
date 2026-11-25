@@ -30,6 +30,10 @@ describe('createCrudRoutes Factory', () => {
   beforeEach(async () => {
     ctx = await setupAuthenticatedRouteTest({
       user: { email: 'admin@test.com', name: 'Admin User', role: 'admin' },
+      additionalUsers: [
+        { key: 'member', email: 'member@test.com', role: 'member' },
+        { key: 'viewer', email: 'viewer@test.com', role: 'viewer' },
+      ],
     })
   })
 
@@ -757,5 +761,68 @@ describe('createCrudRoutes Factory', () => {
       expect(names).toEqual([...names].sort())
     })
   })
-})
 
+  describe('createRole', () => {
+    function tagRoutesApp(createRole?: 'admin' | 'member') {
+      return createTagsApp(
+        createCrudRoutes({
+          table: tag,
+          database: ctx.db,
+          entityName: 'Tag',
+          pluralName: 'tags',
+          singularName: 'tag',
+          createSchema: z.object({ name: z.string().min(1) }),
+          createRole,
+        }),
+      )
+    }
+
+    function post(app: Hono, role: 'admin' | 'member' | 'viewer') {
+      return authenticatedRequest(app, '/api/tags', {
+        method: 'POST',
+        cookie: role === 'admin' ? ctx.cookie : ctx.cookies[role],
+        json: { name: `Tag from ${role}` },
+      })
+    }
+
+    it('keeps create admin-only when createRole is not set', async () => {
+      const app = tagRoutesApp()
+
+      expect((await post(app, 'member')).status).toBe(403)
+      expect((await post(app, 'viewer')).status).toBe(403)
+      expect((await post(app, 'admin')).status).toBe(201)
+      expect((await ctx.db.select().from(tag)).map((row) => row.name)).toEqual(['Tag from admin'])
+    })
+
+    it("opens create to members, but not viewers, when createRole is 'member'", async () => {
+      const app = tagRoutesApp('member')
+
+      expect((await post(app, 'member')).status).toBe(201)
+      expect((await post(app, 'admin')).status).toBe(201)
+      expect((await post(app, 'viewer')).status).toBe(403)
+      expect((await ctx.db.select().from(tag)).map((row) => row.name).sort()).toEqual([
+        'Tag from admin',
+        'Tag from member',
+      ])
+    })
+
+    it("keeps update and delete admin-only when createRole is 'member'", async () => {
+      const app = tagRoutesApp('member')
+      const existing = await createTestTag(ctx.db, { name: 'Existing' })
+
+      const put = await authenticatedRequest(app, `/api/tags/${existing.id}`, {
+        method: 'PUT',
+        cookie: ctx.cookies.member,
+        json: { name: 'Renamed' },
+      })
+      const del = await authenticatedRequest(app, `/api/tags/${existing.id}`, {
+        method: 'DELETE',
+        cookie: ctx.cookies.member,
+      })
+
+      expect(put.status).toBe(403)
+      expect(del.status).toBe(403)
+      expect(await ctx.db.select().from(tag).where(eq(tag.id, existing.id))).toEqual([existing])
+    })
+  })
+})

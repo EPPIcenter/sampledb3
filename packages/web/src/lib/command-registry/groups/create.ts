@@ -43,6 +43,18 @@ export function buildCreateCommands(d: CommandDependencies): Command[] {
     })
   }
 
+  // Not tied to a route: members and admins reach the create form from anywhere (#141).
+  if (d.canCreateLocations) {
+    out.push({
+      id: 'create-location',
+      label: 'Create Location',
+      category: 'Create',
+      keywords: ['create location', 'add location', 'new location'],
+      description: 'Open the create location form',
+      action: () => d.navigate('/locations?createLocation=true'),
+    })
+  }
+
   const studyId = studyDetailId(pathname)
   if (studyId) {
     out.push({

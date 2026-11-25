@@ -17,7 +17,7 @@ import {
   countCollectionsAtLocation,
 } from '../lib/location-helpers'
 import { ConflictError, handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
-import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { likeContains } from '../lib/sql-like'
@@ -31,6 +31,7 @@ export function createLocationsRoutes(database: Database, sqliteDatabase: SQLite
   const locations = new Hono()
   const authMiddleware = createAuthMiddleware(database)
   const adminMiddleware = createAdminMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
 // List all locations
 locations.get('/', authMiddleware, async (c) => {
@@ -267,8 +268,8 @@ locations.get('/:id', authMiddleware, async (c) => {
   })
 })
 
-// Create new location (admin only)
-locations.post('/', adminMiddleware, async (c) => {
+// Create new location (member or admin)
+locations.post('/', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     // Only root locations (parentId is null) require storageTypeId
@@ -359,7 +360,7 @@ locations.post('/', adminMiddleware, async (c) => {
   }
 })
 
-// Update location
+// Update location (admin only: renaming, moving, and canContainCollections reshape the hierarchy)
 locations.put('/:id', adminMiddleware, async (c) => {
   const id = parseInt(requireParam(c, 'id'))
   
@@ -511,42 +512,31 @@ locations.put('/:id', adminMiddleware, async (c) => {
   }
 })
 
-// Delete location
-locations.delete('/:id', adminMiddleware, async (c) => {
+// Delete location (member or admin). Only an empty Location can be deleted, whatever the role.
+locations.delete('/:id', memberMiddleware, async (c) => {
   const id = parseInt(requireParam(c, 'id'))
-  
-  if (isNaN(id)) {
-    return c.json({ error: 'Invalid location ID' }, 400)
-  }
 
   try {
-    // Check if location has children
+    if (isNaN(id)) {
+      throw new ValidationError('Invalid location ID')
+    }
+
     const children = await getLocationChildren(database, id)
     if (children.length > 0) {
-      return c.json({ error: 'Cannot delete location: it has child locations' }, 400)
+      throw new ValidationError('Cannot delete location: it has child locations. Delete them first.')
     }
 
-    // Check if location is in use by collections
-    const [hasPlates, hasCryovialBoxes, hasBoxes, hasBags] = await Promise.all([
-      database.select().from(micronixPlate).where(eq(micronixPlate.locationId, id)).limit(1).get(),
-      database.select().from(cryovialBox).where(eq(cryovialBox.locationId, id)).limit(1).get(),
-      database.select().from(box).where(eq(box.locationId, id)).limit(1).get(),
-      database.select().from(bag).where(eq(bag.locationId, id)).limit(1).get(),
-    ])
-
-    if (hasPlates || hasCryovialBoxes || hasBoxes || hasBags) {
-      return c.json({ error: 'Cannot delete location: it is in use by storage containers' }, 400)
+    if ((await countCollectionsAtLocation(database, id)) > 0) {
+      throw new ValidationError('Cannot delete location: it holds collections. Move them to another location first.')
     }
 
-    const result = await database
+    const deleted = await database
       .delete(location)
       .where(eq(location.id, id))
       .returning()
 
-    // Handle RunResult type - could be array or single result
-    const deleteResult = Array.isArray(result) ? result : [result]
-    if (deleteResult.length === 0) {
-      return c.json({ error: 'Location not found' }, 404)
+    if (deleted.length === 0) {
+      throw new NotFoundError('Location', id)
     }
 
     return c.json({ message: 'Location deleted successfully' })

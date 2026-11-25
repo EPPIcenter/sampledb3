@@ -13,7 +13,7 @@ When you create a control definition, you pick strains and percentages that must
 
 ## Tags
 
-Labels on **containers** only, not specimens. A tag is a name; there is no description field. Click **Add New**.
+Labels on **containers** only, not specimens. A tag is a name; there is no description field. Members and administrators can click **Add New** to create one. Only administrators can rename or delete a tag.
 
 Exports and statistics can include only containers that have all selected tags.
 
@@ -23,4 +23,4 @@ These are not Reference Data tabs and have no create screens in the app. On spec
 
 ## Delete
 
-You cannot delete a strain or tag that is still referenced. Update or remove those references first.
+Only administrators can delete a strain or tag. You cannot delete one that is still referenced. Update or remove those references first.

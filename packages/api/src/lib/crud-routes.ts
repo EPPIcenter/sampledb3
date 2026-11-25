@@ -7,7 +7,7 @@ import type { Database } from '../db/client'
 import { handleRouteError, NotFoundError, ConflictError, ValidationError } from './error-handler'
 import { listResponse, successResponse, createdResponse } from './response-helpers'
 import { requireParam } from './common-validators'
-import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { insertedRow } from './inserted-row'
 
 export interface CrudRouteConfig<
@@ -99,6 +99,12 @@ export interface CrudRouteConfig<
    * Optional: Run after a create, update or delete succeeds, such as to clear a cache of the table
    */
   afterWrite?: () => void
+
+  /**
+   * Optional: The lowest role that may create an entity (defaults to 'admin').
+   * Update and delete are always admin-only.
+   */
+  createRole?: 'admin' | 'member'
 }
 
 /**
@@ -131,6 +137,7 @@ export function createCrudRoutes<
     validateCreate,
     validateUpdate,
     afterWrite,
+    createRole = 'admin',
   } = config
   
   const updateSchema = (providedUpdateSchema || createSchema) as z.ZodType<TUpdate>
@@ -138,6 +145,7 @@ export function createCrudRoutes<
   const routes = new Hono()
   const authMiddleware = createAuthMiddleware(database)
   const adminMiddleware = createAdminMiddleware(database)
+  const middlewareForCreate = createRole === 'member' ? createMemberMiddleware(database) : adminMiddleware
 
   // GET / - List all
   routes.get('/', authMiddleware, async (c) => {
@@ -191,8 +199,8 @@ export function createCrudRoutes<
     }
   })
 
-  // POST / - Create (admin only)
-  routes.post('/', adminMiddleware, async (c) => {
+  // POST / - Create (admin only unless createRole says otherwise)
+  routes.post('/', middlewareForCreate, async (c) => {
     try {
       const body = await c.req.json()
       const data = createSchema.parse(body)

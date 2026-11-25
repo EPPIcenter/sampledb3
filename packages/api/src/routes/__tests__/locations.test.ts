@@ -13,7 +13,7 @@ import {
   createTestMicronixPlate,
   createTestStorageType,
 } from '../../__tests__/helpers/factories'
-import { location } from '../../db/schema'
+import { location, users } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 
 describe('Locations API', () => {
@@ -29,6 +29,7 @@ describe('Locations API', () => {
       },
       additionalUsers: [
         { key: 'admin', email: 'admin@test.com', name: 'Admin', password: 'password123', role: 'admin' },
+        { key: 'viewer', email: 'viewer@test.com', name: 'Viewer', password: 'password123', role: 'viewer' },
       ],
       settings: { pagination: true },
       mount: (app, { db, sqlite }) => {
@@ -40,6 +41,10 @@ describe('Locations API', () => {
   afterEach(() => {
     ctx.cleanup()
   })
+
+  function loadLocation(id: number) {
+    return ctx.db.select().from(location).where(eq(location.id, id)).get()
+  }
 
   describe('GET /api/locations', () => {
     it('returns 200 and locations array with pagination', async () => {
@@ -150,10 +155,6 @@ describe('Locations API', () => {
       return createTestLocation(ctx.db, { name: 'Shelf', storageTypeId: String(storageType.id), canContainCollections: true })
     }
 
-    async function loadLocation(id: number) {
-      return ctx.db.select().from(location).where(eq(location.id, id)).get()
-    }
-
     it('returns 409 naming how many Collections the Location holds, and changes nothing', async () => {
       const shelf = await collectionLocation()
       await createTestMicronixPlate(ctx.db, { name: 'P1', locationId: shelf.id })
@@ -220,6 +221,259 @@ describe('Locations API', () => {
 
       expect(res.status).toBe(200)
       expect((await loadLocation(shelf.id))?.description).toBe('changed')
+    })
+  })
+
+  describe('what each role may write (#141)', () => {
+    type ErrorBody = { error: string; errorCode?: string }
+
+    async function freezer(name = 'Freezer 1') {
+      const storageType = await createTestStorageType(ctx.db, { name: `${name} type` })
+      return createTestLocation(ctx.db, { name, storageTypeId: String(storageType.id), canContainCollections: true })
+    }
+
+    function locationsNamed(name: string) {
+      return ctx.db.select().from(location).where(eq(location.name, name))
+    }
+
+    /** The session cookie for a role; the default session is the member's. */
+    function cookieFor(role: 'member' | 'admin' | 'viewer') {
+      return role === 'member' ? ctx.cookie : ctx.cookies[role]
+    }
+
+    describe('POST /api/locations', () => {
+      it('lets a member create a child Location and records them as its creator', async () => {
+        const parent = await freezer()
+        const member = await ctx.db.select().from(users).where(eq(users.email, 'user@test.com')).get()
+
+        const res = await ctx.request('/api/locations', {
+          method: 'POST',
+          json: { parentId: parent.id, name: 'Shelf 1', canContainCollections: true },
+        })
+
+        expect(res.status).toBe(201)
+        const body = (await res.json()) as { location: { id: number; path: string } }
+        expect(body.location.path).toBe('Freezer 1 → Shelf 1')
+        const row = await loadLocation(body.location.id)
+        expect(row).toMatchObject({
+          parentId: parent.id,
+          name: 'Shelf 1',
+          storageTypeId: null,
+          canContainCollections: true,
+          createdBy: member!.id,
+          updatedBy: member!.id,
+        })
+      })
+
+      it('lets a member create a root Location with its storage type', async () => {
+        const storageType = await createTestStorageType(ctx.db, { name: 'Room' })
+
+        const res = await ctx.request('/api/locations', {
+          method: 'POST',
+          json: { name: 'Room 325', storageTypeId: String(storageType.id) },
+        })
+
+        expect(res.status).toBe(201)
+        const body = (await res.json()) as { location: { id: number } }
+        expect(await loadLocation(body.location.id)).toMatchObject({
+          parentId: null,
+          name: 'Room 325',
+          storageTypeId: String(storageType.id),
+          canContainCollections: false,
+        })
+      })
+
+      it('refuses a member a root Location without a storage type', async () => {
+        const res = await ctx.request('/api/locations', { method: 'POST', json: { name: 'Room 325' } })
+
+        expect(res.status).toBe(400)
+        expect(await locationsNamed('Room 325')).toHaveLength(0)
+      })
+
+      it('refuses a member a name already used under the same parent', async () => {
+        const parent = await freezer()
+        await createTestLocation(ctx.db, { name: 'Shelf 1', parentId: parent.id })
+
+        const res = await ctx.request('/api/locations', {
+          method: 'POST',
+          json: { parentId: parent.id, name: 'Shelf 1' },
+        })
+
+        expect(res.status).toBe(400)
+        expect(((await res.json()) as ErrorBody).error).toBe(
+          'Location with this name already exists under the same parent',
+        )
+        expect(await locationsNamed('Shelf 1')).toHaveLength(1)
+      })
+
+      it('refuses a member a parent that does not exist', async () => {
+        const res = await ctx.request('/api/locations', {
+          method: 'POST',
+          json: { parentId: 99999, name: 'Shelf 1' },
+        })
+
+        expect(res.status).toBe(400)
+        expect(await locationsNamed('Shelf 1')).toHaveLength(0)
+      })
+
+      it('returns 403 to a viewer and creates nothing', async () => {
+        const parent = await freezer()
+
+        const res = await ctx.request('/api/locations', {
+          method: 'POST',
+          cookie: ctx.cookies.viewer,
+          json: { parentId: parent.id, name: 'Shelf 1' },
+        })
+
+        expect(res.status).toBe(403)
+        expect(await locationsNamed('Shelf 1')).toHaveLength(0)
+      })
+
+      it('returns 401 when not authenticated', async () => {
+        const res = await ctx.request('/api/locations', {
+          method: 'POST',
+          cookie: null,
+          json: { name: 'Shelf 1' },
+        })
+
+        expect(res.status).toBe(401)
+      })
+    })
+
+    describe('PUT /api/locations/:id', () => {
+      it.each([
+        ['rename', { name: 'Renamed' }],
+        ['description', { description: 'changed' }],
+        ['canContainCollections', { canContainCollections: false }],
+      ])('returns 403 to a member changing %s, and changes nothing', async (_field, json) => {
+        const loc = await freezer()
+
+        const res = await ctx.request(`/api/locations/${loc.id}`, { method: 'PUT', json })
+
+        expect(res.status).toBe(403)
+        expect(await loadLocation(loc.id)).toEqual(loc)
+      })
+
+      it('returns 403 to a member moving a Location', async () => {
+        const parent = await freezer()
+        const other = await freezer('Freezer 2')
+
+        const res = await ctx.request(`/api/locations/${other.id}`, {
+          method: 'PUT',
+          json: { parentId: parent.id },
+        })
+
+        expect(res.status).toBe(403)
+        expect(await loadLocation(other.id)).toEqual(other)
+      })
+
+      it('returns 403 to a viewer', async () => {
+        const loc = await freezer()
+
+        const res = await ctx.request(`/api/locations/${loc.id}`, {
+          method: 'PUT',
+          cookie: ctx.cookies.viewer,
+          json: { name: 'Renamed' },
+        })
+
+        expect(res.status).toBe(403)
+        expect(await loadLocation(loc.id)).toEqual(loc)
+      })
+    })
+
+    describe('DELETE /api/locations/:id', () => {
+      it.each(['member', 'admin'] as const)('lets a %s delete an empty Location', async (role) => {
+        const parent = await freezer()
+        const shelf = await createTestLocation(ctx.db, { name: 'Shelf 1', parentId: parent.id })
+
+        const res = await ctx.request(`/api/locations/${shelf.id}`, { method: 'DELETE', cookie: cookieFor(role) })
+
+        expect(res.status).toBe(200)
+        expect(await loadLocation(shelf.id)).toBeUndefined()
+        expect(await loadLocation(parent.id)).toBeDefined()
+      })
+
+      it('lets a member delete an empty Location that someone else created', async () => {
+        const parent = await freezer()
+        const admin = await ctx.db.select().from(users).where(eq(users.email, 'admin@test.com')).get()
+        const shelf = await createTestLocation(ctx.db, { name: 'Shelf 1', parentId: parent.id, createdBy: admin!.id })
+
+        const res = await ctx.request(`/api/locations/${shelf.id}`, { method: 'DELETE' })
+
+        expect(res.status).toBe(200)
+        expect(await loadLocation(shelf.id)).toBeUndefined()
+      })
+
+      it.each(['member', 'admin'] as const)(
+        'refuses a %s a Location that has a child Location',
+        async (role) => {
+          const parent = await freezer()
+          const shelf = await createTestLocation(ctx.db, { name: 'Shelf 1', parentId: parent.id })
+
+          const res = await ctx.request(`/api/locations/${parent.id}`, { method: 'DELETE', cookie: cookieFor(role) })
+
+          expect(res.status).toBe(400)
+          expect(((await res.json()) as ErrorBody).error).toBe(
+            'Cannot delete location: it has child locations. Delete them first.',
+          )
+          expect(await loadLocation(parent.id)).toBeDefined()
+          expect(await loadLocation(shelf.id)).toBeDefined()
+        },
+      )
+
+      const collections = {
+        'micronix plate': createTestMicronixPlate,
+        'cryovial box': createTestCryovialBox,
+        box: createTestBox,
+        bag: createTestBag,
+      }
+      const heldCases = (['member', 'admin'] as const).flatMap((role) =>
+        (Object.keys(collections) as Array<keyof typeof collections>).map((kind) => [role, kind] as const),
+      )
+
+      it.each(heldCases)('refuses a %s a Location that holds a %s', async (role, kind) => {
+        const shelf = await freezer()
+        await collections[kind](ctx.db, { name: 'Held', locationId: shelf.id })
+
+        const res = await ctx.request(`/api/locations/${shelf.id}`, { method: 'DELETE', cookie: cookieFor(role) })
+
+        expect(res.status).toBe(400)
+        expect(((await res.json()) as ErrorBody).error).toBe(
+          'Cannot delete location: it holds collections. Move them to another location first.',
+        )
+        expect(await loadLocation(shelf.id)).toBeDefined()
+      })
+
+      it('returns 403 to a viewer and deletes nothing', async () => {
+        const shelf = await freezer()
+
+        const res = await ctx.request(`/api/locations/${shelf.id}`, { method: 'DELETE', cookie: ctx.cookies.viewer })
+
+        expect(res.status).toBe(403)
+        expect(await loadLocation(shelf.id)).toBeDefined()
+      })
+
+      it('returns 404 when the Location does not exist', async () => {
+        const res = await ctx.request('/api/locations/99999', { method: 'DELETE' })
+
+        expect(res.status).toBe(404)
+      })
+
+      it('returns 400 for an ID that is not a number', async () => {
+        const res = await ctx.request('/api/locations/abc', { method: 'DELETE' })
+
+        expect(res.status).toBe(400)
+        expect(((await res.json()) as ErrorBody).error).toBe('Invalid location ID')
+      })
+
+      it('returns 401 when not authenticated', async () => {
+        const shelf = await freezer()
+
+        const res = await ctx.request(`/api/locations/${shelf.id}`, { method: 'DELETE', cookie: null })
+
+        expect(res.status).toBe(401)
+        expect(await loadLocation(shelf.id)).toBeDefined()
+      })
     })
   })
 })

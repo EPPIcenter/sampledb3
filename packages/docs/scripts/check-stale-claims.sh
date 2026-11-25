@@ -40,6 +40,7 @@ check 'keep-daily 7' 'restic forget keeps 14 daily snapshots'
 check 'docker compose run --rm demo-seed' 'there is no demo-seed compose service'
 check '"Execute Move"' 'paper move confirm button is Confirm Move'
 check '\[Barcode Export\]' 'sidebar and page heading are Micronix Barcode Export'
+check 'Only administrators (can )?create (or|and) edit locations' 'members create locations and delete empty ones'
 
 if [ "$fail" -ne 0 ]; then
   echo

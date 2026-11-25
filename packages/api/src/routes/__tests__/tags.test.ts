@@ -6,6 +6,8 @@ import {
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createTagsRoutes } from '../tags'
 import { createTestTag } from '../../__tests__/helpers/factories'
+import { tag } from '../../db/schema'
+import { eq } from 'drizzle-orm'
 
 describe('Tags API', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -18,6 +20,10 @@ describe('Tags API', () => {
         password: 'password123',
         role: 'admin',
       },
+      additionalUsers: [
+        { key: 'member', email: 'member@test.com', role: 'member' },
+        { key: 'viewer', email: 'viewer@test.com', role: 'viewer' },
+      ],
       mount: (app, { db }) => {
         app.route('/api/tags', createTagsRoutes(db))
       },
@@ -88,6 +94,91 @@ describe('Tags API', () => {
       const tagRecord = await createTestTag(ctx.db, { name: 'To Delete' })
       const res = await ctx.request(`/api/tags/${tagRecord.id}`, { method: 'DELETE' })
       expect(res.status).toBe(200)
+    })
+  })
+
+  describe('what each role may write (#141)', () => {
+    function tagsNamed(name: string) {
+      return ctx.db.select().from(tag).where(eq(tag.name, name))
+    }
+
+    it('lets a member create a Tag', async () => {
+      const res = await ctx.request('/api/tags', {
+        method: 'POST',
+        cookie: ctx.cookies.member,
+        json: { name: 'Needs QC' },
+      })
+
+      expect(res.status).toBe(201)
+      expect(((await getResponseData(res)) as { name: string }).name).toBe('Needs QC')
+      expect(await tagsNamed('Needs QC')).toHaveLength(1)
+    })
+
+    it('refuses a member a Tag name that already exists', async () => {
+      await createTestTag(ctx.db, { name: 'Needs QC' })
+
+      const res = await ctx.request('/api/tags', {
+        method: 'POST',
+        cookie: ctx.cookies.member,
+        json: { name: 'Needs QC' },
+      })
+
+      expect(res.status).toBe(409)
+      expect(((await res.json()) as { error: string }).error).toBe('Tag with this name already exists')
+      expect(await tagsNamed('Needs QC')).toHaveLength(1)
+    })
+
+    it('refuses a member a Tag with no name', async () => {
+      const res = await ctx.request('/api/tags', {
+        method: 'POST',
+        cookie: ctx.cookies.member,
+        json: { name: '' },
+      })
+
+      expect(res.status).toBe(400)
+      expect(await ctx.db.select().from(tag)).toHaveLength(0)
+    })
+
+    it('returns 403 to a member renaming a Tag, and changes nothing', async () => {
+      const tagRecord = await createTestTag(ctx.db, { name: 'Original' })
+
+      const res = await ctx.request(`/api/tags/${tagRecord.id}`, {
+        method: 'PUT',
+        cookie: ctx.cookies.member,
+        json: { name: 'Renamed' },
+      })
+
+      expect(res.status).toBe(403)
+      expect(await tagsNamed('Original')).toHaveLength(1)
+    })
+
+    it('returns 403 to a member deleting a Tag, and deletes nothing', async () => {
+      const tagRecord = await createTestTag(ctx.db, { name: 'Original' })
+
+      const res = await ctx.request(`/api/tags/${tagRecord.id}`, {
+        method: 'DELETE',
+        cookie: ctx.cookies.member,
+      })
+
+      expect(res.status).toBe(403)
+      expect(await tagsNamed('Original')).toHaveLength(1)
+    })
+
+    it('returns 403 to a viewer creating a Tag, and creates nothing', async () => {
+      const res = await ctx.request('/api/tags', {
+        method: 'POST',
+        cookie: ctx.cookies.viewer,
+        json: { name: 'Needs QC' },
+      })
+
+      expect(res.status).toBe(403)
+      expect(await tagsNamed('Needs QC')).toHaveLength(0)
+    })
+
+    it('returns 401 for a create when not authenticated', async () => {
+      const res = await ctx.request('/api/tags', { method: 'POST', cookie: null, json: { name: 'Needs QC' } })
+
+      expect(res.status).toBe(401)
     })
   })
 })

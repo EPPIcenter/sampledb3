@@ -39,6 +39,8 @@ export function createTagsRoutes(database: Database): Hono {
     singularName: 'tag',
     createSchema,
     checkInUse: checkTagInUse,
+    // Members create Tags; renaming and deleting one stay admin-only (#141).
+    createRole: 'member',
   })
 }
 

@@ -117,6 +117,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // Permission helpers
   const canWrite = useMemo(() => user?.role === 'admin' || user?.role === 'member', [user])
   const canManageReferenceData = useMemo(() => user?.role === 'admin', [user])
+  // What a member may do with Locations and Tags (#141). Everything else there is canManageReferenceData.
+  const canCreateLocations = canWrite
+  const canDeleteLocations = canWrite
+  const canCreateTags = canWrite
   const isAdmin = useMemo(() => user?.role === 'admin', [user])
   const isMember = useMemo(() => user?.role === 'member', [user])
   const isViewer = useMemo(() => user?.role === 'viewer', [user])
@@ -132,11 +136,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setUser,
       canWrite,
       canManageReferenceData,
+      canCreateLocations,
+      canDeleteLocations,
+      canCreateTags,
       isAdmin,
       isMember,
       isViewer,
     }),
-    [user, loading, error, refreshUser, switchUser, setUser, canWrite, canManageReferenceData, isAdmin, isMember, isViewer]
+    [user, loading, error, refreshUser, switchUser, setUser, canWrite, canManageReferenceData, canCreateLocations, canDeleteLocations, canCreateTags, isAdmin, isMember, isViewer]
   )
 
   return (

@@ -41,10 +41,12 @@ function ReferenceDataContent({
   activeTab: ReferenceDataType
   config: ReferenceDataConfig
 }) {
-  const { canManageReferenceData } = useUser()
+  const { canManageReferenceData, canCreateTags } = useUser()
   const [, setSearchParams] = useSearchParams()
   // Keep isAdmin for backward compatibility in this file (used in multiple places)
   const isAdmin = canManageReferenceData
+  // A member adds Tags and nothing else: no edit or delete, and no other tab (#141).
+  const canAdd = canManageReferenceData || (activeTab === 'tags' && canCreateTags)
 
   const setActiveTab = (tab: ReferenceDataType) => {
     setSearchParams((prev) => {
@@ -233,14 +235,16 @@ function ReferenceDataContent({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <p className="text-sm font-medium">
-                    Reference data is view-only. Contact an administrator to add or modify reference data.
+                    {canAdd
+                      ? 'You can add tags. Contact an administrator to rename or delete a tag.'
+                      : 'Reference data is view-only. Contact an administrator to add or modify reference data.'}
                   </p>
                 </div>
               </div>
             )}
 
           <div className="mb-4 flex justify-end">
-            {canManageReferenceData && (
+            {canAdd && (
               <button
                 onClick={() => setEditingItem({})}
                 className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover"
@@ -273,7 +277,7 @@ function ReferenceDataContent({
           </div>
         </div>
 
-        {editingItem !== null && canManageReferenceData && (
+        {editingItem !== null && (canManageReferenceData || (canAdd && !editingItem.id)) && (
           <ReferenceDataForm
             key={editingItem?.id ?? 'new'}
             item={editingItem}

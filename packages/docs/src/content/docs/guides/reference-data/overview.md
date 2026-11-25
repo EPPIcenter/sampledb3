@@ -9,6 +9,14 @@ The Reference Data page has five tabs: **Specimen Types**, **Tags**, **Storage T
 
 Locations are not a tab here. Manage them under **Browse Data → Locations**. See [Locations](/docs/guides/workflows/locations/).
 
+## Who can change reference data
+
+- **Administrators** can add, edit, and delete items on every tab.
+- **Members** can add tags. They cannot rename or delete a tag, and the other four tabs are view-only for them.
+- **Viewers** see every tab view-only.
+
+To get a specimen type, unit, storage type, or strain added, or a tag renamed or deleted, ask an administrator.
+
 ## What each tab is for
 
 - **Specimen Types.** Sample categories such as Whole Blood or Plasma. Control which container types are allowed. Import names must match exactly, including capitalization.

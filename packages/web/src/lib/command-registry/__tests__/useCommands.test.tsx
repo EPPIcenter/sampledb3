@@ -20,7 +20,7 @@ const deps = (overrides: Partial<CommandDependencies> = {}): CommandDependencies
   search: '',
   canWrite: true,
   isAdmin: false,
-  canManageReferenceData: false,
+  canCreateLocations: false,
   theme: 'light',
   ...overrides,
 })

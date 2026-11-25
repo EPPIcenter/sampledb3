@@ -135,8 +135,8 @@ export function buildContextualCommands(d: CommandDependencies): Command[] {
   const locationMatch = p.match(/^\/locations\/(\d+)$/)
   if (locationMatch) {
     const locationId = locationMatch[1]
-    out.push(
-      {
+    if (d.canCreateLocations) {
+      out.push({
         id: 'ctx-location-add-child',
         label: 'Create Child Location',
         category: 'Actions',
@@ -144,7 +144,9 @@ export function buildContextualCommands(d: CommandDependencies): Command[] {
         description: 'Open create location with this parent pre-selected',
         action: () => d.navigate(`/locations?createLocation=true&parentId=${locationId}`),
         context: { kind: 'routes', routes: [{ path: `/locations/${locationId}`, match: 'exact' }] },
-      },
+      })
+    }
+    out.push(
       {
         id: 'ctx-location-copy-url',
         label: 'Copy Location Page URL',

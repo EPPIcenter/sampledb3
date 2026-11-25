@@ -5,13 +5,15 @@ description: Build and browse the storage hierarchy
 
 Locations are the physical places where collections are stored: buildings, rooms, freezers, shelves. They form a tree. A typical path looks like Building A → Room 101 → Freezer A → Shelf 1. Depth is unlimited. Most labs use three to five levels.
 
-Only administrators can create or edit locations. Open **Browse Data → Locations**. Administrators can also open the same page from the Admin Dashboard **Location Management** card, or run **Create Location** in the command palette to open the create form.
+Members and administrators can create locations and delete empty ones. Only administrators can edit a location. Viewers can browse the tree.
+
+Open **Browse Data → Locations**. To open the create form from any page, run **Create Location** in the command palette. Administrators can also open the page from the Admin Dashboard **Location Management** card.
 
 Locations are not a Reference Data tab.
 
 ## Create locations
 
-When there are no locations, administrators see **Create first location**.
+When there are no locations, members and administrators see **Create first location**.
 
 - To add a root location, click **Add Root**.
 - To add a child, hold the pointer over a parent in the tree and click the plus icon.
@@ -44,8 +46,10 @@ Collection detail pages show the storage path but have no change-location contro
 
 ## Edit or delete a location
 
-Click **Edit Location** to change name, description, and whether the location can contain collections. Root locations can change storage type. Child locations show **Storage Type (inherited)**. You cannot change the parent in this form.
+Only administrators can edit a location. Click **Edit Location** to change name, description, and whether the location can contain collections. Root locations can change storage type. Child locations show **Storage Type (inherited)**. You cannot change the parent in this form.
 
-A location can be deleted only if it has no children and no collections. Move or delete those first. Deletion is permanent.
+Members and administrators can delete a location, but only if it has no children and no collections. Move or delete those first. Deletion is permanent.
+
+If you are a member and you created a location with the wrong name, delete it while it is still empty and create it again. To rename a location that already holds collections, ask an administrator.
 
 Storage types themselves are configured in [Reference Data](/docs/guides/reference-data/storage-types/).

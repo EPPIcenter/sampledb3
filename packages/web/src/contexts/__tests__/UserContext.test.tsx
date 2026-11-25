@@ -76,4 +76,26 @@ describe('UserProvider', () => {
     axiosApi.defaults.adapter = originalAdapter
     expect(result.current.user).toBeNull()
   })
+
+  describe('permission flags', () => {
+    it.each([
+      ['admin', { write: true, manage: true }],
+      ['member', { write: true, manage: false }],
+      ['viewer', { write: false, manage: false }],
+    ] as const)('gives a %s the flags for its role', async (role, { write, manage }) => {
+      vi.mocked(authApi.getCurrentUser).mockResolvedValue({ user: { ...alice, role } } as never)
+
+      const { result } = renderUser()
+      await waitFor(() => expect(result.current.user?.role).toBe(role))
+
+      // Members create Locations and Tags and delete Locations; the rest of Reference data is admin-only (#141).
+      expect(result.current).toMatchObject({
+        canWrite: write,
+        canCreateLocations: write,
+        canDeleteLocations: write,
+        canCreateTags: write,
+        canManageReferenceData: manage,
+      })
+    })
+  })
 })

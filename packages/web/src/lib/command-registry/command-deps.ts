@@ -12,7 +12,7 @@ export interface CommandDependencies {
   search: string
   canWrite: boolean
   isAdmin: boolean
-  canManageReferenceData: boolean
+  canCreateLocations: boolean
   theme: Theme
   setTheme: (theme: Theme) => void
   toggleHelpModal: () => void
