@@ -352,7 +352,20 @@ describe('derivations-csv', () => {
       }
       const parent = await addTube('MT-PARENT', 'A01', 10)
       await addTube('MT-TAKEN', 'A02', 1)
-      return { parent, loc, plate, unit }
+      return { parent, loc, plate, unit, dnaType }
+    }
+
+    async function allowPaperForDna(dnaTypeId: number, unitId: number) {
+      await setContainerDefaults(testDb, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'paper', unitId })
+      await testDb.insert(specimenTypeContainerType).values({
+        specimenTypeId: dnaTypeId,
+        containerType: 'paper',
+        created: utcNow(),
+      })
     }
 
     it('checks non-padded positions against stored ones and against each other', async () => {
@@ -515,7 +528,8 @@ describe('derivations-csv', () => {
     })
 
     it('reports a paper row whose box or bag does not exist in a dry run', async () => {
-      const { parent, loc } = await seedParent()
+      const { parent, loc, unit, dnaType } = await seedParent()
+      await allowPaperForDna(dnaType.id, unit.id)
       await createTestBag(testDb, { name: 'Bag-1', locationId: loc.id })
       const csv = [
         'parent_container_id,container_type,box_name,bag_name,sheet_name,sublabel',
@@ -633,7 +647,8 @@ describe('derivations-csv', () => {
     })
 
     it('finds the bag named by bag_name for paper rows', async () => {
-      const { parent, loc } = await seedParent()
+      const { parent, loc, unit, dnaType } = await seedParent()
+      await allowPaperForDna(dnaType.id, unit.id)
       await createTestBag(testDb, { name: 'Shared Name', locationId: loc.id })
       const csv = ['parent_container_id,container_type,bag_name,sheet_name,sublabel', `${parent.id},paper,Shared Name,Sheet-1,S1`].join('\n')
 
@@ -649,6 +664,130 @@ describe('derivations-csv', () => {
       const result = await validateDerivationsCsv(testDb, csv, { ...settings, containerType: '' })
 
       expect(result.rows[0].error).toBe('box_name or bag_name is required for paper')
+    })
+
+    describe('dry-run and validate agree with real import', () => {
+      it.each([
+        {
+          name: 'a plate that does not exist and has no Location',
+          csv: (parentId: number) => [header, `${parentId},NoSuchPlate,B01,C-NEW-1`].join('\n'),
+          overrideSettings: undefined,
+          expectedPattern: /not found|location/i,
+        },
+        {
+          name: 'an occupied position',
+          csv: (parentId: number) => [header, `${parentId},PlateDef,A02,C-NEW-2`].join('\n'),
+          overrideSettings: undefined,
+          expectedPattern: /A02.*already used/i,
+        },
+        {
+          name: 'a tube barcode in use',
+          csv: (parentId: number) => [header, `${parentId},PlateDef,B01,MT-TAKEN`].join('\n'),
+          overrideSettings: undefined,
+          expectedPattern: /MT-TAKEN.*already exists/i,
+        },
+        {
+          name: 'a blank position',
+          csv: (parentId: number) => [header, `${parentId},PlateDef,,C-NEW-4`].join('\n'),
+          overrideSettings: undefined,
+          expectedPattern: /position.*required/i,
+        },
+        {
+          name: 'an unknown specimen type',
+          csv: (parentId: number) => [`${header},specimen_type_name`, `${parentId},PlateDef,B01,C-NEW-5,NoSuchType`].join('\n'),
+          overrideSettings: { specimenTypeName: '' },
+          expectedPattern: /Specimen type 'NoSuchType' not found/i,
+        },
+        {
+          name: 'an unknown unit',
+          csv: (parentId: number) => [`${header},unit_symbol`, `${parentId},PlateDef,B01,C-NEW-6,NO_UNIT`].join('\n'),
+          overrideSettings: undefined,
+          expectedPattern: /Unit with symbol 'NO_UNIT' not found/i,
+        },
+        {
+          name: 'a blank container type',
+          csv: (parentId: number) => [`${header},container_type`, `${parentId},PlateDef,B01,C-NEW-7,`].join('\n'),
+          overrideSettings: { containerType: '' as const },
+          expectedPattern: /container_type is required/i,
+        },
+      ])('rejects $name in both dryRun: true and dryRun: false', async ({ csv, overrideSettings, expectedPattern }) => {
+        const { parent } = await seedParent()
+        const runSettings = overrideSettings ? { ...settings, ...overrideSettings } : settings
+        const csvText = csv(parent.id)
+
+        const dryResult = await importDerivationsFromCsv(testDb, csvText, { dryRun: true, settings: runSettings })
+        expect(dryResult.rows).toHaveLength(1)
+        expect(dryResult.rows[0].success).toBe(false)
+        expect(dryResult.rows[0].error).toMatch(expectedPattern)
+
+        const realResult = await importDerivationsFromCsv(testDb, csvText, { dryRun: false, settings: runSettings })
+        expect(realResult.rows).toHaveLength(1)
+        expect(realResult.rows[0].success).toBe(false)
+        expect(realResult.rows[0].error).toMatch(expectedPattern)
+
+        expect(await testDb.select().from(containerDerivation)).toHaveLength(0)
+      })
+
+      it('rolls back all writes on a succeeding dryRun: true while preserving collectionStatus', async () => {
+        const { parent, loc } = await seedParent()
+        const csv = [
+          `${header},quantity_used,collection_location_id`,
+          `${parent.id},DRY-NEW-PLATE,A01,C-DRY-1,3,${loc.id}`,
+          `${parent.id},DRY-NEW-PLATE,A02,C-DRY-2,2,${loc.id}`,
+        ].join('\n')
+
+        const dryResult = await importDerivationsFromCsv(testDb, csv, { dryRun: true, settings })
+        expect(dryResult.rows).toEqual([
+          expect.objectContaining({ index: 0, success: true, collectionStatus: 'will_be_created' }),
+          expect.objectContaining({ index: 1, success: true, collectionStatus: 'will_be_created' }),
+        ])
+        expect(await testDb.select().from(containerDerivation)).toHaveLength(0)
+        expect(await testDb.select().from(micronixPlate).where(eq(micronixPlate.name, 'DRY-NEW-PLATE'))).toHaveLength(0)
+        const parentAfterDry = await testDb.select().from(storageContainer).where(eq(storageContainer.id, parent.id)).get()
+        expect(parentAfterDry?.remainingQuantity).toBe(10)
+      })
+
+      it('rejects unknown specimen type, unknown unit, and blank container_type in validateDerivationsCsv too', async () => {
+        const { parent } = await seedParent()
+
+        const badType = await validateDerivationsCsv(
+          testDb,
+          [`${header},specimen_type_name`, `${parent.id},PlateDef,B01,C-V1,NoSuchType`].join('\n'),
+          { ...settings, specimenTypeName: '' },
+        )
+        expect(badType.rows[0].valid).toBe(false)
+        expect(badType.rows[0].error).toMatch(/Specimen type 'NoSuchType' not found/)
+
+        const badUnit = await validateDerivationsCsv(
+          testDb,
+          [`${header},unit_symbol`, `${parent.id},PlateDef,B01,C-V2,NO_UNIT`].join('\n'),
+          settings,
+        )
+        expect(badUnit.rows[0].valid).toBe(false)
+        expect(badUnit.rows[0].error).toMatch(/Unit with symbol 'NO_UNIT' not found/)
+
+        const blankType = await validateDerivationsCsv(
+          testDb,
+          [`${header},container_type`, `${parent.id},PlateDef,B01,C-V3,`].join('\n'),
+          { ...settings, containerType: '' },
+        )
+        expect(blankType.rows[0].valid).toBe(false)
+        expect(blankType.rows[0].error).toMatch(/container_type is required/)
+
+        // A missing plate with no location_id is still reported as will_be_created for the Collections step,
+        // without persisting anything to the database.
+        const missingPlate = await validateDerivationsCsv(
+          testDb,
+          [header, `${parent.id},WizardNewPlate,A01,C-V4`].join('\n'),
+          settings,
+        )
+        expect(missingPlate.rows[0]).toMatchObject({ valid: true, collectionStatus: 'will_be_created' })
+        expect(missingPlate.collections).toEqual([
+          expect.objectContaining({ name: 'WizardNewPlate', status: 'will_be_created', containerType: 'micronix_tube' }),
+        ])
+        expect(await testDb.select().from(containerDerivation)).toHaveLength(0)
+        expect(await testDb.select().from(micronixPlate).where(eq(micronixPlate.name, 'WizardNewPlate'))).toHaveLength(0)
+      })
     })
   })
 
