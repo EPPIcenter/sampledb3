@@ -264,6 +264,18 @@ _Avoid_: LIMS (unless describing the broader category externally), ELN, SRA subm
 A one-time SQL change that one install's operator runs by hand against that install's database with `bun run data-fix` in `packages/api`, to carry out decisions about that install's own data. Unlike a numbered migration, it ships to no other install, so it may name that install's rows by id. The runner copies the database first, refuses a database below the current schema version, runs the fix in one transaction, and records it in `data_fix_log` so it runs only once. The EPPIcenter lab's fixes live in `ops/data-fixes/`.
 _Avoid_: Migration (for a change to one install's data); a migration changes every install's schema.
 
+**Connected app**:
+An external application a user has approved to act as them against SampleDB, such as Claude Code. A connection belongs to one user and one registered client, and acts with the user's current role capped at **Member** (never **Admin**).
+_Avoid_: API token (users never handle raw credentials), bot, service account
+
+**MCP endpoint**:
+The HTTP address under the API path prefix (`/api/mcp`) where the SampleDB instance answers Model Context Protocol requests directly over stateless Streamable HTTP.
+_Avoid_: Local MCP server (the tools live on the instance, not on the user's laptop)
+
+**Transfer link**:
+A short-lived, single-file HTTP address bound to one user and one **Connected app** for uploading an import CSV or **Export filter file**, or downloading an export file, without passing bulk file contents through an AI model.
+_Avoid_: Signed URL, temp link, presigned link
+
 ## Scope
 
 What SampleDB is and is not — for product descriptions and documentation.
