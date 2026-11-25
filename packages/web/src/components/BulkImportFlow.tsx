@@ -707,14 +707,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                           <p className="text-xs text-app-text-muted mt-1">Named after its barcode</p>
                         )}
                       </div>
-                      {collection.status === 'success' && <span className="text-app-trend-up text-sm font-medium">✓ Created</span>}
-                      {collection.status === 'creating' && <span className="text-app-accent text-sm">Creating...</span>}
-                      {collection.status === 'error' && <span className="text-app-trend-down text-sm">Error</span>}
                     </div>
-
-                    {collection.status === 'error' && collection.error && (
-                      <div className="mb-3 text-sm text-app-trend-down">{collection.error}</div>
-                    )}
 
                     <div>
                       <label className="block text-sm font-medium text-app-text mb-2">Location *</label>
@@ -726,7 +719,6 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                           setMissingCollections(updated)
                         }}
                         filterCollectionsOnly
-                        disabled={collection.status === 'creating' || collection.status === 'success'}
                       />
                     </div>
 
@@ -741,7 +733,6 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                             updated[index].collectionBarcode = e.target.value
                             setMissingCollections(updated)
                           }}
-                          disabled={collection.status === 'creating' || collection.status === 'success'}
                           className="form-input w-full"
                           placeholder="Enter barcode (optional)"
                         />

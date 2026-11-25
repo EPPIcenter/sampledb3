@@ -108,7 +108,7 @@ describe('useBulkImportWorkflow', () => {
       checkReports()
       for (const value of values) {
         const missing = await missingFor([{ [column]: value }, { [column]: value }], containerType)
-        expect(missing).toEqual([{ name: value, collectionType: type, locationId: null, status: 'pending' }])
+        expect(missing).toEqual([{ name: value, collectionType: type, locationId: null }])
       }
     })
 
@@ -121,7 +121,7 @@ describe('useBulkImportWorkflow', () => {
       for (const value of values) {
         const missing = await missingFor([{ collection_barcode: value }], containerType)
         expect(missing).toEqual([
-          { name: '', collectionType: type, barcode: value, locationId: null, status: 'pending' },
+          { name: '', collectionType: type, barcode: value, locationId: null },
         ])
       }
     })
@@ -136,7 +136,7 @@ describe('useBulkImportWorkflow', () => {
         'micronix_tube',
       )
       expect(missing).toEqual([
-        { name: 'PLATE-001', collectionType: 'micronix_plate', barcode: 'Barcode 7', locationId: null, status: 'pending' },
+        { name: 'PLATE-001', collectionType: 'micronix_plate', barcode: 'Barcode 7', locationId: null },
       ])
       expect(collectionsApi.check).toHaveBeenCalledWith({
         collections: [
@@ -162,7 +162,7 @@ describe('useBulkImportWorkflow', () => {
     it('ignores collection_barcode on paper rows', async () => {
       checkReports()
       const missing = await missingFor([{ box_name: 'BOX-003', collection_barcode: 'X-1' }], 'paper')
-      expect(missing).toEqual([{ name: 'BOX-003', collectionType: 'box', locationId: null, status: 'pending' }])
+      expect(missing).toEqual([{ name: 'BOX-003', collectionType: 'box', locationId: null }])
     })
 
     it('does not call the check API when no row names a Collection', async () => {

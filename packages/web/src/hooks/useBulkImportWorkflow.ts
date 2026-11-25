@@ -26,8 +26,6 @@ export type BulkImportMissingCollection = {
   /** Typed in the wizard when the CSV gives no Collection barcode. */
   collectionBarcode?: string
   locationId: number | null
-  status: 'pending' | 'creating' | 'success' | 'error'
-  error?: string
 }
 
 /** Specimen type names for CSV template generation (prefetch when import needs types). */
@@ -128,7 +126,6 @@ export async function fetchBulkImportMissingCollections(params: {
       collectionType: ref.type,
       ...(ref.barcode ? { barcode: ref.barcode } : {}),
       locationId: null,
-      status: 'pending',
     })
   }
   return missing
