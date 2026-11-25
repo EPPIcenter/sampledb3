@@ -39,9 +39,23 @@ export function collectionDateRangeOf(dates: ReadonlyArray<string | null>): { ea
   return { earliest, latest }
 }
 
-/** Whole days from `earliest` to `latest`, both YYYY-MM-DD. */
+function parseCalendarDateUtc(value: string): number {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:$|[T ])/.exec(value)
+  if (!match) return NaN
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const ms = Date.UTC(year, month - 1, day)
+  const check = new Date(ms)
+  if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) {
+    return NaN
+  }
+  return ms
+}
+
+/** Whole days from `earliest` to `latest`, both YYYY-MM-DD (or timestamps starting with one). */
 export function daysBetweenCalendarDates(earliest: string, latest: string): number {
-  return Math.round((Date.parse(`${latest}T00:00:00Z`) - Date.parse(`${earliest}T00:00:00Z`)) / DAY_MS)
+  return Math.round((parseCalendarDateUtc(latest) - parseCalendarDateUtc(earliest)) / DAY_MS)
 }
 
 /** Specimens collected per calendar day. */

@@ -381,9 +381,11 @@ studies.get('/:id/summary', authMiddleware, async (c) => {
 
     const collectionDates = specimens.map(s => s.collectionDate)
     const collectionDateRange = collectionDateRangeOf(collectionDates)
-    const studyDurationDays = collectionDateRange
+    const rawStudyDurationDays = collectionDateRange
       ? daysBetweenCalendarDates(collectionDateRange.earliest, collectionDateRange.latest)
       : null
+    const studyDurationDays =
+      rawStudyDurationDays != null && Number.isFinite(rawStudyDurationDays) ? rawStudyDurationDays : null
 
     return c.json({
       study: studyRecord,

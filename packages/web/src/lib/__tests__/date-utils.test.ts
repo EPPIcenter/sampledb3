@@ -205,4 +205,18 @@ describe('calendarDaysBetween', () => {
     expect(calendarDaysBetween('2024-11-03T09:00:00', '2024-11-04T10:00:00')).toBe(1)
     expect(calendarDaysBetween('2024-11-03 23:00:00', '2024-11-04 01:00:00')).toBe(1)
   })
+
+  it('returns NaN for impossible calendar dates', async () => {
+    const { calendarDaysBetween } = await import('../date-utils')
+    expect(calendarDaysBetween('2024-02-31', '2024-03-01')).toBeNaN()
+    expect(calendarDaysBetween('2023-02-29', '2023-03-01')).toBeNaN()
+    expect(calendarDaysBetween('2024-01-01', '2024-13-01')).toBeNaN()
+    expect(calendarDaysBetween('2024-04-31T09:00:00', '2024-05-01T09:00:00')).toBeNaN()
+  })
+
+  it('returns NaN when trailing text follows the date without a T or space separator', async () => {
+    const { calendarDaysBetween } = await import('../date-utils')
+    expect(calendarDaysBetween('2024-11-03', '2024-11-04xyz')).toBeNaN()
+    expect(calendarDaysBetween('2024-11-03-extra', '2024-11-04')).toBeNaN()
+  })
 })

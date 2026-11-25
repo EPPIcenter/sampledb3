@@ -88,4 +88,26 @@ describe('StudyCard', () => {
     )
     expect(screen.getByText('Duration: 2 days')).toBeInTheDocument()
   })
+
+  it('omits duration instead of showing NaN days when collectionDateRange has an invalid date', async () => {
+    await render(
+      <StudyCard
+        study={mockStudy}
+        summary={{
+          studyId: 1,
+          totalSubjects: 2,
+          totalSpecimens: 2,
+          totalContainers: 2,
+          collectionDateRange: {
+            earliest: '2024-02-31',
+            latest: '2024-11-04xyz',
+          },
+          averageSpecimensPerSubject: 1,
+          topSpecimenTypes: [],
+        }}
+      />
+    )
+    expect(screen.queryByText(/Duration:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument()
+  })
 })

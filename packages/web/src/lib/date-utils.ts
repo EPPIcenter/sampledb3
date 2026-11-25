@@ -29,9 +29,21 @@ export function displayDateTime(value: string): number {
 
 /** UTC midnight of a value's calendar date: its leading YYYY-MM-DD, or else its local date. */
 function calendarDateAsUtc(value: string): number {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
-  if (match) return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:$|[T ])/.exec(value)
+  if (match) {
+    const year = Number(match[1])
+    const month = Number(match[2])
+    const day = Number(match[3])
+    const ms = Date.UTC(year, month - 1, day)
+    const check = new Date(ms)
+    if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) {
+      return NaN
+    }
+    return ms
+  }
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return NaN
   const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return NaN
   return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
 }
 
