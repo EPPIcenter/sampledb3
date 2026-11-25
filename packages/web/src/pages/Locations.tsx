@@ -19,6 +19,7 @@ import LocationForm from '../components/LocationForm'
 import LocationHierarchyStatsDisplay from '../components/LocationHierarchyStats'
 import LocationCapabilityBadge from '../components/LocationCapabilityBadge'
 import { useUser } from '../contexts/UserContext'
+import { useToast } from '../contexts/ToastContext'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import { useClickOutside } from '../hooks/useClickOutside'
 import '../styles/storage.css'
@@ -56,6 +57,7 @@ export default function Locations() {
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const { canManageReferenceData, canCreateLocations, canDeleteLocations } = useUser()
+  const { error: showError } = useToast()
   // Renaming, moving, and changing canContainCollections stay admin-only; members create and delete (#141).
   const canEdit = canManageReferenceData
   const canCreate = canCreateLocations
@@ -387,24 +389,29 @@ export default function Locations() {
     setMutationLoading(true)
     setSuccessMessage(null)
     try {
-      await locationsApi.delete(deletingLocationId)
-      setSuccessMessage('Location deleted successfully')
-      setDeletingLocationId(null)
-      // Clear location details cache
-      setLocationDetailsCache({})
-      // Clear selection if deleted location was selected
-      if (selectedNode?.locationId === deletingLocationId) {
-        setSelectedNode(null)
+      const deleted = await locationsApi.delete(deletingLocationId).then(
+        () => true,
+        (error: unknown) => {
+          showError(getQueryErrorMessage(error, 'Failed to delete location'))
+          return false
+        },
+      )
+      if (deleted) {
+        setSuccessMessage('Location deleted successfully')
+        // Clear selection if deleted location was selected
+        if (selectedNode?.locationId === deletingLocationId) {
+          setSelectedNode(null)
+        }
       }
+      // Deleted or refused, the dialog closes and the tree reloads. The dialog offers Delete only
+      // for a Location the page believes is empty, so a refusal means the tree is out of date.
+      setDeletingLocationId(null)
+      setLocationDetailsCache({})
       await reloadLocations(true)
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccessMessage(null), 3000)
-    } catch (error: any) {
-      const errorMessage =
-        error.response?.data?.error ||
-        error.message ||
-        'Failed to delete location'
-      alert(errorMessage)
+      if (deleted) {
+        // Clear success message after 3 seconds
+        setTimeout(() => setSuccessMessage(null), 3000)
+      }
     } finally {
       setMutationLoading(false)
     }
@@ -434,74 +441,75 @@ export default function Locations() {
     return (
       <div key={loc.id} className={depth > 0 ? 'ml-3 border-l pl-2 mt-1' : 'mb-2'} style={{ borderColor: 'rgb(var(--app-border))' }}>
         <div className="group flex items-center gap-0.5">
-          <button
-            ref={isSelected ? selectedNodeRef : null}
-            type="button"
-            onClick={handleNodeClick}
-            className={`flex items-center flex-1 min-w-0 px-1.5 py-0.5 rounded text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--app-accent))] transition-colors ${
+          {/* The highlight wraps the expand toggle and the select button, which are siblings: a button cannot hold another. */}
+          <div
+            className={`flex items-center flex-1 min-w-0 px-1.5 py-0.5 rounded text-xs transition-colors ${
               isSelected
                 ? 'border shadow-sm'
                 : 'border border-transparent hover:bg-[rgb(var(--app-surface))]'
             }`}
             style={isSelected ? { backgroundColor: 'rgb(var(--app-accent-muted))', borderColor: 'rgb(var(--app-accent) / 0.4)' } : undefined}
           >
-            <div className="flex items-center flex-1">
-              {children.length > 0 && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    toggleExpanded(loc.id)
-                  }}
-                  className="w-3 h-3 mr-1.5 flex-shrink-0 rounded hover:bg-[rgb(var(--app-accent)/0.15)]"
-                  style={{ color: 'rgb(var(--app-text-muted))' }}
-                >
-                  {isExpanded ? '▾' : '▸'}
-                </button>
+            {children.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => toggleExpanded(loc.id)}
+                aria-expanded={isExpanded}
+                aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${loc.name}`}
+                className="w-3 h-3 mr-1.5 flex-shrink-0 rounded hover:bg-[rgb(var(--app-accent)/0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--app-accent))]"
+                style={{ color: 'rgb(var(--app-text-muted))' }}
+              >
+                {isExpanded ? '▾' : '▸'}
+              </button>
+            ) : (
+              <span className="w-3 h-3 mr-1.5 flex-shrink-0"></span>
+            )}
+            <button
+              ref={isSelected ? selectedNodeRef : null}
+              type="button"
+              onClick={handleNodeClick}
+              className="text-left flex-1 min-w-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--app-accent))]"
+            >
+              <span className="flex items-center gap-1.5">
+                <span className="truncate" style={{ color: 'rgb(var(--app-text))' }}>
+                  {getLocationLabel(loc)}
+                </span>
+                {loc.canContainCollections && (
+                  <LocationCapabilityBadge canContainCollections={true} size="sm" />
+                )}
+                {children.length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: 'rgb(var(--app-text-muted))', backgroundColor: 'rgb(var(--app-surface))' }}>
+                    {children.length} child{children.length !== 1 ? 'ren' : ''}
+                  </span>
+                )}
+              </span>
+              {loc.description && (
+                <span className="block text-[11px] truncate" style={{ color: 'rgb(var(--app-text-muted))' }}>
+                  {loc.description}
+                </span>
               )}
-              {children.length === 0 && <span className="w-3 h-3 mr-1.5"></span>}
-              <div className="text-left flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <p className="truncate" style={{ color: 'rgb(var(--app-text))' }}>
-                    {getLocationLabel(loc)}
-                  </p>
-                  {loc.canContainCollections && (
-                    <LocationCapabilityBadge canContainCollections={true} size="sm" />
-                  )}
-                  {children.length > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: 'rgb(var(--app-text-muted))', backgroundColor: 'rgb(var(--app-surface))' }}>
-                      {children.length} child{children.length !== 1 ? 'ren' : ''}
+              {loc.path && (
+                <span className="block text-[10px] font-mono break-words" style={{ color: 'rgb(var(--app-text-muted))' }}>
+                  {loc.path}
+                </span>
+              )}
+              {/* Show cached container count if available */}
+              {(() => {
+                const cached = locationDetailsCache[loc.id]
+                const stats = cached?.hierarchyStats
+                if (!stats) return null
+                const directTotal = stats.directContainers.micronix + stats.directContainers.cryovial + stats.directContainers.boxes + stats.directContainers.bags
+                if (directTotal > 0) {
+                  return (
+                    <span className="block text-[10px] font-medium mt-0.5" style={{ color: 'rgb(var(--app-accent))' }}>
+                      {directTotal} container{directTotal !== 1 ? 's' : ''}
                     </span>
-                  )}
-                </div>
-                {loc.description && (
-                  <p className="text-[11px] truncate" style={{ color: 'rgb(var(--app-text-muted))' }}>
-                    {loc.description}
-                  </p>
-                )}
-                {loc.path && (
-                  <p className="text-[10px] font-mono break-words" style={{ color: 'rgb(var(--app-text-muted))' }}>
-                    {loc.path}
-                  </p>
-                )}
-                {/* Show cached container count if available */}
-                {(() => {
-                  const cached = locationDetailsCache[loc.id]
-                  const stats = cached?.hierarchyStats
-                  if (!stats) return null
-                  const directTotal = stats.directContainers.micronix + stats.directContainers.cryovial + stats.directContainers.boxes + stats.directContainers.bags
-                  if (directTotal > 0) {
-                    return (
-                      <p className="text-[10px] font-medium mt-0.5" style={{ color: 'rgb(var(--app-accent))' }}>
-                        {directTotal} container{directTotal !== 1 ? 's' : ''}
-                      </p>
-                    )
-                  }
-                  return null
-                })()}
-              </div>
-            </div>
-          </button>
+                  )
+                }
+                return null
+              })()}
+            </button>
+          </div>
           {(canCreate || canEdit || canDelete) && (
             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
               {canCreate && (

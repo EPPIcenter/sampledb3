@@ -115,6 +115,13 @@ describe('Locations API', () => {
       expect(res.status).toBe(404)
     })
 
+    it('returns 400 for an ID that is not a number', async () => {
+      const res = await ctx.request('/api/locations/abc')
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ error: 'Invalid location ID', errorCode: 'VALIDATION_ERROR' })
+    })
+
     it('returns 401 when not authenticated', async () => {
       const res = await authenticatedRequest(ctx.createRequestApp(), '/api/locations/1', { method: 'GET' })
       expect(res.status).toBe(401)
@@ -221,6 +228,113 @@ describe('Locations API', () => {
 
       expect(res.status).toBe(200)
       expect((await loadLocation(shelf.id))?.description).toBe('changed')
+    })
+  })
+
+  describe('PUT /api/locations/:id refusals', () => {
+    async function freezerWithShelf() {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const freezer = await createTestLocation(ctx.db, { name: 'Freezer 1', storageTypeId: String(storageType.id) })
+      const shelf = await createTestLocation(ctx.db, { name: 'Shelf 1', parentId: freezer.id })
+      return { storageType, freezer, shelf }
+    }
+
+    function loadLocation(id: number) {
+      return ctx.db.select().from(location).where(eq(location.id, id)).get()
+    }
+
+    function put(id: number | string, json: Record<string, unknown>) {
+      return ctx.request(`/api/locations/${id}`, { method: 'PUT', cookie: ctx.cookies.admin, json })
+    }
+
+    it('returns 400 for an ID that is not a number', async () => {
+      const res = await put('abc', { name: 'Renamed' })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ error: 'Invalid location ID', errorCode: 'VALIDATION_ERROR' })
+    })
+
+    it('returns 404 when the Location does not exist', async () => {
+      const res = await put(99999, { name: 'Renamed' })
+
+      expect(res.status).toBe(404)
+      expect(await res.json()).toMatchObject({ error: 'Location not found', errorCode: 'NOT_FOUND' })
+    })
+
+    it('refuses a parent that does not exist', async () => {
+      const { shelf } = await freezerWithShelf()
+
+      const res = await put(shelf.id, { parentId: 99999 })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ error: 'Parent location not found', errorCode: 'VALIDATION_ERROR' })
+      expect(await loadLocation(shelf.id)).toEqual(shelf)
+    })
+
+    it('refuses to make a Location its own parent', async () => {
+      const { shelf } = await freezerWithShelf()
+
+      const res = await put(shelf.id, { parentId: shelf.id })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({
+        error: 'Location cannot be its own parent',
+        errorCode: 'VALIDATION_ERROR',
+      })
+      expect(await loadLocation(shelf.id)).toEqual(shelf)
+    })
+
+    it('refuses to move a Location under one of its own descendants', async () => {
+      const { freezer, shelf } = await freezerWithShelf()
+
+      const res = await put(freezer.id, { parentId: shelf.id })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({
+        error: 'Cannot set parent: would create a circular reference (parent is a descendant)',
+        errorCode: 'VALIDATION_ERROR',
+      })
+      expect(await loadLocation(freezer.id)).toEqual(freezer)
+    })
+
+    it('refuses to clear the storage type of a root Location', async () => {
+      const { freezer } = await freezerWithShelf()
+
+      const res = await put(freezer.id, { storageTypeId: null })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({
+        error: 'Storage type ID is required for root locations',
+        errorCode: 'VALIDATION_ERROR',
+      })
+      expect(await loadLocation(freezer.id)).toEqual(freezer)
+    })
+
+    it('refuses to give a child Location a storage type', async () => {
+      const { storageType, shelf } = await freezerWithShelf()
+
+      const res = await put(shelf.id, { storageTypeId: String(storageType.id) })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({
+        error: 'Storage type ID must be null for child locations',
+        errorCode: 'VALIDATION_ERROR',
+      })
+      expect(await loadLocation(shelf.id)).toEqual(shelf)
+    })
+
+    it('refuses a name already used under the same parent', async () => {
+      const { freezer, shelf } = await freezerWithShelf()
+      const other = await createTestLocation(ctx.db, { name: 'Shelf 2', parentId: freezer.id })
+
+      const res = await put(other.id, { name: shelf.name })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({
+        error: 'Location with this name already exists under the same parent',
+        errorCode: 'VALIDATION_ERROR',
+      })
+      expect(await loadLocation(other.id)).toEqual(other)
     })
   })
 

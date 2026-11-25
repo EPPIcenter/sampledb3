@@ -5,8 +5,15 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createTagsRoutes } from '../tags'
-import { createTestTag } from '../../__tests__/helpers/factories'
-import { tag } from '../../db/schema'
+import {
+  createTestContainerTags,
+  createTestSpecimen,
+  createTestSpecimenType,
+  createTestStorageContainer,
+  createTestTag,
+  createTestUnit,
+} from '../../__tests__/helpers/factories'
+import { storageContainerTag, tag } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 
 describe('Tags API', () => {
@@ -94,6 +101,33 @@ describe('Tags API', () => {
       const tagRecord = await createTestTag(ctx.db, { name: 'To Delete' })
       const res = await ctx.request(`/api/tags/${tagRecord.id}`, { method: 'DELETE' })
       expect(res.status).toBe(200)
+      expect(await ctx.db.select().from(tag).where(eq(tag.id, tagRecord.id))).toHaveLength(0)
+    })
+
+    it('refuses to delete a Tag that a Container carries, and keeps both', async () => {
+      const tagRecord = await createTestTag(ctx.db, { name: 'Needs QC' })
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'Plasma' })
+      const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const specimen = await createTestSpecimen(ctx.db, specimenType.id)
+      const container = await createTestStorageContainer(ctx.db, { specimenId: specimen.id, unitId: unit.id })
+      await createTestContainerTags(ctx.db, container.id, [tagRecord.id])
+
+      const res = await ctx.request(`/api/tags/${tagRecord.id}`, { method: 'DELETE' })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({
+        error: 'Cannot delete tag: it is in use by storage containers',
+        errorCode: 'VALIDATION_ERROR',
+      })
+      expect(await ctx.db.select().from(tag).where(eq(tag.id, tagRecord.id))).toHaveLength(1)
+      expect(
+        await ctx.db.select().from(storageContainerTag).where(eq(storageContainerTag.tagId, tagRecord.id)),
+      ).toHaveLength(1)
+    })
+
+    it('returns 404 when the Tag does not exist', async () => {
+      const res = await ctx.request('/api/tags/99999', { method: 'DELETE' })
+      expect(res.status).toBe(404)
     })
   })
 

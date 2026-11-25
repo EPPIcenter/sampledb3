@@ -1,28 +1,19 @@
 import { useMemo } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { locationsApi } from '../lib/api/locations'
 import { specimenTypesApi } from '../lib/api/reference-data'
 import type { ReferenceDataType } from '../config/reference-data-config'
 import { getReferenceDataConfig } from '../config/reference-data-config'
 
 export const referenceDataPageKeys = {
   all: ['reference-data-page'] as const,
-  tab: (tab: ReferenceDataType, search: string) => [...referenceDataPageKeys.all, tab, search] as const,
+  tab: (tab: ReferenceDataType) => [...referenceDataPageKeys.all, tab] as const,
   containerTypes: (specimenTypeId: number) =>
     [...referenceDataPageKeys.all, 'container-types', specimenTypeId] as const,
 }
 
-async function loadTabData(
-  tab: ReferenceDataType,
-  searchDebounced: string
-): Promise<unknown[]> {
+async function loadTabData(tab: ReferenceDataType): Promise<unknown[]> {
   const config = getReferenceDataConfig(tab)
   if (!config) return []
-
-  if (config.requiresPagination || config.requiresSearch) {
-    const res = await locationsApi.list(undefined, undefined, searchDebounced)
-    return (res as { locations?: unknown[] }).locations ?? []
-  }
 
   const res = await config.list()
   // Typed loosely on purpose: callers pass unvalidated response bodies.
@@ -34,10 +25,10 @@ async function loadTabData(
   return []
 }
 
-export function useReferenceDataTab(activeTab: ReferenceDataType, searchDebounced: string) {
+export function useReferenceDataTab(activeTab: ReferenceDataType) {
   return useQuery({
-    queryKey: referenceDataPageKeys.tab(activeTab, searchDebounced),
-    queryFn: () => loadTabData(activeTab, searchDebounced),
+    queryKey: referenceDataPageKeys.tab(activeTab),
+    queryFn: () => loadTabData(activeTab),
   })
 }
 

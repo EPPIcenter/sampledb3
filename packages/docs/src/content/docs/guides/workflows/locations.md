@@ -24,11 +24,11 @@ Click **Create**. The tree updates in place.
 
 ## Browse the tree
 
-Click arrows or names to expand and collapse. Expansion lasts for the current visit and resets when you leave the page.
+Click the arrow beside a location to expand or collapse it. Click a location's name to select it, which also expands it. Click the selected location's name again to collapse it. Expansion lasts for the current visit and resets when you leave the page.
 
 **Search Collections** finds plates, boxes, and bags by name or barcode. Click a result to open that collection. It does not search location names.
 
-Click a location to select it. The details panel shows name, full path, storage type, description, created and updated times, whether collections can be stored here, lists of Micronix Plates, Cryovial Boxes, Boxes, and Bags, and counts for collections, containers, collection types, child locations, and descendants.
+For the selected location, the details panel shows name, full path, storage type, description, created and updated times, whether collections can be stored here, lists of Micronix Plates, Cryovial Boxes, Boxes, and Bags, and counts for collections, containers, collection types, child locations, and descendants.
 
 Only locations that can contain collections appear in location pickers when you assign a collection.
 
@@ -46,9 +46,15 @@ Collection detail pages show the storage path but have no change-location contro
 
 ## Edit or delete a location
 
-Only administrators can edit a location. Click **Edit Location** to change name, description, and whether the location can contain collections. Root locations can change storage type. Child locations show **Storage Type (inherited)**. You cannot change the parent in this form.
+Hold the pointer over a location in the tree to show its controls. Members and administrators see a plus icon to add a child and a trash icon to delete. Administrators also see a pencil icon to edit. Viewers see no icons.
 
-Members and administrators can delete a location, but only if it has no children and no collections. Move or delete those first. Deletion is permanent.
+Only administrators can edit a location. Click the pencil icon to open the **Edit Location** form. You can change the name, the description, and whether the location can contain collections. A root location can also change its storage type. A child location shows **Parent Location** and **Storage Type (inherited)**, and you cannot change either. SampleDB has no control for moving a location under a different parent.
+
+You cannot clear **Can Contain Collections** while the location holds collections. The form tells you how many it holds. Move them to another location first.
+
+Members and administrators can delete a location, but only if it has no child locations and holds no collections. Click the trash icon. For an empty location, the dialog asks you to confirm. Deletion is permanent. If the location has child locations or holds collections, the dialog says so and you cannot click **Delete**. Delete the child locations or move the collections first.
+
+If someone adds a child location or a collection after you opened the page, SampleDB refuses the delete. A message at the top right of the page gives the reason, and the tree reloads.
 
 If you are a member and you created a location with the wrong name, delete it while it is still empty and create it again. To rename a location that already holds collections, ask an administrator.
 

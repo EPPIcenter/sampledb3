@@ -104,28 +104,7 @@ export default function ReferenceDataForm<T extends { id?: number }>({
     setError(null)
 
     try {
-      // Prepare data for submission
-      const submitData: any = { ...formData }
-      
-      // Special handling for location form
-      // Convert parentId from string to number if it's set, or null if empty
-      if (submitData.parentId !== undefined && submitData.parentId !== null && submitData.parentId !== '') {
-        // Convert string to number if needed
-        submitData.parentId = typeof submitData.parentId === 'string' ? parseInt(submitData.parentId, 10) : submitData.parentId
-        // Clear storageTypeId when parentId is set (storage type is inferred from parent)
-        // Explicitly set to null (not undefined) so backend knows to clear it
-        submitData.storageTypeId = null
-      } else {
-        // No parent selected - this is a root location
-        submitData.parentId = null
-        // For root locations, storageTypeId should be set (required by backend)
-        // If it's undefined or empty string, remove it so validation error is clear
-        if (submitData.storageTypeId === '' || submitData.storageTypeId === undefined) {
-          delete submitData.storageTypeId
-        }
-      }
-      
-      await onSave(submitData)
+      await onSave({ ...formData })
     } catch (err: any) {
       // Extract error message from various possible error formats
       const errorMessage = err.response?.data?.error || 
@@ -166,19 +145,7 @@ export default function ReferenceDataForm<T extends { id?: number }>({
   }
 
   const handleChange = (key: keyof T, value: any) => {
-    setFormData((prev) => {
-      const updated = { ...prev, [key]: value }
-      
-      // Special handling for location form: clear storageTypeId when parentId is set
-      if (key === 'parentId') {
-        if (value && value !== '' && value !== null && value !== undefined) {
-          // If parent is selected, clear storageTypeId (it will be inferred from parent)
-          ;(updated as any).storageTypeId = undefined
-        }
-      }
-      
-      return updated
-    })
+    setFormData((prev) => ({ ...prev, [key]: value }))
   }
 
   const formRef = useRef<HTMLFormElement>(null)

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor, within } from '../../__tests__/helpers/render'
 import Locations from '../Locations'
+import { ToastContainer } from '../../components/Toast'
 
 vi.mock('../../lib/api/locations', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
@@ -149,12 +150,59 @@ describe('Locations page: what each role can do (#141)', () => {
   async function renderAs(role: Role) {
     signInAs(role)
     const user = userEvent.setup()
-    await render(<Locations />)
+    await render(
+      <>
+        <Locations />
+        <ToastContainer />
+      </>,
+    )
     // The tree opens with its roots collapsed; expand Freezer A so both rows show.
-    await user.click(await screen.findByRole('button', { name: '▸' }))
-    await screen.findByRole('button', { name: /Shelf 1/ })
+    await user.click(await screen.findByRole('button', { name: 'Expand Freezer A' }))
+    await screen.findByRole('button', { name: /^Shelf 1/ })
     return user
   }
+
+  describe('tree rows', () => {
+    it('expands and collapses a Location with a toggle named for it', async () => {
+      signInAs('viewer')
+      const user = userEvent.setup()
+      await render(<Locations />)
+
+      const expand = await screen.findByRole('button', { name: 'Expand Freezer A' })
+      expect(expand).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.queryByRole('button', { name: /^Shelf 1/ })).not.toBeInTheDocument()
+
+      await user.click(expand)
+
+      expect(await screen.findByRole('button', { name: /^Shelf 1/ })).toBeInTheDocument()
+      const collapse = screen.getByRole('button', { name: 'Collapse Freezer A' })
+      expect(collapse).toHaveAttribute('aria-expanded', 'true')
+
+      await user.click(collapse)
+
+      expect(screen.queryByRole('button', { name: /^Shelf 1/ })).not.toBeInTheDocument()
+    })
+
+    it('gives a Location with no child Locations no toggle', async () => {
+      await renderAs('viewer')
+
+      expect(screen.queryByRole('button', { name: /(Expand|Collapse) Shelf 1/ })).not.toBeInTheDocument()
+    })
+
+    it('keeps the toggle outside the button that selects the Location', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+      await renderAs('viewer')
+
+      const row = screen.getByRole('button', { name: /^Freezer A/ })
+      expect(row).not.toContainElement(screen.getByRole('button', { name: 'Collapse Freezer A' }))
+      for (const button of screen.getAllByRole('button')) {
+        expect(button.querySelector('button')).toBeNull()
+      }
+      // React logs "<button> cannot be a descendant of <button>" for a nested one.
+      expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/descendant|validateDOMNesting/)
+      consoleError.mockRestore()
+    })
+  })
 
   /** Opens the page the way the Create Location command does. */
   async function renderFromCreateCommand(role: Role) {
@@ -261,6 +309,42 @@ describe('Locations page: what each role can do (#141)', () => {
       expect(await screen.findByText('Location deleted successfully')).toBeInTheDocument()
     })
 
+    it("is shown the API's reason in a toast when a delete is refused", async () => {
+      mockDetail(shelf)
+      vi.mocked(locationsApi.delete).mockRejectedValue({
+        response: {
+          data: { error: 'Cannot delete location: it holds collections. Move them to another location first.' },
+        },
+      })
+      const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+      const user = await renderAs('member')
+      const listCalls = vi.mocked(locationsApi.list).mock.calls.length
+
+      await user.click((await screen.findAllByRole('button', { name: 'Delete location' }))[1])
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Cannot delete location: it holds collections. Move them to another location first.',
+      )
+      expect(alert).not.toHaveBeenCalled()
+      expect(screen.queryByText('Location deleted successfully')).not.toBeInTheDocument()
+      // The dialog closes and the tree reloads, since the page offered a delete the API refused.
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      await waitFor(() => expect(vi.mocked(locationsApi.list).mock.calls.length).toBeGreaterThan(listCalls))
+      expect(screen.getByRole('button', { name: /^Shelf 1/ })).toBeInTheDocument()
+    })
+
+    it('is told the delete failed when the error carries no message', async () => {
+      mockDetail(shelf)
+      vi.mocked(locationsApi.delete).mockRejectedValue({})
+      const user = await renderAs('member')
+
+      await user.click((await screen.findAllByRole('button', { name: 'Delete location' }))[1])
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Failed to delete location')
+    })
+
     it('is told a Location with child Locations cannot be deleted', async () => {
       const user = await renderAs('member')
 
@@ -308,7 +392,7 @@ describe('Locations page: what each role can do (#141)', () => {
       await renderFromCreateCommand('viewer')
 
       // The form opens once the list has loaded, so wait for the tree before checking.
-      expect(await screen.findByRole('button', { name: /Freezer A/ })).toBeInTheDocument()
+      expect(await screen.findByRole('button', { name: /^Freezer A/ })).toBeInTheDocument()
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
   })

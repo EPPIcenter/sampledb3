@@ -1,8 +1,8 @@
 import type { RefObject } from 'react'
 import { useState } from 'react'
+import { useToast } from '../contexts/ToastContext'
 import { useUser } from '../contexts/UserContext'
-import { SkeletonTable } from '../ui'
-import Pagination from './Pagination'
+import { Button, Modal, SkeletonTable, getQueryErrorMessage } from '../ui'
 
 export interface Column<T> {
   key: keyof T
@@ -17,17 +17,8 @@ interface ReferenceDataTableProps<T extends { id: number }> {
   onDelete: (id: number) => Promise<void>
   searchPlaceholder?: string
   emptyMessage?: string
-  search?: string
-  onSearchChange?: (search: string) => void
-  disableClientFilter?: boolean
   loading?: boolean
   readOnly?: boolean
-  pagination?: {
-    page: number
-    pageSize: number
-    onPageChange: (page: number) => void
-    showPagination?: boolean
-  }
   searchInputRef?: RefObject<HTMLInputElement | null>
 }
 
@@ -38,69 +29,56 @@ export default function ReferenceDataTable<T extends { id: number }>({
   onDelete,
   searchPlaceholder = 'Search...',
   emptyMessage = 'No items found',
-  search: externalSearch,
-  onSearchChange,
-  disableClientFilter = false,
   loading = false,
   readOnly = false,
-  pagination,
   searchInputRef,
 }: ReferenceDataTableProps<T>) {
   const { canManageReferenceData } = useUser()
+  const { error: showError } = useToast()
   const canEdit = !readOnly && canManageReferenceData
-  const [internalSearch, setInternalSearch] = useState('')
-  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [search, setSearch] = useState('')
+  /** The item whose delete the user is asked to confirm. */
+  const [pendingDelete, setPendingDelete] = useState<T | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
-  // Use external search if provided, otherwise use internal state
-  const search = externalSearch !== undefined ? externalSearch : internalSearch
-  const setSearch = onSearchChange || setInternalSearch
+  const filteredData = data.filter((item) => {
+    if (!search.trim()) return true
 
-  const filteredData = disableClientFilter
-    ? data // No client-side filtering when backend handles it
-    : data.filter((item) => {
-      if (!search.trim()) return true
+    // Split search into words (handle multiple spaces)
+    const searchWords = search.trim().split(/\s+/).filter(word => word.length > 0)
+    if (searchWords.length === 0) return true
 
-      // Split search into words (handle multiple spaces)
-      const searchWords = search.trim().split(/\s+/).filter(word => word.length > 0)
-      if (searchWords.length === 0) return true
-
-      // For each word, check if it matches any column
-      // ALL words must match (AND logic)
-      return searchWords.every(word => {
-        const wordLower = word.toLowerCase()
-        return columns.some((col) => {
-          const value = item[col.key]
-          // Use rendered value if render function exists, otherwise use raw value
-          const displayValue = col.render
-            ? String(col.render(value, item))
-            : String(value || '')
-          return displayValue.toLowerCase().includes(wordLower)
-        })
+    // For each word, check if it matches any column
+    // ALL words must match (AND logic)
+    return searchWords.every(word => {
+      const wordLower = word.toLowerCase()
+      return columns.some((col) => {
+        const value = item[col.key]
+        // Use rendered value if render function exists, otherwise use raw value
+        const displayValue = col.render
+          ? String(col.render(value, item))
+          : String(value || '')
+        return displayValue.toLowerCase().includes(wordLower)
       })
     })
+  })
 
-  // Apply pagination if enabled
-  const paginatedData = pagination
-    ? filteredData.slice((pagination.page - 1) * pagination.pageSize, pagination.page * pagination.pageSize)
-    : filteredData
-  
-  const totalPages = pagination ? Math.ceil(filteredData.length / pagination.pageSize) : 1
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete) return
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this item?')) {
-      return
-    }
-
-    setDeletingId(id)
+    setDeleting(true)
     try {
-      await onDelete(id)
+      await onDelete(pendingDelete.id)
     } catch (error) {
-      console.error('Failed to delete:', error)
-      alert('Failed to delete item. It may be in use.')
+      // The API says what still uses the item.
+      showError(getQueryErrorMessage(error, 'Failed to delete item'))
     } finally {
-      setDeletingId(null)
+      setDeleting(false)
+      setPendingDelete(null)
     }
   }
+
+  const pendingDeleteName = (pendingDelete as { name?: unknown } | null)?.name
 
   return (
     <div className="space-y-4">
@@ -140,7 +118,7 @@ export default function ReferenceDataTable<T extends { id: number }>({
               </tr>
             </thead>
             <tbody className="bg-app-card divide-y divide-app-border">
-              {paginatedData.map((item) => (
+              {filteredData.map((item) => (
                 <tr key={item.id} className="hover:bg-app-surface">
                   {columns.map((col) => (
                     <td key={String(col.key)} className="px-6 py-4 whitespace-nowrap text-sm text-app-text">
@@ -156,11 +134,10 @@ export default function ReferenceDataTable<T extends { id: number }>({
                         Edit
                       </button>
                       <button
-                        onClick={() => handleDelete(item.id)}
-                        disabled={deletingId === item.id}
-                        className="text-app-trend-down hover:opacity-90 disabled:opacity-50"
+                        onClick={() => setPendingDelete(item)}
+                        className="text-app-trend-down hover:opacity-90"
                       >
-                        {deletingId === item.id ? 'Deleting...' : 'Delete'}
+                        Delete
                       </button>
                     </td>
                   )}
@@ -168,18 +145,38 @@ export default function ReferenceDataTable<T extends { id: number }>({
               ))}
             </tbody>
           </table>
-          {pagination && pagination.showPagination !== false && totalPages > 1 && (
-            <div className="px-6 py-4 border-t border-app-border">
-              <Pagination
-                currentPage={pagination.page}
-                totalPages={totalPages}
-                onPageChange={pagination.onPageChange}
-                totalItems={filteredData.length}
-                itemsPerPage={pagination.pageSize}
-              />
-            </div>
-          )}
         </div>
+      )}
+
+      {pendingDelete && (
+        <Modal
+          isOpen
+          onClose={() => setPendingDelete(null)}
+          title="Delete item"
+          size="sm"
+          closeDisabled={deleting}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setPendingDelete(null)} disabled={deleting}>
+                Cancel
+              </Button>
+              <Button variant="danger" onClick={() => void handleConfirmDelete()} disabled={deleting}>
+                {deleting ? 'Deleting...' : 'Delete'}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-app-text">
+            Are you sure you want to delete{' '}
+            {typeof pendingDeleteName === 'string' && pendingDeleteName ? (
+              <strong>{pendingDeleteName}</strong>
+            ) : (
+              'this item'
+            )}
+            ?
+          </p>
+          <p className="mt-2 text-sm text-app-text-muted">This action cannot be undone.</p>
+        </Modal>
       )}
     </div>
   )

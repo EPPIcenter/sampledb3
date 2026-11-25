@@ -67,7 +67,7 @@ describe('Reference Data page: what each role can do (#141)', () => {
       await user.click(within(dialog).getByRole('button', { name: 'Add' }))
 
       await waitFor(() => {
-        expect(tagsApi.create).toHaveBeenCalledWith(expect.objectContaining({ name: 'Hold' }))
+        expect(tagsApi.create).toHaveBeenCalledWith({ name: 'Hold' })
       })
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     })
