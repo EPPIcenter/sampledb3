@@ -59,6 +59,21 @@ describe('CollectionSelectOrCreate', () => {
     vi.clearAllMocks()
   })
 
+  it('leaves no timer running when it unmounts just after its input loses focus', () => {
+    vi.useFakeTimers()
+    try {
+      const { unmount } = render(<CollectionSelectOrCreate {...defaultProps} />)
+      fireEvent.blur(screen.getByRole('combobox'))
+      expect(vi.getTimerCount()).toBe(1)
+
+      unmount()
+
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('renders input and no Create new button when allowCreate is false', () => {
     render(<CollectionSelectOrCreate {...defaultProps} />)
     expect(screen.getByRole('combobox')).toBeInTheDocument()
