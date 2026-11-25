@@ -37,6 +37,10 @@ function getTypeLabel(type: CollectionListItem['type']): string {
   return tab?.label ?? type
 }
 
+function getCollectionRowKey(row: CollectionListItem): string {
+  return `${row.type}:${row.id}`
+}
+
 export default function Collections() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -209,6 +213,7 @@ export default function Collections() {
                 key={tabFromUrl}
                 data={filteredCollections}
                 columns={columns}
+                getRowKey={getCollectionRowKey}
                 loading={false}
                 density="compact"
                 onRowClick={(row) => navigate(getCollectionDetailUrl(row))}

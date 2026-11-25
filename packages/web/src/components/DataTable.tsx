@@ -14,6 +14,8 @@ export interface Column<T> {
 interface DataTableProps<T> {
   data: T[]
   columns: Column<T>[]
+  /** Unique key per row when `row.id` is not unique across the table (e.g. mixed collection types). */
+  getRowKey?: (row: T) => string | number
   onRowClick?: (row: T) => void
   loading?: boolean
   emptyMessage?: string
@@ -47,6 +49,7 @@ interface DataTableProps<T> {
 export default function DataTable<T extends { id: number }>({
   data,
   columns,
+  getRowKey,
   onRowClick,
   loading = false,
   emptyMessage = 'No data available',
@@ -64,7 +67,7 @@ export default function DataTable<T extends { id: number }>({
   const serverPaged = pagination?.totalItems !== undefined
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null)
   const tableRef = useRef<HTMLDivElement>(null)
-  const rowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map())
+  const rowRefs = useRef<Map<string | number, HTMLTableRowElement>>(new Map())
   const prevResetDepsRef = useRef([data.length, sortColumn, sortDirection, pagination?.page ?? 0])
 
   const handleSort = (column: Column<T>) => {
@@ -174,13 +177,14 @@ export default function DataTable<T extends { id: number }>({
   // Scroll selected row into view
   useEffect(() => {
     if (selectedRowIndex !== null && paginatedData[selectedRowIndex]) {
-      const rowId = paginatedData[selectedRowIndex].id
-      const rowElement = rowRefs.current.get(rowId)
+      const selectedRow = paginatedData[selectedRowIndex]
+      const rowKey = getRowKey ? getRowKey(selectedRow) : selectedRow.id
+      const rowElement = rowRefs.current.get(rowKey)
       if (rowElement) {
         rowElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
       }
     }
-  }, [selectedRowIndex, paginatedData])
+  }, [selectedRowIndex, paginatedData, getRowKey])
 
   if (loading) {
     return <SkeletonTable rows={5} columns={columns.length} density={density} />
@@ -233,14 +237,15 @@ export default function DataTable<T extends { id: number }>({
           <tbody className="divide-y divide-app-border">
             {paginatedData.map((row, index) => {
               const isSelected = selectedRowIndex === index
+              const rowKey = getRowKey ? getRowKey(row) : row.id
               return (
                 <tr
-                  key={row.id}
+                  key={rowKey}
                   ref={(el) => {
                     if (el) {
-                      rowRefs.current.set(row.id, el)
+                      rowRefs.current.set(rowKey, el)
                     } else {
-                      rowRefs.current.delete(row.id)
+                      rowRefs.current.delete(rowKey)
                     }
                   }}
                   onClick={() => onRowClick?.(row)}
