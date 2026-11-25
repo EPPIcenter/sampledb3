@@ -12,6 +12,7 @@ import ContainerTypeUnitsManager from '../components/ContainerTypeUnitsManager'
 import PaginationSettingsForm from '../components/PaginationSettingsForm'
 import PasswordRequirementsForm from '../components/PasswordRequirementsForm'
 import SessionSettingsForm from '../components/SessionSettingsForm'
+import ConnectedAppsSettingsForm from '../components/ConnectedAppsSettingsForm'
 import ExportConfigurationsManager from '../components/ExportConfigurationsManager'
 import TableViewConfigurationsManager from '../components/TableViewConfigurationsManager'
 import ScannerConfigurationsManager from '../components/ScannerConfigurationsManager'
@@ -28,6 +29,7 @@ type SettingsSection =
   | 'pagination'
   | 'password'
   | 'session'
+  | 'connected-apps'
   | 'export-configurations'
   | 'table-view-configurations'
   | 'scanner-configurations'
@@ -109,6 +111,12 @@ const settingsStructure: SettingsStructure[] = [
         id: 'session',
         label: 'Session Settings',
         tooltip: 'Configure how long users remain logged in before requiring re-authentication',
+        adminOnly: true,
+      },
+      {
+        id: 'connected-apps',
+        label: 'Connected Apps',
+        tooltip: 'Control whether external apps such as Claude Code can connect to this instance through the MCP endpoint',
         adminOnly: true,
       },
     ],
@@ -355,6 +363,19 @@ export default function Settings() {
             onError={(err) => setMutationError(err)}
             onSuccess={() => {
               setSuccess('Session settings saved successfully')
+              setTimeout(() => setSuccess(null), 3000)
+              refreshSettings()
+            }}
+          />
+        )
+      case 'connected-apps':
+        return (
+          <ConnectedAppsSettingsForm
+            data={settings.connected_apps}
+            onSave={handleSave}
+            onError={(err) => setMutationError(err)}
+            onSuccess={() => {
+              setSuccess('Connected apps setting saved successfully')
               setTimeout(() => setSuccess(null), 3000)
               refreshSettings()
             }}

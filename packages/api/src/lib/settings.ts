@@ -24,6 +24,14 @@ export interface SessionSettings {
   maxAgeSeconds: number
 }
 
+export interface ConnectedAppsSettings {
+  enabled: boolean
+}
+
+export const DEFAULT_CONNECTED_APPS_SETTINGS: ConnectedAppsSettings = {
+  enabled: false,
+}
+
 export interface ExportConfiguration {
   name: string
   columns: string[]
@@ -270,6 +278,29 @@ export async function getSessionSettings(db: Database): Promise<SessionSettings 
  */
 export async function setSessionSettings(db: Database, config: SessionSettings): Promise<void> {
   return setSetting(db, 'session_settings', config)
+}
+
+/**
+ * Get Connected apps settings (defaults to off when unset).
+ */
+export async function getConnectedAppsSettings(db: Database): Promise<ConnectedAppsSettings> {
+  const stored = await getSetting<ConnectedAppsSettings>(db, 'connected_apps', null)
+  return { enabled: stored?.enabled === true }
+}
+
+/**
+ * Set Connected apps settings (system-wide, admin only).
+ */
+export async function setConnectedAppsSettings(db: Database, config: ConnectedAppsSettings): Promise<void> {
+  return setSetting(db, 'connected_apps', { enabled: config.enabled }, null)
+}
+
+/**
+ * True when Connected apps and the MCP endpoint are turned on for this instance.
+ */
+export async function isConnectedAppsEnabled(db: Database): Promise<boolean> {
+  const settings = await getConnectedAppsSettings(db)
+  return settings.enabled
 }
 
 /**

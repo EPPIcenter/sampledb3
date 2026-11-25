@@ -5,7 +5,7 @@ description: Configure appearance, export presets, scanner layouts, and admin de
 
 The page title and sidebar label are **Application Settings**. Open it from the sidebar, or press **Ctrl+Shift+K** / **Cmd+Shift+K** and run **Go to Application Settings**.
 
-The left column lists categories and sections. What you see depends on your role. Members see appearance, pagination, about, export configurations, and scanner configurations. Administrators also see container defaults, container type units, password requirements, session settings, and table view configurations.
+The left column lists categories and sections. What you see depends on your role. Members see appearance, pagination, about, export configurations, and scanner configurations. Administrators also see container defaults, container type units, password requirements, session settings, connected apps, and table view configurations.
 
 Changes in a section save when you complete that section's action. There is no page-wide Save.
 
@@ -26,6 +26,8 @@ Changes in a section save when you complete that section's action. There is no p
 **Password Requirements.** Minimum length and related rules for new passwords.
 
 **Session Settings.** How long a signed-in session lasts.
+
+**Connected Apps.** Turns Connected apps and the MCP endpoint (`/api/mcp`) on or off for this instance (off by default). When enabled, lab staff can connect approved external applications such as Claude Code to query inventory data and—for members and administrators—run imports, always capped at member access. Turning it off immediately disables the MCP endpoint without removing existing connections.
 
 ## Data Management
 

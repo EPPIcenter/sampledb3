@@ -11,6 +11,7 @@ function mockAllSettings() {
     pagination_settings: { defaultPageSize: 10, maxPageSize: 100 },
     password_requirements: { minLength: 8 },
     session_settings: { maxAgeSeconds: 604800 },
+    connected_apps: { enabled: false },
     export_configurations: { configurations: [] },
     scanner_configurations: { configurations: [] },
     table_view_configurations: null,
@@ -77,6 +78,29 @@ describe('Settings page', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
     await waitFor(() => expect(settingsApi.update).toHaveBeenCalledWith('pagination_settings', expect.anything()))
+    await waitFor(() =>
+      expect(queryClient.getQueryState(['export', 'configurations'])?.isInvalidated).toBe(true),
+    )
+  })
+
+  it('lets an admin toggle Connected Apps and invalidates cached queries', async () => {
+    const user = userEvent.setup()
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    queryClient.setQueryData(['export', 'configurations'], { configurations: [] })
+    await render(<Settings />, {
+      queryClient,
+      initialEntries: ['/settings?category=security&section=connected-apps'],
+    })
+
+    const toggle = await screen.findByRole('switch', { name: /enable connected apps/i })
+    expect(toggle).not.toBeChecked()
+    await user.click(toggle)
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() =>
+      expect(settingsApi.update).toHaveBeenCalledWith('connected_apps', { enabled: true }),
+    )
+    expect(await screen.findByText(/connected apps setting saved successfully/i)).toBeInTheDocument()
     await waitFor(() =>
       expect(queryClient.getQueryState(['export', 'configurations'])?.isInvalidated).toBe(true),
     )
