@@ -65,7 +65,7 @@ You now have three subjects in TUT01. See [Bulk import](/docs/guides/bulk-operat
 
    Specimen type names must match **Reference Data** (they are case-sensitive). Download [tutorial-specimens-no-containers.csv](/docs/tutorial-csvs/tutorial-specimens-no-containers.csv) for this example. Micronix CSVs also need `plate_name`, `barcode`, and `position`. See [Bulk import](/docs/guides/bulk-operations/import/).
 5. Select the file under **CSV File**, then click **Validate & Continue**.
-6. If the CSV names collections that do not exist, a **Create Collections** step asks you to assign each one to a location. Continue to run the import.
+6. If the CSV names collections that do not exist yet, a **Collection Locations** step asks you to choose a location for each one so the import can create them. Continue to run the import.
 7. Read the result summary.
 
 ## Step 4: Verify

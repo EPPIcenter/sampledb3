@@ -39,18 +39,20 @@ Validation has two stages:
 
 Common failures include missing columns, wrong date or position format, unknown study codes, duplicate barcodes or positions, and locations that cannot hold collections.
 
-## Create missing collections
+## Assign locations for new collections
 
-This step appears only if the CSV names plates, boxes, or bags that are not in the system. For each missing collection, pick a location in the hierarchical tree. Only locations that can hold collections are selectable. For plates and boxes, you can enter an optional barcode.
+This step appears only if the CSV names plates, boxes, or bags that do not exist yet. For each new collection, pick a location in the hierarchical tree. Only locations that can hold collections are selectable. For plates and boxes, you can enter an optional barcode.
 
-- **Per subject:** click **Create Collections & Continue**. Collections are created, then each subject is imported in its own transaction.
-- **Full file (all-or-nothing):** click **Continue to Import**. Missing collections, subjects, specimens, and containers are created in one transaction. Either everything is committed or nothing is.
+Click **Continue to Import** once every new collection has a location. Missing collections are created by the import request itself rather than beforehand:
+
+- **Specimens only** and **Combined, Full file (all-or-nothing):** missing collections, subjects, specimens, and containers are created in one transaction. Either everything is committed or nothing is.
+- **Combined, Per subject:** each subject is imported in its own transaction, creating any missing collection referenced by that subject when it is imported.
 
 If you are importing subjects only, or specimens with **No Containers**, you skip this step.
 
 ## Import results
 
-After collections are created if needed, the server validates again. If that pass fails, you see all errors on the import step and nothing is written. Click **Back to Upload**, fix the CSV, and run **Validate & Continue** again.
+After you assign locations (if needed), the server validates the payload with those locations. If that pass fails, you see all errors and nothing is written. Fix the CSV or locations, then try again.
 
 When a specimen with the same study, subject, specimen type, and collection date already exists, the import reuses that specimen and only adds containers when container data is present. The summary shows how many specimens were created versus how many containers were added.
 
@@ -58,7 +60,7 @@ When a specimen with the same study, subject, specimen type, and collection date
 
 - **Subjects only** and **Specimens only:** the whole batch is one transaction. If anything fails after validation, the batch is rolled back.
 - **Combined, Full file (all-or-nothing):** the entire CSV is one transaction, including missing collections if you assigned locations and clicked **Continue to Import**. The server runs a final in-transaction check so stale pre-validation cannot produce a partial commit.
-- **Combined, Per subject:** each subject, with its specimens and containers, is committed separately. Some subjects can succeed while others fail. Create missing collections first with **Create Collections & Continue**.
+- **Combined, Per subject:** each subject, with its specimens and containers, is committed separately. Some subjects can succeed while others fail. Any new collection whose location you assigned on **Collection Locations** is created when the first subject that uses it is imported.
 - **Derivation bulk import:** all rows succeed together or none do. See [Derivations](/docs/guides/features/derivations/).
 
 If a **per subject** run partly succeeds, only failed subjects need to be fixed and re-imported.
@@ -99,7 +101,7 @@ In a longitudinal study, use one CSV row per collection. Each row creates a sepa
 - **Invalid study codes / Study not found.** Create the study first, or correct the code.
 - **Subject name already exists / Duplicate subject.** For Combined, existing subjects get new specimens. For Subjects Only, each name must be new in the study and unique in the batch.
 - **Subject name differs only by case.** Names compare ignoring case, so `abc-1` is refused when the study has `ABC-1`. Spell the name as the study already does, or choose a different name.
-- **Missing collections.** Assign locations on **Create Missing Collections**, or fix names and barcodes in the CSV.
+- **Missing collections.** Assign locations on **Collection Locations**, or fix names and barcodes in the CSV.
 - **Location cannot contain collections.** Pick a location that is allowed to hold collections, such as a freezer or shelf configured for that.
 - **Position already used / duplicate position.** That well is taken in the plate or box, or the same position appears twice in the file for the same collection.
 - **Barcode already exists / duplicate barcode.** The barcode is already in the database or appears twice in the file.

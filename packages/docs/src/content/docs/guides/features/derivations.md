@@ -36,7 +36,7 @@ Open **Operations → Derivations** and click **Import CSV**. Four steps: **Uplo
 
 **Upload.** Choose **Source** (Control Batch or Study Subject) and **Parent container type**. Control batch parents: Paper (DBS spots) or Cryovial Tube. Study subject parents: Paper (DBS spots), Micronix Tube, or Cryovial Tube. Optional **Import settings** set derivation type, derived specimen type, derived container type, protocol, and date for the whole file; otherwise supply them per row. Select a CSV and **Download template** for columns that match the source, parent type, and current settings. Click **Validate & Continue**. Validation does not write.
 
-**Collections.** If the CSV names missing plates or boxes, assign a location each, then click **Create collections & continue**.
+**Collections.** If the CSV names plates or boxes that do not exist yet, assign a location for each one, then click **Continue to review**. They are created together with your derivations when you import.
 
 **Review & Edit.** Summary of valid, invalid, and warnings, plus a per-row table. Click **Create derivations**.
 
@@ -48,7 +48,7 @@ CSV columns for the derived container:
 - Cryovial: `box_name` or `collection_barcode`, and `position`. `container_barcode` is optional.
 - Paper: `box_name` or `bag_name`, plus `sheet_name`. `sublabel` is optional.
 
-A plate or cryovial box that doesn't exist yet is created in the **Collections** step. One given only by `collection_barcode` is named after its barcode, as in bulk import, so either import finds it later by that barcode or by that name.
+A plate or cryovial box that doesn't exist yet is assigned a location in the **Collections** step and created when the import runs. One given only by `collection_barcode` is named after its barcode, as in bulk import, so either import finds it later by that barcode or by that name.
 
 For `derivation_type` in CSV, use the stored value: `aliquot` for Distribution, `dna_extraction` for DNA Extraction. The UI shows readable labels.
 

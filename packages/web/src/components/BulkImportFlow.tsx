@@ -448,7 +448,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
               <div className="storage-step-connector" />
               <div className={`storage-step-item ${effectiveStep === 'collections' ? 'storage-step-item--active' : ''}`}>
                 <span className="storage-step-item__circle">2</span>
-                <span>Create Collections{missingCollections.length === 0 && effectiveStep === 'upload' ? ' (if needed)' : ''}</span>
+                <span>Collection Locations{missingCollections.length === 0 && effectiveStep === 'upload' ? ' (if needed)' : ''}</span>
               </div>
               <div className="storage-step-connector" />
               <div className={`storage-step-item ${effectiveStep === 'import' ? 'storage-step-item--active' : ''}`}>
@@ -670,9 +670,9 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
           {effectiveStep === 'collections' && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-semibold mb-2 text-app-text">Create Missing Collections</h2>
+                <h2 className="text-xl font-semibold mb-2 text-app-text">Assign Locations for New Collections</h2>
                 <p className="text-sm text-app-text-muted">
-                  The following collections need to be created. Please specify a location for each one.
+                  These Collections do not exist yet and will be created when you run the import. Choose a Location for each one.
                 </p>
               </div>
 

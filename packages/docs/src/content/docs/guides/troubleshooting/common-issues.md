@@ -13,7 +13,7 @@ Read the validation messages first. They name the row and the problem. Nothing i
 
 **Subject already exists.** For **Specimens Only**, subjects must already exist. For **Combined**, existing subjects are reused and specimens are added. For **Subjects Only**, each name must be new in the study.
 
-**Collection not found.** Use the **Create Missing Collections** step, or fix the name or barcode in the CSV.
+**Collection not found.** Assign a location on the **Collection Locations** step so the import creates it, or fix the name or barcode in the CSV.
 
 **Invalid position.** For micronix and static wells, stored form is `A01` (letter A-H plus two digits). `A1` and `a1` are accepted and padded to `A01`. `B012` is not valid. For cryovial, match the box layout and stay consistent within the box.
 

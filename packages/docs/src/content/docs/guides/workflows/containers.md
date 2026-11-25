@@ -28,7 +28,7 @@ A **container** is the physical unit that holds specimen material. A **collectio
 There is no standalone "create plate" page. Collections are created when a workflow needs them:
 
 - **Move Micronix Tubes** or **Move Cryovial Tubes:** **Create Plates** or **Create Boxes** when the destination does not exist. See [Container movement](/docs/guides/bulk-operations/container-movement/).
-- **Bulk import:** **Create Missing Collections** when the CSV names a collection that is not in the database.
+- **Bulk import:** assign a location on the **Collection Locations** step when the CSV names a collection that is not in the database; the import creates it.
 - **Specimen registration** or **Add container:** **Create new collection** on the collection field.
 
 You provide a name, a location, and optionally a barcode.

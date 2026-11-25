@@ -246,6 +246,10 @@ describe('BulkImportFlow', () => {
       )
 
       expect(await screen.findByRole('heading', { name: 'PLATE-001' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /assign locations for new collections/i })).toBeInTheDocument()
+      expect(screen.getByText(/do not exist yet and will be created when you run the import/i)).toBeInTheDocument()
+      expect(screen.getByText('Collection Locations')).toBeInTheDocument()
+      expect(screen.queryByText(/create missing collections/i)).not.toBeInTheDocument()
       expect(collectionsApi.check).toHaveBeenCalledWith({
         collections: [{ identifier: 'PLATE-001', type: 'micronix_plate' }],
       })
