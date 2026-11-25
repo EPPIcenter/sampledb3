@@ -13,7 +13,7 @@ interface SystemInsightsProps {
 
 export default function SystemInsights({ data, loading }: SystemInsightsProps) {
   const { theme } = useTheme()
-  const chartColors = useMemo(() => getAppChartColors(), [theme])
+  const chartColors = useMemo(() => getAppChartColors(theme), [theme])
 
   if (loading || !data) {
     return (

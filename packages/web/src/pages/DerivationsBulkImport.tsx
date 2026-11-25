@@ -153,7 +153,7 @@ export default function DerivationsBulkImport() {
       sourceType,
       parentContainerType,
       specimenTypes,
-      exampleDerivationType: settings.derivationType || DERIVATION_TYPES[0]?.value,
+      exampleDerivationType: settings.derivationType || DERIVATION_TYPES[0].value,
       exampleProtocol: settings.protocol || undefined,
     })
 

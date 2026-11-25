@@ -135,7 +135,7 @@ export function getLocationSearchHighlightQuery(raw: string): string {
   const t = raw.trim()
   if (!t) return ''
   const segs = parseLocationPathSegments(t)
-  if (segs) return segs[segs.length - 1]! ?? t
+  if (segs) return segs[segs.length - 1]
   return t
 }
 

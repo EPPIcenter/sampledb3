@@ -68,7 +68,7 @@ export function useStudySummaryCards() {
 
   useEffect(() => {
     return queryClient.getQueryCache().subscribe((event) => {
-      const key = event.query?.queryKey
+      const key = event.query.queryKey
       if (
         key?.[0] === studyKeys.all[0] &&
         (key[1] === 'summary-card' || key[1] === 'summaries-batch')

@@ -188,7 +188,7 @@ export function usePlateScanBootstrap() {
     queryKey: [...exportWorkflowKeys.plateScanBootstrap(), 'plates'] as const,
     queryFn: async (): Promise<PlateScanPlate[]> => {
       const res = await collectionsApi.listCollectionsByType('micronix_plate')
-      return (res.collections ?? []).map((c) => ({
+      return res.collections.map((c) => ({
         id: c.id,
         name: c.name,
       }))

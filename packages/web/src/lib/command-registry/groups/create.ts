@@ -12,7 +12,7 @@ function subjectDetailId(pathname: string): string | null {
 }
 
 export function buildCreateCommands(d: CommandDependencies): Command[] {
-  const { pathname, search } = d.location
+  const { pathname, search } = d
   const out: Command[] = []
 
   if (pathname === '/' || pathname === '/studies' || /^\/studies\/\d+$/.test(pathname)) {

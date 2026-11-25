@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
+import { useEffect, useState, useRef, useMemo, useCallback, useEffectEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import type { Study, StudySummaryBasic } from '../lib/api/studies'
 import StudyCard from '../components/StudyCard'
@@ -156,7 +156,7 @@ export default function Studies() {
     )
 
     cardRefs.current.forEach((element) => {
-      if (element && summaryObserverRef.current) {
+      if (summaryObserverRef.current) {
         summaryObserverRef.current.observe(element)
       }
     })
@@ -166,20 +166,18 @@ export default function Studies() {
     }
   }, [studies, prefetchSummaries])
 
+  const loadNextPage = useEffectEvent(() => {
+    if (infiniteQuery.hasNextPage && !infiniteQuery.isFetchingNextPage) {
+      void infiniteQuery.fetchNextPage()
+    }
+  })
+
   useEffect(() => {
     if (hasActiveFilters || !infiniteQuery.hasNextPage) return
 
     const observer = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => {
-          if (
-            entry.isIntersecting &&
-            infiniteQuery.hasNextPage &&
-            !infiniteQuery.isFetchingNextPage
-          ) {
-            void infiniteQuery.fetchNextPage()
-          }
-        })
+        if (entries.some((entry) => entry.isIntersecting)) loadNextPage()
       },
       { rootMargin: '200px' }
     )
@@ -189,12 +187,9 @@ export default function Studies() {
     }
 
     return () => observer.disconnect()
-  }, [
-    hasActiveFilters,
-    infiniteQuery.hasNextPage,
-    infiniteQuery.isFetchingNextPage,
-    infiniteQuery.fetchNextPage,
-  ])
+    // isFetchingNextPage re-creates the observer after each page, which fires again
+    // while the sentinel is still visible, so short pages keep loading.
+  }, [hasActiveFilters, infiniteQuery.hasNextPage, infiniteQuery.isFetchingNextPage])
 
   const filteredAndSortedStudies = useMemo(() => {
     let filtered = [...studies]

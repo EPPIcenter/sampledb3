@@ -10,7 +10,14 @@ Canonical triage roles mapped to GitHub labels; see `docs/agents/triage-labels.m
 
 ### Domain docs
 
-Single-context layout — `CONTEXT.md` and `docs/adr/` at repo root when present. See `docs/agents/domain.md`.
+`CONTEXT.md` (glossary) and `docs/adr/` (decisions) at repo root. See `docs/agents/domain.md`.
+
+### Package docs
+
+- Writing an API test (test database, factories, authenticated routes): `packages/api/src/__tests__/README.md`
+- Writing a web test (render helper, API mocks, React Query hooks): `packages/web/src/__tests__/README.md`
+- Changing the schema, a migration, or a transaction: `packages/api/src/db/README.md`
+- Finding the code behind a UI label: `packages/web/src/components/Sidebar.tsx` (label → path) → `packages/web/src/App.tsx` (path → page) → the page's hooks and `lib/` → `packages/api/src/routes` → `packages/api/src/lib`
 
 ### Tests
 
@@ -20,7 +27,7 @@ Single-context layout — `CONTEXT.md` and `docs/adr/` at repo root when present
 | `@sampledb/api` | `cd packages/api && bun test src/...` | **Bun** (needs `bun:sqlite`) |
 | repo root | `bun run test` | both, via package scripts |
 
-**Web tests must use `bun run test` (Vitest), not `bun test`.** Bun's runner hangs on React component tests (no `vi.importActual`, no jsdom). Piping a hung process to `tail` blocks until EOF — avoid `| tail` on web tests unless you know the runner exits.
+**Run web tests with `bun run test` (Vitest).** It runs `vitest run`, which exits on its own, so piping to `tail` or `grep` is safe. Bun's own runner (`bun test`) hangs on React component tests.
 
 Example (completes in ~1s):
 
@@ -28,9 +35,9 @@ Example (completes in ~1s):
 cd packages/web && bun run test -- src/components/__tests__/BulkImportFlow.test.tsx
 ```
 
-### Pre-commit hooks
+### Pre-commit hooks and CI
 
-CI builds the Docker image with `bun run build`, which runs `tsc` on API and web. Type errors that tests miss will fail the nightly build.
+The `Checks` workflow runs `bun run ci:verify` on every PR: typecheck, lint, build, unit tests, and the docs stale-claims check. Lint is clean, so any lint error is yours.
 
 Install repo hooks once per clone:
 
@@ -38,8 +45,8 @@ Install repo hooks once per clone:
 bun run setup:hooks
 ```
 
-The pre-commit hook runs `typecheck` on `@sampledb/contract`, `@sampledb/api`, and/or `@sampledb/web` when staged files touch those packages (or Docker/build config). To mirror CI fully before pushing:
+The pre-commit hook runs `typecheck` on `@sampledb/contract`, `@sampledb/api`, and/or `@sampledb/web` when staged files touch those packages (or Docker/build config), and lints the staged API/web source files. It refuses a source file with unstaged edits, since eslint would lint the working-tree copy. To mirror CI fully before pushing:
 
 ```bash
-bun run ci:verify   # typecheck + build all packages
+bun run ci:verify
 ```

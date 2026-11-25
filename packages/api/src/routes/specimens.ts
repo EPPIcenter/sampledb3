@@ -16,6 +16,7 @@ import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { validateBulkSpecimenRows, createBulkSpecimenRows } from '../lib/registration-orchestrator'
+import { insertedRow } from '../lib/inserted-row'
 
 /**
  * Create specimens routes with database injection
@@ -178,15 +179,13 @@ specimens.post('/', memberMiddleware, async (c) => {
       insertData.collectionDate = validation.resolved.collectionDate
     }
     
-    const [newSpecimen] = await dbInstance
-      .insert(specimen)
-      .values(insertData)
-      .returning()
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
-    if (!newSpecimen) {
-      throw new Error('Insert did not return specimen row')
-    }
+    const newSpecimen = insertedRow(
+      await dbInstance
+        .insert(specimen)
+        .values(insertData)
+        .returning(),
+      'specimen',
+    )
     let containerResult: { success: boolean; containerId?: number; error?: string } | null = null
 
     if (data.container) {

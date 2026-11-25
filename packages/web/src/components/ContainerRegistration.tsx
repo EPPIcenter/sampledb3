@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useEffectEvent } from 'react'
 import CollectionSelectOrCreate, {
   type CollectionOption,
   type CollectionSelectValue,
@@ -133,15 +133,21 @@ export default function ContainerRegistration({
     }
   }
 
-  // When allowed types are restricted and current type is not allowed, reset to first allowed
-  useEffect(() => {
+  // When allowed types are restricted and current type is not allowed, reset to first allowed.
+  // Runs when the allowed list changes; the select only offers allowed types.
+  const resetDisallowedContainerType = useEffectEvent(() => {
     if (allowedContainerTypes.length > 0 && !allowedContainerTypes.includes(containerType)) {
       const first = allowedContainerTypes[0] as ContainerType
       setContainerType(first)
       setFormData((prev) => ({ ...prev, containerType: first }))
     }
+  })
+  useEffect(() => {
+    resetDisallowedContainerType()
   }, [allowedContainerTypes])
 
+  // Read at use time, so a unit picked while defaults load is kept.
+  const hasChosenUnit = useEffectEvent(() => Boolean(selectedUnitId || defaultValue?.unitId))
   useEffect(() => {
     const cancelled = { current: false }
     loadUnits()
@@ -158,7 +164,7 @@ export default function ContainerRegistration({
             totalQuantity: typeDefaults.totalQuantity,
             remainingQuantity: typeDefaults.remainingQuantity,
           })
-          if (!selectedUnitId && !defaultValue?.unitId) {
+          if (!hasChosenUnit()) {
             const resUnits = await unitsApi.listAll()
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- effect cleanup can set cancelled.current between awaits
             if (cancelled.current) return
@@ -215,7 +221,7 @@ export default function ContainerRegistration({
     }
   }, [effectiveCollectionType, containerType, paperParentType])
 
-  const loadUnits = async () => {
+  const loadUnits = useEffectEvent(async () => {
     try {
       setUnitsError(null)
       // Load units filtered by container type
@@ -228,7 +234,7 @@ export default function ContainerRegistration({
       console.error('Failed to load units:', err)
       // Don't fallback - show error to user instead
     }
-  }
+  })
 
   const isInitialMount = useRef(true)
   // When container type or unit changes (after mount), clear quantity fields so placeholder (default) text shows again
@@ -282,7 +288,7 @@ export default function ContainerRegistration({
     return isValid
   }
 
-  const updateContainerData = () => {
+  const updateContainerData = useEffectEvent(() => {
     const data: ContainerData = {
       ...formData,
       unitId: selectedUnitId,
@@ -293,7 +299,7 @@ export default function ContainerRegistration({
     } else {
       onChange(null)
     }
-  }
+  })
 
   const handleFieldChange = (field: keyof ContainerData, value: any) => {
     setFormData((prev) => {

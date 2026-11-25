@@ -1,9 +1,26 @@
 import type { CSSProperties } from 'react'
+import type { Theme } from '../contexts/theme-types'
 
 /**
- * Read app chart palette from CSS variables (--app-chart-1 … --app-chart-8).
- * Values are theme-aware (light/dark) so charts adapt automatically.
+ * Read token values for `theme` from a hidden probe element carrying that theme, not from the
+ * document root: a component rendering for a newly chosen theme runs before ThemeProvider applies
+ * it to the root. Returns null outside a browser.
  */
+function readThemeTokens(theme: Theme, names: readonly string[]): string[] | null {
+  if (typeof document === 'undefined') return null
+  const probe = document.createElement('div')
+  probe.dataset.theme = theme
+  probe.hidden = true
+  document.body.appendChild(probe)
+  try {
+    const style = getComputedStyle(probe)
+    return names.map((name) => style.getPropertyValue(name).trim())
+  } finally {
+    probe.remove()
+  }
+}
+
+/** App chart palette tokens (--app-chart-1 … --app-chart-8); each theme sets its own values. */
 const CHART_TOKEN_NAMES = [
   '--app-chart-1',
   '--app-chart-2',
@@ -24,8 +41,9 @@ function parseTokenRgb(value: string): string {
   return `rgb(${r}, ${g}, ${b})`
 }
 
-export function getAppChartColors(): string[] {
-  if (typeof document === 'undefined') {
+export function getAppChartColors(theme: Theme): string[] {
+  const tokens = readThemeTokens(theme, CHART_TOKEN_NAMES)
+  if (!tokens) {
     return [
       'rgb(20, 184, 166)',
       'rgb(13, 148, 136)',
@@ -37,10 +55,8 @@ export function getAppChartColors(): string[] {
       'rgb(71, 85, 105)',
     ]
   }
-  const root = document.documentElement
-  const style = getComputedStyle(root)
-  return CHART_TOKEN_NAMES.map((name) => {
-    const value = style.getPropertyValue(name).trim()
+  return CHART_TOKEN_NAMES.map((_, i) => {
+    const value = tokens[i]
     return value ? parseTokenRgb(value) : 'rgb(100, 116, 139)'
   })
 }
@@ -64,14 +80,12 @@ export interface AppAxisColors {
 }
 
 /** Theme-aware colors for chart axes, grid lines, and labels (e.g. StudyTimeline). */
-export function getAppAxisColors(): AppAxisColors {
-  if (typeof document === 'undefined') {
+export function getAppAxisColors(theme: Theme): AppAxisColors {
+  const tokens = readThemeTokens(theme, [AXIS_TOKEN_NAMES.text, AXIS_TOKEN_NAMES.border])
+  if (!tokens) {
     return { text: 'rgb(30, 41, 59)', border: 'rgb(226, 232, 240)' }
   }
-  const root = document.documentElement
-  const style = getComputedStyle(root)
-  const text = style.getPropertyValue(AXIS_TOKEN_NAMES.text).trim()
-  const border = style.getPropertyValue(AXIS_TOKEN_NAMES.border).trim()
+  const [text, border] = tokens
   return {
     text: text ? parseTokenRgb(text) : 'rgb(30, 41, 59)',
     border: border ? parseTokenRgb(border) : 'rgb(226, 232, 240)',
@@ -79,8 +93,9 @@ export function getAppAxisColors(): AppAxisColors {
 }
 
 /** Theme-aware styles for Recharts (and other) chart tooltips. */
-export function getAppTooltipStyles(): AppTooltipStyles {
-  if (typeof document === 'undefined') {
+export function getAppTooltipStyles(theme: Theme): AppTooltipStyles {
+  const tokens = readThemeTokens(theme, [TOOLTIP_TOKEN_NAMES.card, TOOLTIP_TOKEN_NAMES.text, TOOLTIP_TOKEN_NAMES.border])
+  if (!tokens) {
     return {
       contentStyle: {
         margin: 0,
@@ -94,11 +109,7 @@ export function getAppTooltipStyles(): AppTooltipStyles {
       labelStyle: { color: 'rgb(30, 41, 59)' },
     }
   }
-  const root = document.documentElement
-  const style = getComputedStyle(root)
-  const card = style.getPropertyValue(TOOLTIP_TOKEN_NAMES.card).trim()
-  const text = style.getPropertyValue(TOOLTIP_TOKEN_NAMES.text).trim()
-  const border = style.getPropertyValue(TOOLTIP_TOKEN_NAMES.border).trim()
+  const [card, text, border] = tokens
   const bg = card ? `rgb(${card})` : 'rgb(255, 255, 255)'
   const textColor = text ? `rgb(${text})` : 'rgb(30, 41, 59)'
   const borderColor = border ? `rgb(${border})` : 'rgb(226, 232, 240)'

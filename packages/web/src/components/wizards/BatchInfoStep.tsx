@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useEffectEvent, useRef, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { controlsApi } from '../../lib/api/controls'
 import type { ControlDefinition } from '../../lib/api/controls'
@@ -74,12 +74,16 @@ export default function BatchInfoStep({
     }
   }, [definitionsQuery.data])
 
+  // Attach the loaded definition once; edits to other batch fields don't re-run this.
+  const attachDefinition = useEffectEvent((def: ControlDefinition) => {
+    onChange({ ...batchInfo, controlDefinition: def })
+  })
   useEffect(() => {
     const def = definitionDetailQuery.data
     if (def && batchInfo.controlDefinitionId && !batchInfo.controlDefinition) {
-      onChange({ ...batchInfo, controlDefinition: def })
+      attachDefinition(def)
     }
-  }, [definitionDetailQuery.data, batchInfo.controlDefinitionId, batchInfo.controlDefinition, onChange])
+  }, [definitionDetailQuery.data, batchInfo.controlDefinitionId, batchInfo.controlDefinition])
 
   // Client-side filter by search, strains, and density
   const filteredDefinitions = useMemo(() => {

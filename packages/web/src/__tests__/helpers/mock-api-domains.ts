@@ -122,7 +122,7 @@ const MODULE_API_KEYS: Record<ApiModuleId, string[]> = {
 export function modulesForOverrides(overrides: MockApiOverrides): ApiModuleId[] {
   const mods = new Set<ApiModuleId>()
   for (const key of Object.keys(overrides)) {
-    const mod = API_KEY_TO_MODULE[key]
+    const mod = API_KEY_TO_MODULE[key] as ApiModuleId | undefined
     if (mod) mods.add(mod)
   }
   return [...mods]

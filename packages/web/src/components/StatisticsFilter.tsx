@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useEffectEvent } from 'react'
 import { studiesApi } from '../lib/api/studies';
 import type { Study } from '../lib/api/studies';
 import { specimenTypesApi } from '../lib/api/reference-data';
@@ -96,15 +96,18 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
     }
   }, [studyPickerOpen])
 
+  // Only a search change should restart the debounce; opening the picker loads above.
+  const reloadForSearch = useEffectEvent(() => {
+    if (studyPickerOpen) void loadStudies()
+  })
   useEffect(() => {
-    if (!studyPickerOpen) return
     const timeout = setTimeout(() => {
-      void loadStudies()
+      reloadForSearch()
     }, 300)
     return () => clearTimeout(timeout)
   }, [studySearch])
 
-  const loadStudies = async () => {
+  const loadStudies = useEffectEvent(async () => {
     try {
       setStudyLoading(true)
       const response = await studiesApi.list(studySearch || undefined)
@@ -114,7 +117,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
     } finally {
       setStudyLoading(false)
     }
-  }
+  })
 
   const selectedStudy = studies.find((s) => s.shortCode === localFilters.study)
 

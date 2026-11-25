@@ -103,9 +103,7 @@ export default function CollectionSelectOrCreate({
     const el = containerRef.current?.querySelector(
       `[data-suggestion-index="${highlightIndex}"]`
     )
-    if (el && typeof (el as HTMLElement).scrollIntoView === 'function') {
-      (el as HTMLElement).scrollIntoView({ block: 'nearest' })
-    }
+    el?.scrollIntoView({ block: 'nearest' })
   }, [showDropdown, highlightIndex])
 
   useClickOutside(containerRef, () => setDropdownOpen(false), dropdownOpen)

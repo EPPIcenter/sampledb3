@@ -121,7 +121,7 @@ containers.get('/:id', authMiddleware, async (c) => {
       return c.json({ error: 'Container not found' }, 404)
     }
 
-    const [view] = await loadContainerReadViews(database, [container])
+    const view = (await loadContainerReadViews(database, [container])).at(0)
     if (!view) {
       return c.json({ error: 'Container not found' }, 404)
     }
@@ -224,7 +224,7 @@ containers.patch('/:id', memberMiddleware, async (c) => {
         }
       }
 
-      if (newBarcode !== null && newBarcode !== undefined) {
+      if (newBarcode !== null) {
         const takenBy = await resolveContainerByBarcode(database, newBarcode)
         if (takenBy !== null && takenBy !== id) {
           return c.json({ error: `Barcode '${newBarcode}' is already in use` }, 400)
@@ -242,7 +242,7 @@ containers.patch('/:id', memberMiddleware, async (c) => {
         const trimmed = rawSublabel.trim()
         newSublabel = trimmed.length === 0 ? null : trimmed
       }
-      if (newSublabel !== null && newSublabel !== undefined) {
+      if (newSublabel !== null) {
         const takenBy = await resolveContainerByBarcode(database, newSublabel)
         if (takenBy !== null && takenBy !== id) {
           return c.json({ error: `Sublabel '${newSublabel}' is already in use` }, 400)

@@ -210,7 +210,7 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
     ctx.save()
     ctx.translate(margin.left, margin.top)
 
-    const axisColors = getAppAxisColors()
+    const axisColors = getAppAxisColors(theme)
 
     // Create scales
     const xScale = scaleLinear()
@@ -491,7 +491,7 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
       const point = nearestPoint as ScatterDataPoint
       navigate(`/specimens/${point.specimenId}`)
     }
-  }, [dateRange, filteredSubjects, spatialIndex, navigate])
+  }, [allPoints.length, dateRange, filteredSubjects, spatialIndex, navigate])
 
   // Set up canvas and event listeners
   useEffect(() => {

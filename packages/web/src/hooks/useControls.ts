@@ -4,6 +4,7 @@ import { strainsApi } from '../lib/api/reference-data'
 import type { Strain } from '../lib/api/reference-data'
 import { getCompositionKey } from '../lib/composition-key'
 import { localToday } from '../lib/date-utils'
+import { getHttpStatus } from '../ui/async'
 
 export const controlKeys = {
   all: ['blood-controls'] as const,
@@ -121,6 +122,8 @@ export function useControlDefinitionWizardSeed(definitionId: number | undefined)
       ])
       return { summaryResponse, suggestedName: nameResponse.name, productionDate: today }
     },
+    // A missing definition stays missing; show it now instead of after a retry.
+    retry: (failureCount, error) => getHttpStatus(error) !== 404 && failureCount < 1,
     enabled: !!definitionId && definitionId > 0,
   })
 }

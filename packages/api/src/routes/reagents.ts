@@ -8,6 +8,7 @@ import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { handleRouteError } from '../lib/error-handler'
+import { insertedRow } from '../lib/inserted-row'
 
 /**
  * Create reagents routes with database injection
@@ -92,19 +93,17 @@ reagents.post('/', memberMiddleware, async (c) => {
     const data = schema.parse(body)
     const user = c.get('user')
     
-    const [newReagent] = await database
-      .insert(reagent)
-      .values({
-        ...data,
-        createdBy: user?.id,
-        updatedBy: user?.id,
-      })
-      .returning()
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
-    if (!newReagent) {
-      throw new Error('Insert did not return reagent row')
-    }
+    const newReagent = insertedRow(
+      await database
+        .insert(reagent)
+        .values({
+          ...data,
+          createdBy: user?.id,
+          updatedBy: user?.id,
+        })
+        .returning(),
+      'reagent',
+    )
     return c.json({ reagent: newReagent }, 201)
   } catch (error) {
     return handleRouteError(error, c)

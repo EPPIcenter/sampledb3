@@ -14,6 +14,7 @@ import {
 } from './collections/collection-lifecycle'
 import { utcNow } from './datetime'
 import { ValidationError } from './error-handler'
+import { insertedRow } from './inserted-row'
 
 type DatabaseOrTransaction =
   | Database
@@ -325,8 +326,7 @@ async function ensureSheetId(
       updatedBy: options?.userId,
     })
     .returning()
-  const row = inserted[0]
-  if (!row) throw new Error('Insert did not return sheet row')
+  const row = insertedRow(inserted, 'sheet')
   return row.id
 }
 

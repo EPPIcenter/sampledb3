@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useEffectEvent } from 'react'
 import { settingsApi } from '../lib/api/settings';
 import { unitsApi } from '../lib/api/reference-data';
 import type { ContainerDefaults } from '../lib/api/settings';
@@ -52,11 +52,13 @@ export default function ContainerTypeUnitsManager({
   // All available units
   const [allUnits, setAllUnits] = useState<Unit[]>([])
 
+  // Bumped by handlers to reload; the effect owns loading.
+  const [reloadCount, setReloadCount] = useState(0)
   useEffect(() => {
-    loadData()
-  }, [])
+    void loadData()
+  }, [reloadCount])
 
-  const loadData = async () => {
+  const loadData = useEffectEvent(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -110,7 +112,7 @@ export default function ContainerTypeUnitsManager({
     } finally {
       setLoading(false)
     }
-  }
+  })
 
   const handleToggleUnit = async (containerType: ContainerType, unitId: number) => {
     const currentAllowed = allowedUnits[containerType]
@@ -148,7 +150,7 @@ export default function ContainerTypeUnitsManager({
       setError(errorMsg)
       onError?.(errorMsg)
       // Reload to get correct state
-      await loadData()
+      setReloadCount((n) => n + 1)
     }
   }
 

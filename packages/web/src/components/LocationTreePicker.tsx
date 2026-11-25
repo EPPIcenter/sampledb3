@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, useEffectEvent } from 'react'
 import { locationsApi } from '../lib/api/locations';
 import type { Location } from '../lib/api/types';
 import {
@@ -38,7 +38,7 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
     }
   }, [open])
 
-  const loadLocations = async () => {
+  const loadLocations = useEffectEvent(async () => {
     try {
       setLoading(true)
       // Fetch all locations in a single request (no pagination params)
@@ -65,7 +65,7 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
     } finally {
       setLoading(false)
     }
-  }
+  })
 
   const locationChildrenMap = useMemo(
     () => buildLocationChildrenMap(locations),

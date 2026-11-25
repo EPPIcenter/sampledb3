@@ -1,4 +1,4 @@
-export { type PresentationStatus, fromQuery, getQueryErrorMessage } from './async'
+export { type PresentationStatus, fromQuery, getHttpStatus, getQueryErrorMessage } from './async'
 export { AsyncPresentation, type AsyncPresentationProps } from './AsyncPresentation'
 export { Button, buttonClassName, type ButtonProps, type ButtonVariant } from './Button'
 export { EmptyState, type EmptyStateProps } from './EmptyState'

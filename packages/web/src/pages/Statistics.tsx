@@ -396,7 +396,7 @@ export default function Statistics() {
         )}
 
         {/* Loading overlay when refreshing with data */}
-        {statisticsQuery.isFetching && data && (
+        {statisticsQuery.isFetching && (
           <div className="mb-6 p-4 rounded-lg flex items-center gap-3 border" style={{ backgroundColor: 'rgb(var(--app-accent-muted))', borderColor: 'rgb(var(--app-accent) / 0.3)' }}>
             <svg className="animate-spin h-5 w-5 flex-shrink-0" style={{ color: 'rgb(var(--app-accent-hover))' }} fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />

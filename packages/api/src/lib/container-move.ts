@@ -513,7 +513,7 @@ export async function executeMoves(database: Database, request: BatchMoveRequest
       return { success: false, moved: 0, errors }
     }
 
-    await database.transaction(async (tx) => {
+    database.transaction((tx) => {
       for (const { info, targetCollectionId } of finalMoves) {
         if (!targetCollectionId) continue
         switch (info.containerType) {

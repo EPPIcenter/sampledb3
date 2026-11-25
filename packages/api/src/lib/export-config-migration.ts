@@ -49,16 +49,16 @@ function appendSublabelWhenNeeded(columns: string[]): { columns: string[]; chang
 export function migrateExportConfigurationColumnKeys(
   configs: ExportConfigurations,
 ): { configs: ExportConfigurations; changed: boolean } {
-  let changed = false
   const configurations = configs.configurations.map((config) => {
     const retired = rewriteRetiredColumnKeys(config.columns)
     const withSublabel = appendSublabelWhenNeeded(retired.columns)
     if (!retired.changed && !withSublabel.changed) {
       return config
     }
-    changed = true
     return { ...config, columns: withSublabel.columns }
   })
+  // Unchanged configs are returned as-is, so identity tells us whether anything was rewritten.
+  const changed = configurations.some((config, i) => config !== configs.configurations[i])
 
   if (!changed) {
     return { configs, changed: false }

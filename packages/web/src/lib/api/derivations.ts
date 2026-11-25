@@ -92,10 +92,11 @@ export const derivationsApi = {
       params,
     }),
   getSource: (containerId: number) =>
+    // Containers that were not derived get { type: 'original', source, ... } with no derivation.
     api.get<{
-      derivation: Derivation
-      parentContainer: any
-      parentSpecimen: Specimen
+      derivation?: Derivation
+      parentContainer?: any
+      parentSpecimen?: Specimen
     }>(`/derivations/containers/${containerId}/source`),
   getChain: (containerId: number) =>
     api.get<{

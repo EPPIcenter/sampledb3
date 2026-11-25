@@ -108,7 +108,7 @@ export function useDashboardSecondary() {
         controlsApi.list().catch(() => ({ controls: [] as unknown[] })),
       ])
 
-      const activities = (activityRes.activity ?? []) as Array<{
+      const activities = activityRes.activity as Array<{
         id: number
         type: string
         timestamp: string
@@ -126,7 +126,7 @@ export function useDashboardSecondary() {
           label: item.label,
           context: item.context,
         })),
-        hasControls: (controlsRes.controls?.length ?? 0) > 0,
+        hasControls: controlsRes.controls.length > 0,
       }
     },
   })

@@ -31,7 +31,7 @@ export type ContainerPlacementFields = {
 
 /** Placement-only collection info from a resolved placement bundle row. */
 export function projectContainerCollection(placement: ContainerPlacement): CollectionInfo | null {
-  if (placement.containerType === 'unknown' || !placement.collection) {
+  if (placement.containerType === 'unknown') {
     return null
   }
 

@@ -1,51 +1,17 @@
 # Domain Docs
 
-How the engineering skills should consume this repo's domain documentation when exploring the codebase.
+Read these before naming or changing domain concepts:
 
-## Before exploring, read these
-
-- **`CONTEXT.md`** at the repo root — the canonical domain glossary (entity names, hierarchies, scope). Read this before naming concepts in issues, tests, or refactors.
-- **`CONTEXT-MAP.md`** at the repo root if it exists — it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`** — read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
-
-`CONTEXT.md` exists in this repo. Start there for vocabulary; use the guides under `packages/docs/` for user-facing workflow detail.
-
-## File structure
-
-Single-context repo (most repos):
-
-```
-/
-├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
-└── src/
-```
-
-Multi-context repo (presence of `CONTEXT-MAP.md` at the root):
-
-```
-/
-├── CONTEXT-MAP.md
-├── docs/adr/                          ← system-wide decisions
-└── src/
-    ├── ordering/
-    │   ├── CONTEXT.md
-    │   └── docs/adr/                  ← context-specific decisions
-    └── billing/
-        ├── CONTEXT.md
-        └── docs/adr/
-```
+- **`CONTEXT.md`** is the domain glossary: entity names, hierarchies, and scope.
+- **`docs/adr/`** records design decisions. Read the ADRs that touch the area you're changing.
+- **`packages/docs/`** holds the user guide, for user-facing workflow detail.
 
 ## Use the glossary's vocabulary
 
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
-
-If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/grill-with-docs`).
+When your output names a domain concept (an issue title, a test name, a refactor proposal), use the term as `CONTEXT.md` defines it, not a synonym it lists under _Avoid_. If the concept isn't in the glossary, say so rather than inventing a term.
 
 ## Flag ADR conflicts
 
-If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
+If your change contradicts an ADR, say so explicitly instead of silently overriding it:
 
-> _Contradicts ADR-0007 (event-sourced orders) — but worth reopening because…_
+> _Contradicts ADR-0006 (unified container inbound write), but worth reopening because…_

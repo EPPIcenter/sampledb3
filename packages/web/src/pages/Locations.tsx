@@ -64,7 +64,7 @@ export default function Locations() {
 
   const locationsQuery = useLocationsList()
   const listStatus = fromQuery(locationsQuery, {
-    isEmpty: locationsQuery.isSuccess && (locationsQuery.data?.length ?? 0) === 0,
+    isEmpty: locationsQuery.isSuccess && locationsQuery.data.length === 0,
   })
   const preserveOnNextSync = useRef(false)
   const [locations, setLocations] = useState<Location[]>([])
@@ -158,7 +158,7 @@ export default function Locations() {
     if (nodeRef && tree) {
       // Small delay to ensure DOM is updated
       setTimeout(() => {
-        nodeRef?.scrollIntoView?.({
+        nodeRef.scrollIntoView({
           behavior: 'smooth',
           block: 'center',
           inline: 'nearest',

@@ -9,10 +9,10 @@
     "start": "bun dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
-    "test": "NODE_ENV=test bun test src",
-    "test:watch": "NODE_ENV=test bun test --watch src",
+    "test": "NODE_ENV=test bun test src eslint-rules",
+    "test:watch": "NODE_ENV=test bun test --watch src eslint-rules",
     "test:ui": "vitest --ui",
-    "test:coverage": "NODE_ENV=test bun test src --coverage",
+    "test:coverage": "NODE_ENV=test bun test src eslint-rules --coverage",
     "demo:seed": "bun src/lib/demo-seed.ts"
   },
   "dependencies": {

@@ -445,12 +445,11 @@ export default function CollectionDestinationPicker({
       <>
         {rootsWithBoxes.map((root) => renderLocationNode(root, 0))}
 
-        {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- collectionsByLocation[0] may be missing when key 0 not in map */}
-        {(collectionsByLocation[0] ?? []).length > 0 && (
+        {collectionsByLocation[0].length > 0 && (
           <div className="mt-4 pt-4 border-t border-app-border" role="listbox" aria-label={labels.unlocatedList}>
             <div className="font-medium text-sm text-app-text mb-2">{labels.unlocated}</div>
             <div className="space-y-1">
-              {(collectionsByLocation[0] ?? [])
+              {collectionsByLocation[0]
                 .filter((box) => {
                   if (!debouncedSearch.trim()) return true
                   const searchLower = debouncedSearch.toLowerCase()

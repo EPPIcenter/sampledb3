@@ -62,22 +62,18 @@ export async function runBulkCsvServerValidation(
     return validateRes.errors.map((e) => ({ row: e.index + 1, error: e.message }))
   }
 
-  if (ctx.importType === 'combined') {
-    const payload = buildBulkCombinedRequestPayload(data, {
-      containerType: ctx.containerType,
-      fixedStudyShortCode: ctx.fixedStudyShortCode,
-      missingCollections: ctx.missingCollections,
-      atomicMode: ctx.atomicMode,
-    })
-    const validateRes = await importsApi.bulkCombinedValidate(payload)
-    if (validateRes.valid || validateRes.errors.length === 0) return []
-    return validateRes.errors.map((e) => ({
-      row: e.rowIndex ?? e.subjectIndex + 1,
-      error: e.message,
-    }))
-  }
-
-  return []
+  const payload = buildBulkCombinedRequestPayload(data, {
+    containerType: ctx.containerType,
+    fixedStudyShortCode: ctx.fixedStudyShortCode,
+    missingCollections: ctx.missingCollections,
+    atomicMode: ctx.atomicMode,
+  })
+  const validateRes = await importsApi.bulkCombinedValidate(payload)
+  if (validateRes.valid || validateRes.errors.length === 0) return []
+  return validateRes.errors.map((e) => ({
+    row: e.rowIndex ?? e.subjectIndex + 1,
+    error: e.message,
+  }))
 }
 
 export async function runBulkCsvImport(

@@ -7,6 +7,7 @@ import ReferenceDataForm from '../components/ReferenceDataForm'
 import {
   referenceDataConfigs,
   getReferenceDataConfig,
+  type ReferenceDataConfig,
   type ReferenceDataType,
 } from '../config/reference-data-config'
 import { useStorageTypes } from '../hooks/useReferenceData'
@@ -23,10 +24,27 @@ import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/reference-data.css'
 
 export default function ReferenceData() {
-  const { canManageReferenceData } = useUser()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- tab from URL may be missing or invalid
   const activeTab = (searchParams.get('tab') as ReferenceDataType) || 'specimen-types'
+  const config = getReferenceDataConfig(activeTab)
+
+  if (!config) {
+    return <div>Invalid tab</div>
+  }
+  return <ReferenceDataContent activeTab={activeTab} config={config} />
+}
+
+/** Split out so its hooks run on every render, even when the tab is invalid. */
+function ReferenceDataContent({
+  activeTab,
+  config,
+}: {
+  activeTab: ReferenceDataType
+  config: ReferenceDataConfig
+}) {
+  const { canManageReferenceData } = useUser()
+  const [, setSearchParams] = useSearchParams()
   // Keep isAdmin for backward compatibility in this file (used in multiple places)
   const isAdmin = canManageReferenceData
 
@@ -36,12 +54,6 @@ export default function ReferenceData() {
       next.set('tab', tab)
       return next
     })
-  }
-
-  const config = getReferenceDataConfig(activeTab)
-   
-  if (!config) {
-    return <div>Invalid tab</div>
   }
 
   const queryClient = useQueryClient()

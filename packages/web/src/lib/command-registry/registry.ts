@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useShallowStable } from '../../hooks/useShallowStable'
 import type { Command } from '../commands'
 import type { CommandDependencies } from './command-deps'
 import { buildNavigationCommands } from './groups/navigation'
@@ -21,25 +22,8 @@ export function buildAllCommands(deps: CommandDependencies): Command[] {
   ]
 }
 
-export function useCommands(deps: CommandDependencies) {
-  return useMemo(
-    () => buildAllCommands(deps),
-    [
-      deps.navigate,
-      deps.location.pathname,
-      deps.location.search,
-      deps.location.key,
-      deps.canWrite,
-      deps.isAdmin,
-      deps.canManageReferenceData,
-      deps.theme,
-      deps.setTheme,
-      deps.toggleHelpModal,
-      deps.openSearchModal,
-      deps.refreshUser,
-      deps.handleExportSpecimens,
-      deps.handleExportInventory,
-      deps.handleClearFilters,
-    ]
-  )
+export function useCommands(deps: CommandDependencies): Command[] {
+  // The caller builds a new deps object each render; keep the last one while its fields are unchanged.
+  const stableDeps = useShallowStable(deps)
+  return useMemo(() => buildAllCommands(stableDeps), [stableDeps])
 }

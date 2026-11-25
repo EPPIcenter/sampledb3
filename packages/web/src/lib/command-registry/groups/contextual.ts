@@ -2,14 +2,14 @@ import type { Command } from '../../commands'
 import type { CommandDependencies } from '../command-deps'
 
 function mergeSearch(d: CommandDependencies, mutator: (sp: URLSearchParams) => void): void {
-  const sp = new URLSearchParams(d.location.search)
+  const sp = new URLSearchParams(d.search)
   mutator(sp)
   const next = sp.toString()
-  d.navigate({ pathname: d.location.pathname, search: next ? `?${next}` : '' })
+  d.navigate({ pathname: d.pathname, search: next ? `?${next}` : '' })
 }
 
 export function buildContextualCommands(d: CommandDependencies): Command[] {
-  const p = d.location.pathname
+  const p = d.pathname
   const out: Command[] = []
 
   const studyMatch = p.match(/^\/studies\/(\d+)$/)

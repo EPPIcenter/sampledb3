@@ -6,6 +6,7 @@ import type { EmptyCollectionItem, EmptyCollectionsDeleteIds } from '../lib/api/
 import { adminKeys, useAdminIntegrityReport } from '../hooks/useAdmin'
 import { Modal, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/admin.css'
+import { EMPTY_LIST } from '../lib/empty-list'
 
 const COLLECTION_TYPES: EmptyCollectionItem['type'][] = ['micronix_plate', 'cryovial_box', 'box', 'bag']
 
@@ -49,7 +50,7 @@ export default function AdminDataIntegrityEmptyCollections() {
   const queryClient = useQueryClient()
   const reportQuery = useAdminIntegrityReport()
   const reportStatus = fromQuery(reportQuery)
-  const collections = reportQuery.data?.emptyCollections ?? []
+  const collections = reportQuery.data?.emptyCollections ?? EMPTY_LIST
   const [mutationError, setMutationError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<SelectionKey>>(new Set())
   const [showDeleteModal, setShowDeleteModal] = useState(false)
