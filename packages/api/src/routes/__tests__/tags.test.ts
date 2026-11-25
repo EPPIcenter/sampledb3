@@ -6,6 +6,7 @@ import {
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createTagsRoutes } from '../tags'
 import {
+  createTestContainerTags,
   createTestSpecimen,
   createTestSpecimenType,
   createTestStorageContainer,
@@ -109,7 +110,7 @@ describe('Tags API', () => {
       const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
       const specimen = await createTestSpecimen(ctx.db, specimenType.id)
       const container = await createTestStorageContainer(ctx.db, { specimenId: specimen.id, unitId: unit.id })
-      await ctx.db.insert(storageContainerTag).values({ storageContainerId: container.id, tagId: tagRecord.id })
+      await createTestContainerTags(ctx.db, container.id, [tagRecord.id])
 
       const res = await ctx.request(`/api/tags/${tagRecord.id}`, { method: 'DELETE' })
 
