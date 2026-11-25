@@ -18,7 +18,10 @@ describe('Settings API', () => {
         password: 'password123',
         role: 'admin',
       },
-      additionalUsers: [{ key: 'viewer', email: 'viewer@test.com', password: 'password123', role: 'viewer' }],
+      additionalUsers: [
+        { key: 'member', email: 'member@test.com', password: 'password123', role: 'member' },
+        { key: 'viewer', email: 'viewer@test.com', password: 'password123', role: 'viewer' },
+      ],
       mount: (app, { db }) => {
         app.route('/api/settings', createSettingsRoutes(db))
       },
@@ -83,5 +86,73 @@ describe('Settings API', () => {
         expect(((await res.json()) as { error: string }).error).toMatch(/userId must be a positive integer or null/)
       })
     }
+  })
+
+  describe('connected_apps setting', () => {
+    it('defaults to off in GET /api/settings and GET /api/settings/connected_apps', async () => {
+      const allRes = await ctx.request('/api/settings', { method: 'GET' })
+      expect(allRes.status).toBe(200)
+      const allData = (await allRes.json()) as { connected_apps?: { enabled: boolean } }
+      expect(allData.connected_apps).toEqual({ enabled: false })
+
+      const singleRes = await ctx.request('/api/settings/connected_apps', { method: 'GET' })
+      expect(singleRes.status).toBe(200)
+      expect(await singleRes.json()).toEqual({
+        key: 'connected_apps',
+        value: { enabled: false },
+      })
+    })
+
+    it('allows an admin to enable and disable connected_apps', async () => {
+      const enableRes = await ctx.request('/api/settings/connected_apps', {
+        method: 'PUT',
+        json: { enabled: true },
+      })
+      expect(enableRes.status).toBe(200)
+      expect(await enableRes.json()).toEqual({
+        key: 'connected_apps',
+        value: { enabled: true },
+      })
+
+      const afterEnable = await ctx.request('/api/settings/connected_apps', { method: 'GET' })
+      expect(await afterEnable.json()).toEqual({
+        key: 'connected_apps',
+        value: { enabled: true },
+      })
+
+      const disableRes = await ctx.request('/api/settings/connected_apps', {
+        method: 'PUT',
+        json: { enabled: false },
+      })
+      expect(disableRes.status).toBe(200)
+      expect(await disableRes.json()).toEqual({
+        key: 'connected_apps',
+        value: { enabled: false },
+      })
+    })
+
+    it('rejects non-admin updates (member and viewer) with 403', async () => {
+      const memberRes = await ctx.request('/api/settings/connected_apps', {
+        method: 'PUT',
+        cookie: ctx.cookies.member,
+        json: { enabled: true },
+      })
+      expect(memberRes.status).toBe(403)
+
+      const viewerRes = await ctx.request('/api/settings/connected_apps', {
+        method: 'PUT',
+        cookie: ctx.cookies.viewer,
+        json: { enabled: true },
+      })
+      expect(viewerRes.status).toBe(403)
+    })
+
+    it('rejects invalid connected_apps payload with 400', async () => {
+      const res = await ctx.request('/api/settings/connected_apps', {
+        method: 'PUT',
+        json: { enabled: 'yes' },
+      })
+      expect(res.status).toBe(400)
+    })
   })
 })

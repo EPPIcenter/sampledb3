@@ -40,6 +40,9 @@ export type QpcrExperimentWell = InferSelectModel<typeof qpcrExperimentWell>
 export type QpcrRun = InferSelectModel<typeof qpcrRun>
 export type QpcrWellResult = InferSelectModel<typeof qpcrWellResult>
 export type QpcrAmplificationData = InferSelectModel<typeof qpcrAmplificationData>
+export type OAuthClient = InferSelectModel<typeof oauthClients>
+export type OAuthAuthorizationCode = InferSelectModel<typeof oauthAuthorizationCodes>
+export type ConnectedApp = InferSelectModel<typeof connectedApps>
 
 // Users and authentication
 export const users = sqliteTable('users', {
@@ -605,4 +608,57 @@ export const qpcrAmplificationData = sqliteTable('qpcr_amplification_data', {
   deltaRn: real('delta_rn'),
 }, (table) => ({
   wellResultIdx: index('qpcr_amplification_data_well_result_idx').on(table.qpcrWellResultId),
+}))
+
+// Registered OAuth 2.1 public clients (Dynamic Client Registration, loopback redirect URIs only)
+export const oauthClients = sqliteTable('oauth_clients', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  redirectUris: text('redirect_uris', { mode: 'json' }).$type<string[]>().notNull(),
+  createdAt: text('created_at').notNull().default(sql`current_timestamp`),
+}, (table) => ({
+  createdAtIdx: index('oauth_clients_created_at_idx').on(table.createdAt),
+}))
+
+// Single-use OAuth 2.1 authorization codes (PKCE S256 required; raw code stored only as SHA-256 hex hash)
+export const oauthAuthorizationCodes = sqliteTable('oauth_authorization_codes', {
+  id: text('id').primaryKey(),
+  codeHash: text('code_hash').notNull(),
+  clientId: text('client_id').notNull().references(() => oauthClients.id, { onDelete: 'cascade' }),
+  userId: integer('user_id').notNull().references(() => users.id),
+  redirectUri: text('redirect_uri').notNull(),
+  codeChallenge: text('code_challenge').notNull(),
+  codeChallengeMethod: text('code_challenge_method').notNull(),
+  resource: text('resource'),
+  scope: text('scope'),
+  expiresAt: integer('expires_at').notNull(),
+  usedAt: text('used_at'),
+  createdAt: text('created_at').notNull().default(sql`current_timestamp`),
+}, (table) => ({
+  codeHashIdx: uniqueIndex('oauth_authorization_codes_code_hash_idx').on(table.codeHash),
+  expiresAtIdx: index('oauth_authorization_codes_expires_at_idx').on(table.expiresAt),
+  userIdIdx: index('oauth_authorization_codes_user_id_idx').on(table.userId),
+}))
+
+// Connected apps: one connection per approved client + user.
+// Access and refresh tokens are stored only as SHA-256 hex hashes; id is the public id logged on MCP requests.
+export const connectedApps = sqliteTable('connected_apps', {
+  id: text('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id),
+  clientId: text('client_id').notNull().references(() => oauthClients.id),
+  accessTokenHash: text('access_token_hash').notNull(),
+  accessTokenExpiresAt: integer('access_token_expires_at').notNull(),
+  refreshTokenHash: text('refresh_token_hash'),
+  previousRefreshTokenHash: text('previous_refresh_token_hash'),
+  refreshTokenExpiresAt: integer('refresh_token_expires_at'),
+  scope: text('scope'),
+  createdAt: text('created_at').notNull().default(sql`current_timestamp`),
+  lastUsedAt: text('last_used_at'),
+  revokedAt: text('revoked_at'),
+}, (table) => ({
+  accessTokenHashIdx: uniqueIndex('connected_apps_access_token_hash_idx').on(table.accessTokenHash),
+  refreshTokenHashIdx: uniqueIndex('connected_apps_refresh_token_hash_idx').on(table.refreshTokenHash),
+  previousRefreshTokenHashIdx: index('connected_apps_previous_refresh_token_hash_idx').on(table.previousRefreshTokenHash),
+  userIdIdx: index('connected_apps_user_id_idx').on(table.userId),
+  clientIdIdx: index('connected_apps_client_id_idx').on(table.clientId),
 }))

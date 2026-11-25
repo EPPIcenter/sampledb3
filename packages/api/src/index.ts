@@ -38,6 +38,8 @@ import { createSettingsRoutes } from './routes/settings'
 import { createErrorLogsRoutes } from './routes/error-logs'
 import { createDataAuditRoutes } from './routes/data-audit'
 import { createQpcrExperimentsRoutes } from './routes/qpcr-experiments'
+import { createMcpRoutes } from './routes/mcp'
+import { getAllowedOrigins, isMcpEndpointPath } from './lib/mcp/origin'
 import { handleRouteError } from './lib/error-handler'
 import { requestContextMiddleware } from './middleware/request-context'
 import { getAppBuildId } from './lib/app-build-id'
@@ -72,12 +74,17 @@ app.use('*', async (c, next) => {
 })
 app.use('*', requestContextMiddleware())
 app.use('*', secureHeaders())
-app.use('*', cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.ALLOWED_ORIGINS?.split(',') || []
-    : ['http://localhost:5173', 'http://localhost:3000'],
+const apiCors = cors({
+  origin: getAllowedOrigins(),
   credentials: true,
-}))
+})
+app.use('*', async (c, next) => {
+  // The MCP endpoint grants browsers no CORS access; it validates Origin itself.
+  if (isMcpEndpointPath(new URL(c.req.url).pathname)) {
+    return next()
+  }
+  return apiCors(c, next)
+})
 app.use('*', omitOnWireMiddleware)
 
 // Global error handler - catches all unhandled errors
@@ -195,6 +202,7 @@ app.route('/api/units', createUnitsRoutes(db))
 app.route('/api/error-logs', createErrorLogsRoutes(db))
 app.route('/api/admin/data-audit', createDataAuditRoutes(db))
 app.route('/api/qpcr-experiments', createQpcrExperimentsRoutes(db))
+app.route('/api/mcp', createMcpRoutes(db))
 
 // Serve static files from web build in production; SPA fallback for client routes
 if (process.env.NODE_ENV === 'production') {
