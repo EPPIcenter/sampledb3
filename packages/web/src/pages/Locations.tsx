@@ -169,7 +169,12 @@ export default function Locations() {
 
   useClickOutside(searchRef, () => setIsSearchOpen(false), isSearchOpen)
 
+  // Latest search text; responses for older text are dropped so a slow "PL-1" reply
+  // cannot overwrite "PL-12" results or reopen the dropdown after the box is cleared.
+  const latestSearchRef = useRef('')
+
   useEffect(() => {
+    latestSearchRef.current = search
     if (search.length >= 1) {
       const timeoutId = setTimeout(() => {
         performCollectionSearch(search)
@@ -179,6 +184,7 @@ export default function Locations() {
     } else {
       setCollectionResults([])
       setIsSearchOpen(false)
+      setSearchLoading(false)
     }
   }, [search])
 
@@ -186,6 +192,7 @@ export default function Locations() {
     try {
       setSearchLoading(true)
       const response = await searchApi.search(searchQuery, 'collection')
+      if (searchQuery !== latestSearchRef.current) return
       // Filter to only collection types (micronix_plate, cryovial_box, box, bag)
       const collectionResults = response.results.filter(
         (r): r is CollectionSearchResult =>
@@ -194,10 +201,11 @@ export default function Locations() {
       setCollectionResults(collectionResults)
       setIsSearchOpen(true)
     } catch (error) {
+      if (searchQuery !== latestSearchRef.current) return
       console.error('Collection search failed:', error)
       setCollectionResults([])
     } finally {
-      setSearchLoading(false)
+      if (searchQuery === latestSearchRef.current) setSearchLoading(false)
     }
   }
 

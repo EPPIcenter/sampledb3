@@ -7,6 +7,7 @@ import { getContainerTypeIcon } from '../lib/icons'
 import { useControlDefinitionSummary } from '../hooks/useControls'
 import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/blood-controls.css'
+import { formatDate } from '../lib/date-utils'
 
 export default function ControlDefinitionDetail() {
   const { id } = useParams<{ id: string }>()
@@ -72,7 +73,7 @@ export default function ControlDefinitionDetail() {
       label: 'Production Date',
       sortable: true,
       render: (value) => value ? (
-        <span className="dashboard-stat-value">{new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+        <span className="dashboard-stat-value">{formatDate(value)}</span>
       ) : <span className="text-app-text-muted italic">Not set</span>,
     },
     {

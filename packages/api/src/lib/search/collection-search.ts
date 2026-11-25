@@ -8,9 +8,10 @@ import {
   controlBatch,
   controlDefinition,
 } from '../../db/schema'
-import { eq, or, like } from 'drizzle-orm'
+import { eq, or } from 'drizzle-orm'
 import { formatLocationPath } from '../container-enrichment'
 import type { SearchResult } from './types'
+import { likeContains } from '../sql-like'
 
 /** Search collections and control batches by name, barcode, or numeric id. */
 export async function searchCollections(database: Database, query: string): Promise<SearchResult[]> {
@@ -32,7 +33,7 @@ export async function searchCollections(database: Database, query: string): Prom
     .where(
       isNumeric
         ? eq(micronixPlate.id, queryNum)
-        : or(like(micronixPlate.name, `%${query}%`), like(micronixPlate.barcode, `%${query}%`))!,
+        : or(likeContains(micronixPlate.name, query), likeContains(micronixPlate.barcode, query))!,
     )
     .limit(10)
 
@@ -68,7 +69,7 @@ export async function searchCollections(database: Database, query: string): Prom
     .where(
       isNumeric
         ? eq(cryovialBox.id, queryNum)
-        : or(like(cryovialBox.name, `%${query}%`), like(cryovialBox.barcode, `%${query}%`))!,
+        : or(likeContains(cryovialBox.name, query), likeContains(cryovialBox.barcode, query))!,
     )
     .limit(10)
 
@@ -100,7 +101,7 @@ export async function searchCollections(database: Database, query: string): Prom
     })
     .from(box)
     .leftJoin(location, eq(box.locationId, location.id))
-    .where(isNumeric ? eq(box.id, queryNum) : like(box.name, `%${query}%`))
+    .where(isNumeric ? eq(box.id, queryNum) : likeContains(box.name, query))
     .limit(10)
 
   for (const paperBox of boxes) {
@@ -126,7 +127,7 @@ export async function searchCollections(database: Database, query: string): Prom
     })
     .from(bag)
     .leftJoin(location, eq(bag.locationId, location.id))
-    .where(isNumeric ? eq(bag.id, queryNum) : like(bag.name, `%${query}%`))
+    .where(isNumeric ? eq(bag.id, queryNum) : likeContains(bag.name, query))
     .limit(10)
 
   for (const paperBag of bags) {
@@ -153,7 +154,7 @@ export async function searchCollections(database: Database, query: string): Prom
     .where(
       isNumeric
         ? eq(controlBatch.id, queryNum)
-        : or(like(controlBatch.name, `%${query}%`), like(controlDefinition.name, `%${query}%`))!,
+        : or(likeContains(controlBatch.name, query), likeContains(controlDefinition.name, query))!,
     )
     .limit(10)
 

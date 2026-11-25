@@ -72,3 +72,49 @@ describe('date-utils', () => {
     })
   })
 })
+
+describe('calendar dates in local time', () => {
+  it('parseDisplayDate keeps a bare YYYY-MM-DD on its calendar day', async () => {
+    const { parseDisplayDate } = await import('../date-utils')
+    const d = parseDisplayDate('2024-01-15')
+    expect([d.getFullYear(), d.getMonth(), d.getDate()]).toEqual([2024, 0, 15])
+  })
+
+  it('formatDate shows a collection date on its own day', async () => {
+    const { formatDate } = await import('../date-utils')
+    expect(formatDate('2024-01-15')).toBe('Jan 15, 2024')
+  })
+
+  it('toLocalDateString uses the local date, not the UTC date', async () => {
+    const { toLocalDateString } = await import('../date-utils')
+    // 11pm local on Jan 15 is already Jan 16 in UTC for any zone west of UTC.
+    expect(toLocalDateString(new Date(2024, 0, 15, 23, 30))).toBe('2024-01-15')
+  })
+})
+
+// vitest.config.ts pins TZ to America/Los_Angeles, where 2024-11-03 is a 25-hour day
+// (DST ends) and 2024-03-10 a 23-hour one (DST starts).
+describe('calendarDaysBetween', () => {
+  it('counts one day across a DST fall-back', async () => {
+    const { calendarDaysBetween } = await import('../date-utils')
+    expect(calendarDaysBetween('2024-11-03', '2024-11-04')).toBe(1)
+  })
+
+  it('counts one day across a DST spring-forward', async () => {
+    const { calendarDaysBetween } = await import('../date-utils')
+    expect(calendarDaysBetween('2024-03-10', '2024-03-11')).toBe(1)
+  })
+
+  it('counts zero days for the same date and whole days across months and a leap day', async () => {
+    const { calendarDaysBetween } = await import('../date-utils')
+    expect(calendarDaysBetween('2024-01-15', '2024-01-15')).toBe(0)
+    expect(calendarDaysBetween('2024-02-28', '2024-03-01')).toBe(2)
+    expect(calendarDaysBetween('2024-01-01', '2024-12-31')).toBe(365)
+  })
+
+  it('counts by the date part of a timestamp, whatever the time of day', async () => {
+    const { calendarDaysBetween } = await import('../date-utils')
+    expect(calendarDaysBetween('2024-11-03T09:00:00', '2024-11-04T10:00:00')).toBe(1)
+    expect(calendarDaysBetween('2024-11-03 23:00:00', '2024-11-04 01:00:00')).toBe(1)
+  })
+})

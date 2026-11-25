@@ -1,5 +1,6 @@
-import { gte, lte } from 'drizzle-orm'
+import { gte } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
+import { dateToUpperBound } from '../sql-helpers'
 
 /** Build date filter conditions for specimen date columns. */
 export function buildDateFilter(column: SQLiteColumn, dateFrom?: string, dateTo?: string) {
@@ -8,16 +9,7 @@ export function buildDateFilter(column: SQLiteColumn, dateFrom?: string, dateTo?
     conditions.push(gte(column, dateFrom))
   }
   if (dateTo) {
-    conditions.push(lte(column, dateTo))
+    conditions.push(dateToUpperBound(column, dateTo))
   }
   return conditions
-}
-
-/** Batch an array into chunks for SQLite variable limits. */
-export function chunkArray<T>(array: T[], chunkSize: number): T[][] {
-  const chunks: T[][] = []
-  for (let i = 0; i < array.length; i += chunkSize) {
-    chunks.push(array.slice(i, i + chunkSize))
-  }
-  return chunks
 }

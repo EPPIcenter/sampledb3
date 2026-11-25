@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import SimpleTimeline from '../components/SimpleTimeline'
 import { getContainerTypeName, getSpecimenTypeIcon } from '../lib/icons'
+import { formatDate } from '../lib/date-utils'
 import SpecimenForm from '../components/forms/SpecimenForm'
 import SubjectForm from '../components/forms/SubjectForm'
 import { useUser } from '../contexts/UserContext'
@@ -105,16 +106,8 @@ export default function SubjectDetail() {
   const formatDateRange = () => {
     if (!summary.collectionDateRange) return 'No collection dates'
     const { earliest, latest } = summary.collectionDateRange
-    const earliestDate = new Date(earliest).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
-    const latestDate = new Date(latest).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
+    const earliestDate = formatDate(earliest)
+    const latestDate = formatDate(latest)
     if (earliest === latest) {
       return earliestDate
     }

@@ -1,5 +1,28 @@
+import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import type { Database } from '../../db/client'
-import { tag, storageType, specimenType, strain, storageContainer, location, controlDefinition, specimen, unit, study, studySubject, controlBatch, micronixPlate } from '../../db/schema'
+import {
+  tag,
+  storageType,
+  specimenType,
+  strain,
+  storageContainer,
+  location,
+  controlDefinition,
+  specimen,
+  unit,
+  study,
+  studySubject,
+  controlBatch,
+  micronixPlate,
+  cryovialBox,
+  box,
+  bag,
+  sheet,
+  micronixTube,
+  cryovialTube,
+  staticWell,
+  paper,
+} from '../../db/schema'
 import { utcNow } from '../../lib/datetime'
 
 /**
@@ -131,6 +154,122 @@ export async function createTestMicronixPlate(db: Database, data: {
 }
 
 /**
+ * Create a test cryovial box
+ */
+export async function createTestCryovialBox(db: Database, data: {
+  name: string
+  locationId: number
+  barcode?: string | null
+}) {
+  const now = utcNow()
+  const [result] = await db.insert(cryovialBox).values({
+    name: data.name,
+    locationId: data.locationId,
+    barcode: data.barcode ?? null,
+    created: now,
+    lastUpdated: now,
+  }).returning()
+  return result
+}
+
+/**
+ * Create a test box (a paper Sheet parent)
+ */
+export async function createTestBox(db: Database, data: { name: string; locationId: number }) {
+  const now = utcNow()
+  const [result] = await db.insert(box).values({ ...data, created: now, lastUpdated: now }).returning()
+  return result
+}
+
+/**
+ * Create a test bag (a paper Sheet parent)
+ */
+export async function createTestBag(db: Database, data: { name: string; locationId: number }) {
+  const now = utcNow()
+  const [result] = await db.insert(bag).values({ ...data, created: now, lastUpdated: now }).returning()
+  return result
+}
+
+/**
+ * Create a test sheet in a box or a bag
+ */
+export async function createTestSheet(
+  db: Database,
+  data: { name: string } & ({ boxId: number; bagId?: never } | { bagId: number; boxId?: never }),
+) {
+  const [result] = await db.insert(sheet).values(data).returning()
+  return result
+}
+
+/**
+ * Make an existing storage container a micronix tube on a plate
+ */
+export async function createTestMicronixTube(db: Database, data: {
+  containerId: number
+  collectionId: number
+  barcode: string
+  position?: string | null
+}) {
+  const [result] = await db.insert(micronixTube).values({
+    id: data.containerId,
+    collectionId: data.collectionId,
+    barcode: data.barcode,
+    position: data.position ?? null,
+  }).returning()
+  return result
+}
+
+/**
+ * Make an existing storage container a cryovial tube in a cryovial box
+ */
+export async function createTestCryovialTube(db: Database, data: {
+  containerId: number
+  collectionId: number
+  barcode?: string | null
+  position?: string | null
+}) {
+  const [result] = await db.insert(cryovialTube).values({
+    id: data.containerId,
+    collectionId: data.collectionId,
+    barcode: data.barcode ?? null,
+    position: data.position ?? null,
+  }).returning()
+  return result
+}
+
+/**
+ * Make an existing storage container a static well on a plate
+ */
+export async function createTestStaticWell(db: Database, data: {
+  containerId: number
+  collectionId: number
+  position?: string | null
+}) {
+  const [result] = await db.insert(staticWell).values({
+    id: data.containerId,
+    collectionId: data.collectionId,
+    position: data.position ?? null,
+  }).returning()
+  return result
+}
+
+/**
+ * Make an existing storage container a paper on a sheet
+ */
+export async function createTestPaper(db: Database, data: {
+  containerId: number
+  sheetId: number
+  sublabel?: string | null
+}) {
+  const [result] = await db.insert(paper).values({
+    id: data.containerId,
+    sheetId: data.sheetId,
+    sublabel: data.sublabel ?? null,
+  }).returning()
+  return result
+}
+
+/**
  * Create a test location (for testing storage type "in use")
  */
 export async function createTestLocation(db: Database, data: {
@@ -202,6 +341,34 @@ export async function createTestStudySubject(db: Database, data: { studyId: numb
     lastUpdated: now,
   }).returning()
   return result
+}
+
+/**
+ * Give a study `count` subjects, each with one specimen (collected 2024-01-01) in one container.
+ * Raw statements in one transaction keep tens of thousands of rows fast. A count above 65,535
+ * is more ids than one statement can bind, which is what a large-study test needs.
+ */
+export function seedLargeTestStudy(
+  sqlite: SQLiteDatabase,
+  ids: { studyId: number; specimenTypeId: number; unitId: number },
+  count: number,
+): void {
+  sqlite.exec('BEGIN')
+  const addSubject = sqlite.prepare(
+    "INSERT INTO study_subject (study_id, name, created, last_updated) VALUES (?, ?, '2024-01-01', '2024-01-01')",
+  )
+  const addSpecimen = sqlite.prepare(
+    "INSERT INTO specimen (study_subject_id, specimen_type_id, collection_date, created, last_updated) VALUES (?, ?, '2024-01-01', '2024-01-01', '2024-01-01')",
+  )
+  const addContainer = sqlite.prepare(
+    "INSERT INTO storage_container (specimen_id, unit_id, total_quantity, remaining_quantity, created, last_updated) VALUES (?, ?, 1, 1, '2024-01-01', '2024-01-01')",
+  )
+  for (let i = 0; i < count; i++) {
+    const subject = addSubject.run(ids.studyId, `S${i}`)
+    const spec = addSpecimen.run(subject.lastInsertRowid, ids.specimenTypeId)
+    addContainer.run(spec.lastInsertRowid, ids.unitId)
+  }
+  sqlite.exec('COMMIT')
 }
 
 /**

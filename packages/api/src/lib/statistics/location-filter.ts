@@ -4,10 +4,15 @@ import {
   location,
   micronixPlate,
   micronixTube,
+  staticWell,
   cryovialBox,
   cryovialTube,
+  box,
+  bag,
+  sheet,
+  paper,
 } from '../../db/schema'
-import { eq, inArray } from 'drizzle-orm'
+import { eq, inArray, or } from 'drizzle-orm'
 
 export type StatisticsLocationFilterResult =
   | { kind: 'none' }
@@ -43,50 +48,45 @@ export async function resolveStatisticsLocationFilter(
   }
 }
 
-/** Resolve storage container ids at micronix plates / cryovial boxes in the given locations. */
+/**
+ * Resolve storage container ids stored in the given locations: tubes and static wells on
+ * micronix plates, tubes in cryovial boxes, and papers on sheets in boxes or bags.
+ * Collections are matched with subqueries so large locations never build huge IN lists.
+ */
 export async function resolveContainerIdsAtLocations(
   database: Database,
   filteredLocationIds: number[],
   tagFilteredContainerIds?: number[] | null,
 ): Promise<number[]> {
-  const [matchingPlates, matchingBoxes] = await Promise.all([
-    database
-      .select({ id: micronixPlate.id })
-      .from(micronixPlate)
-      .where(inArray(micronixPlate.locationId, filteredLocationIds)),
-    database
-      .select({ id: cryovialBox.id })
-      .from(cryovialBox)
-      .where(inArray(cryovialBox.locationId, filteredLocationIds)),
-  ])
-
-  const plateIds = matchingPlates.map((p) => p.id)
-  const boxIds = matchingBoxes.map((b) => b.id)
-
-  const [micronixContainerIds, cryovialContainerIds] = await Promise.all([
-    plateIds.length > 0
-      ? database
-          .select({ id: micronixTube.id })
-          .from(micronixTube)
-          .where(inArray(micronixTube.collectionId, plateIds))
-      : Promise.resolve([]),
-    boxIds.length > 0
-      ? database
-          .select({ id: cryovialTube.id })
-          .from(cryovialTube)
-          .where(inArray(cryovialTube.collectionId, boxIds))
-      : Promise.resolve([]),
-  ])
-
-  let locationFilteredContainerIds = [
-    ...new Set([...micronixContainerIds.map((r) => r.id), ...cryovialContainerIds.map((r) => r.id)]),
-  ]
-
-  if (tagFilteredContainerIds) {
-    locationFilteredContainerIds = locationFilteredContainerIds.filter((id) =>
-      tagFilteredContainerIds.includes(id),
+  const platesHere = database
+    .select({ id: micronixPlate.id })
+    .from(micronixPlate)
+    .where(inArray(micronixPlate.locationId, filteredLocationIds))
+  const cryovialBoxesHere = database
+    .select({ id: cryovialBox.id })
+    .from(cryovialBox)
+    .where(inArray(cryovialBox.locationId, filteredLocationIds))
+  const sheetsHere = database
+    .select({ id: sheet.id })
+    .from(sheet)
+    .where(
+      or(
+        inArray(sheet.boxId, database.select({ id: box.id }).from(box).where(inArray(box.locationId, filteredLocationIds))),
+        inArray(sheet.bagId, database.select({ id: bag.id }).from(bag).where(inArray(bag.locationId, filteredLocationIds))),
+      ),
     )
-  }
 
-  return locationFilteredContainerIds
+  const [micronix, wells, cryovial, papers] = await Promise.all([
+    database.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.collectionId, platesHere)),
+    database.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.collectionId, platesHere)),
+    database.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.collectionId, cryovialBoxesHere)),
+    database.select({ id: paper.id }).from(paper).where(inArray(paper.sheetId, sheetsHere)),
+  ])
+
+  const ids = new Set([...micronix, ...wells, ...cryovial, ...papers].map((r) => r.id))
+  if (tagFilteredContainerIds) {
+    const tagged = new Set(tagFilteredContainerIds)
+    return [...ids].filter((id) => tagged.has(id))
+  }
+  return [...ids]
 }

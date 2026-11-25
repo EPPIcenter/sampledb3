@@ -53,6 +53,19 @@ describe('study-read', () => {
       expect(result.studies.some((s) => s.shortCode === 'UNQ01')).toBe(true)
       expect(result.studies.some((s) => s.shortCode === 'OTH01')).toBe(false)
     })
+
+    it('matches "_" and "%" in the search term literally', async () => {
+      await createTestStudy(testDb, { title: 'Cohort A_1', shortCode: 'UND01' })
+      await createTestStudy(testDb, { title: 'Cohort AB1', shortCode: 'WLD01' })
+      await createTestStudy(testDb, { title: 'Yield 50% drop', shortCode: 'PCT01' })
+
+      const underscore = await listStudies(testDb, { search: 'A_1', page: 1, limit: 10 })
+      expect(underscore.studies.map((s) => s.shortCode)).toEqual(['UND01'])
+      expect(underscore.pagination.total).toBe(1)
+
+      const percent = await listStudies(testDb, { search: '%', page: 1, limit: 10 })
+      expect(percent.studies.map((s) => s.shortCode)).toEqual(['PCT01'])
+    })
   })
 
   describe('getStudySummaries', () => {

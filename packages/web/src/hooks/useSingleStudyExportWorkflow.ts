@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { exportApi, type ExportFilters } from '../lib/api/export'
+import { subjectDateSelections, type SubjectDateFilter } from '@sampledb/contract'
 import { parseExportModalCsv, type SingleStudyExportCsvRow } from '../lib/export-filter-csv'
 import { formatLocalDateTime } from '../lib/date-utils'
 import { toggleArrayFilterValue } from '../lib/filter-array-toggle'
@@ -16,17 +17,14 @@ export type SingleStudyExportSubmitParams = {
   columns: string[]
 }
 
-function buildSubjectDatesFromCsv(csvData: SingleStudyExportCsvRow[]) {
-  const subjectDates: { [key: string]: { exact?: string; from?: string; to?: string } } = {}
-  for (const row of csvData) {
-    if (row.collection_date) {
-      subjectDates[row.subject_name] = { exact: row.collection_date }
-    } else if (row.date_from || row.date_to) {
-      subjectDates[row.subject_name] = {
-        from: row.date_from,
-        to: row.date_to,
-      }
-    }
+/**
+ * Per-subject date filters for the API from the uploaded CSV. Subjects whose rows select
+ * all dates are left out: the API matches every date for a listed subject with no entry.
+ */
+export function buildSubjectDatesFromCsv(csvData: SingleStudyExportCsvRow[]) {
+  const subjectDates: { [key: string]: SubjectDateFilter[] } = {}
+  for (const [name, selection] of subjectDateSelections(csvData)) {
+    if (selection.kind === 'dates') subjectDates[name] = selection.filters
   }
   return Object.keys(subjectDates).length > 0 ? subjectDates : undefined
 }

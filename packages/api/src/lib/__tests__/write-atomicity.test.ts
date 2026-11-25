@@ -7,17 +7,18 @@ import {
   createTestLocation,
   createTestMicronixPlate,
   createTestUnit,
+  createTestBox,
+  createTestSheet,
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
 import { runBulkCombinedImport } from '../bulk-combined-import'
-import { moveSheetsToCollection, SheetNotFoundError } from '../collections/sheet-move'
+import { moveSheetsToCollection, SheetNameConflictError, SheetNotFoundError } from '../collections/sheet-move'
 import {
   specimenTypeContainerType,
   containerTypeUnit,
   studySubject,
   specimen,
   storageContainer,
-  box,
   sheet,
 } from '../../db/schema'
 import { eq } from 'drizzle-orm'
@@ -104,10 +105,9 @@ describe('multi-step writes roll back on failure', () => {
 
   it('sheet move leaves every sheet in place when one sheet id is missing', async () => {
     const { loc } = await setupMicronixPlate()
-    const now = utcNow()
-    const [boxA] = await testDb.insert(box).values({ name: 'BoxA', locationId: loc.id, created: now, lastUpdated: now }).returning()
-    const [boxB] = await testDb.insert(box).values({ name: 'BoxB', locationId: loc.id, created: now, lastUpdated: now }).returning()
-    const [s1] = await testDb.insert(sheet).values({ name: 'Sheet-1', boxId: boxA.id }).returning()
+    const boxA = await createTestBox(testDb, { name: 'BoxA', locationId: loc.id })
+    const boxB = await createTestBox(testDb, { name: 'BoxB', locationId: loc.id })
+    const s1 = await createTestSheet(testDb, { name: 'Sheet-1', boxId: boxA.id })
 
     await expect(moveSheetsToCollection(testDb, [s1.id, 99999], boxB.id, 'box')).rejects.toBeInstanceOf(
       SheetNotFoundError
@@ -115,5 +115,33 @@ describe('multi-step writes roll back on failure', () => {
 
     const [after] = await testDb.select().from(sheet).where(eq(sheet.id, s1.id))
     expect(after.boxId).toBe(boxA.id)
+  })
+
+  it('sheet move refuses a name that already exists in the target box', async () => {
+    const { loc } = await setupMicronixPlate()
+    const boxA = await createTestBox(testDb, { name: 'BoxA', locationId: loc.id })
+    const boxB = await createTestBox(testDb, { name: 'BoxB', locationId: loc.id })
+    const moving = await createTestSheet(testDb, { name: 'Sheet-1', boxId: boxA.id })
+    await createTestSheet(testDb, { name: 'Sheet-1', boxId: boxB.id })
+
+    await expect(moveSheetsToCollection(testDb, [moving.id], boxB.id, 'box')).rejects.toBeInstanceOf(SheetNameConflictError)
+  })
+
+  it('sheet move gives the name conflict, not a constraint error, to the losing side of a race', async () => {
+    const { loc } = await setupMicronixPlate()
+    const [boxA, boxB, target] = await Promise.all(
+      ['BoxA', 'BoxB', 'Target'].map((name) => createTestBox(testDb, { name, locationId: loc.id })),
+    )
+    const fromA = await createTestSheet(testDb, { name: 'Sheet-1', boxId: boxA.id })
+    const fromB = await createTestSheet(testDb, { name: 'Sheet-1', boxId: boxB.id })
+
+    const results = await Promise.allSettled([
+      moveSheetsToCollection(testDb, [fromA.id], target.id, 'box'),
+      moveSheetsToCollection(testDb, [fromB.id], target.id, 'box'),
+    ])
+
+    expect(results.map((r) => r.status).sort()).toEqual(['fulfilled', 'rejected'])
+    const rejected = results.find((r) => r.status === 'rejected') as PromiseRejectedResult
+    expect(rejected.reason).toBeInstanceOf(SheetNameConflictError)
   })
 })

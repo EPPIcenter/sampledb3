@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { useNavigate } from 'react-router-dom'
+import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 
 vi.mock('../../lib/api/studies', async () => {
@@ -26,6 +28,11 @@ function installIntersectionObserver() {
   if (typeof window !== 'undefined') (window as { IntersectionObserver: typeof C }).IntersectionObserver = C
 }
 
+function BackButton() {
+  const navigate = useNavigate()
+  return <button onClick={() => void navigate(-1)}>Back</button>
+}
+
 describe('Studies', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -44,5 +51,38 @@ describe('Studies', () => {
     await waitFor(() => {
       expect(screen.getByText('No studies found')).toBeInTheDocument()
     })
+  })
+
+  it('reads search and filters from the URL and clears them', async () => {
+    const user = userEvent.setup()
+    const { default: Studies } = await import('../Studies')
+    await render(<Studies />, { initialEntries: ['/studies?q=malaria&type=longitudinal'] })
+
+    const searchBox = await screen.findByPlaceholderText(/Search by title/)
+    expect(searchBox).toHaveValue('malaria')
+    expect(screen.getByDisplayValue(/longitudinal/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /clear filters/i }))
+
+    await waitFor(() => expect(searchBox).toHaveValue(''))
+  })
+
+  it('undoes a filter change with Back', async () => {
+    const user = userEvent.setup()
+    const { default: Studies } = await import('../Studies')
+    await render(
+      <>
+        <Studies />
+        <BackButton />
+      </>,
+      { initialEntries: ['/studies'] },
+    )
+    const typeFilter = await screen.findByDisplayValue(/all types/i)
+
+    await user.selectOptions(typeFilter, 'longitudinal')
+    await waitFor(() => expect(typeFilter).toHaveValue('longitudinal'))
+
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(typeFilter).toHaveValue('all'))
   })
 })

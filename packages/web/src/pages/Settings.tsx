@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import type { AllSettings } from '../lib/api/settings'
 import { useUser } from '../contexts/UserContext'
-import { settingsKeys, useAllSettings } from '../hooks/useSettings'
+import { useAllSettings } from '../hooks/useSettings'
 import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import { useTheme, THEME_IDS, THEME_LABELS } from '../contexts/ThemeContext'
 import InfoTooltip from '../components/InfoTooltip'
@@ -246,8 +246,10 @@ export default function Settings() {
   const [mutationError, setMutationError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
+  // Settings feed many other queries (export and scanner configurations, move page
+  // bootstraps, container defaults, table views), so a save marks every query stale.
   const refreshSettings = () => {
-    void queryClient.invalidateQueries({ queryKey: settingsKeys.allSettings() })
+    void queryClient.invalidateQueries()
   }
 
   const handleSave = async () => {

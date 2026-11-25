@@ -1,6 +1,7 @@
 import type { Database } from '../../db/client'
 import { users, sessions, settings } from '../../db/schema'
 import bcrypt from 'bcryptjs'
+import { BCRYPT_COST } from '../../lib/auth/auth-service'
 import { nanoid } from 'nanoid'
 import type { Hono } from 'hono'
 import { testClient } from 'hono/testing'
@@ -28,7 +29,7 @@ export async function createTestUser(
   db: Database,
   options: CreateTestUserOptions
 ) {
-  const passwordHash = await bcrypt.hash(options.password || 'password123', 10)
+  const passwordHash = await bcrypt.hash(options.password || 'password123', BCRYPT_COST)
   
   const createdAt = utcNow()
   const approvedAt = options.approvedAt !== undefined ? options.approvedAt : createdAt

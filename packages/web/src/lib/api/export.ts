@@ -1,4 +1,4 @@
-import type { ContainerExportData, CSVExportOptions, ExportFilters } from '@sampledb/contract'
+import type { ContainerExportData, CSVExportOptions, ExportFilters, SubjectDateFilter } from '@sampledb/contract'
 import { api } from './client'
 import {
   downloadExportFile,
@@ -8,6 +8,9 @@ import {
 } from '../export-download'
 
 export type { ContainerExportData, ExportFilters, CSVExportOptions }
+
+/** Collection dates per subject name for a single-study export; a subject left out exports every date. */
+export type SubjectDatesByName = { [subjectName: string]: SubjectDateFilter | SubjectDateFilter[] }
 
 function csvOptionsToQueryParams(csvOptions?: CSVExportOptions): Record<string, string | boolean> {
   const params: Record<string, string | boolean> = {}
@@ -107,7 +110,7 @@ export const exportApi = {
   containersByNames: (params: {
     study: string
     subject_names: string[]
-    subject_dates?: { [subjectName: string]: { exact?: string; from?: string; to?: string } }
+    subject_dates?: SubjectDatesByName
     date_tolerance?: number
     format?: 'csv' | 'xlsx' | 'json'
     columns?: string[]
@@ -138,7 +141,7 @@ export const exportApi = {
   containersCountByNames: (params: {
     study: string
     subject_names: string[]
-    subject_dates?: { [subjectName: string]: { exact?: string; from?: string; to?: string } }
+    subject_dates?: SubjectDatesByName
     date_tolerance?: number
     specimen_type_ids?: number[]
     container_types?: string[]
@@ -176,7 +179,6 @@ export const exportApi = {
       date_from?: string
       date_to?: string
     }>
-    subject_dates?: { [subjectName: string]: { exact?: string; from?: string; to?: string } }
     date_tolerance?: number
     format?: 'csv' | 'xlsx' | 'json'
     columns?: string[]

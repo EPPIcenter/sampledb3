@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { formatDate } from '../lib/date-utils'
 import type { Study, StudySummaryBasic } from '../lib/api/studies';interface StudySummaryData extends StudySummaryBasic {
   averageSpecimensPerSubject?: number
   studyDurationDays?: number | null
@@ -57,14 +58,6 @@ const ChevronDownIcon = () => (
 
 export default function StudyCard({ study, summary, loading, onLoadSummary, variant = 'grid' }: StudyCardProps) {
   const [expanded, setExpanded] = useState(false)
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric' 
-    })
-  }
 
   const formatDateRange = (range: { earliest: string; latest: string } | null) => {
     if (!range) return null

@@ -18,6 +18,7 @@ import {
   staticWell,
 } from '../db/schema'
 import { eq, inArray } from 'drizzle-orm'
+import { z } from 'zod'
 import {
   formatExportTimestamp,
   parseCSVExportOptions,
@@ -46,6 +47,23 @@ function parseTagIdsFromBody(body: unknown): number[] | undefined {
   const ids = raw.map((id) => parseInt(String(id), 10)).filter((id) => !Number.isNaN(id))
   return ids.length > 0 ? ids : undefined
 }
+
+const subjectDateFilterSchema = z.union([
+  z.object({ exact: z.string().min(1) }),
+  z
+    .object({ from: z.string().min(1).optional(), to: z.string().min(1).optional() })
+    .refine((range) => range.from !== undefined || range.to !== undefined, {
+      message: 'A date range needs from or to',
+    }),
+])
+
+/**
+ * Per-subject collection dates, keyed by subject name. An empty list (or a listed subject
+ * with no entry) exports every date for that subject.
+ */
+const subjectDatesSchema = z
+  .record(z.string(), z.union([subjectDateFilterSchema, z.array(subjectDateFilterSchema)]))
+  .nullish()
 
 function handleExportFailure(c: Context, message: string, error: unknown): Response {
   if (error instanceof ExpectedNotFoundError || error instanceof RouteError) {
@@ -213,8 +231,10 @@ export function createExportRoutes(database: Database): Hono {
         return c.json({ error: 'subject_names array is required' }, 400)
       }
 
-      const subjectDates =
-        body.subject_dates && typeof body.subject_dates === 'object' ? body.subject_dates : undefined
+      const subjectDates = subjectDatesSchema.safeParse(body.subject_dates)
+      if (!subjectDates.success) {
+        return handleRouteError(subjectDates.error, c)
+      }
 
       const result = await runSingleStudyContainerExportPost(database, {
         studyCode: body.study,
@@ -225,7 +245,7 @@ export function createExportRoutes(database: Database): Hono {
         csvOptions: parseCSVExportOptions(body),
         userId: user?.id,
         countOnly: body.count_only === true,
-        subjectDates,
+        subjectDates: subjectDates.data ?? undefined,
         dateTolerance: body.date_tolerance || 0,
       })
 

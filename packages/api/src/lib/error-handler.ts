@@ -29,6 +29,25 @@ function isZodError(error: unknown): error is z.ZodError {
   return 'issues' in obj && Array.isArray(obj.issues)
 }
 
+/** Readable message for a SQLite UNIQUE / FOREIGN KEY violation, or null for other errors. */
+export function sqliteConstraintConflict(error: Error): string | null {
+  const code = (error as { code?: unknown }).code
+  if (code === 'SQLITE_CONSTRAINT_UNIQUE' || code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
+    // "UNIQUE constraint failed: study.title, study.x" -> "title, x"
+    const columns = error.message
+      .replace(/^.*constraint failed:\s*/i, '')
+      .split(',')
+      .map((col) => col.trim().split('.').pop()?.replace(/_/g, ' '))
+      .filter(Boolean)
+      .join(', ')
+    return columns ? `A record with this ${columns} already exists.` : 'This record already exists.'
+  }
+  if (code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+    return 'This record is still referenced by other data, or refers to a record that does not exist.'
+  }
+  return null
+}
+
 export function handleRouteError(error: unknown, c: Context): Response {
   const database = getRequestDatabase(c)
   
@@ -104,6 +123,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
       // Log error asynchronously (non-blocking)
       logBackendError(database, error, errorContext).catch(logPersistFailure)
       return c.json({
+        ...error.fields,
         error: error.message,
         errorCode: 'CONFLICT'
       }, 409)
@@ -131,6 +151,18 @@ export function handleRouteError(error: unknown, c: Context): Response {
       }, 400)
     }
     
+    // A UNIQUE or FOREIGN KEY violation is a conflict with existing data, not a server fault.
+    // Reply 409 with a readable message instead of the raw SQLite text.
+    const constraint = sqliteConstraintConflict(error)
+    if (constraint) {
+      logError(database, 'backend', 'warning', error.message, error, errorContext).catch(logPersistFailure)
+      return c.json({
+        error: constraint,
+        errorCode: 'CONFLICT',
+        ...(isDevelopment && { details: error.message }),
+      }, 409)
+    }
+
     // Log error asynchronously (non-blocking)
     logBackendError(database, error, errorContext).catch(logPersistFailure)
     return c.json({
@@ -172,7 +204,8 @@ export class NotFoundError extends Error {
 }
 
 export class ConflictError extends Error {
-  constructor(message: string) {
+  /** `fields` are added to the 409 body next to `error` (e.g. the record that conflicts). */
+  constructor(message: string, public readonly fields: Record<string, unknown> = {}) {
     super(message)
     this.name = 'ConflictError'
   }

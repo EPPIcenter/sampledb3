@@ -8,6 +8,7 @@ import { useUser } from '../contexts/UserContext'
 import { useQpcrExperimentsList } from '../hooks/useQpcrExperiments'
 import { AsyncPresentation, EmptyState, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/qpcr.css'
+import { parseDisplayDate } from '../lib/date-utils'
 
 const TEMPLATE_LABELS: Record<string, string> = {
   biorad: 'Bio-Rad CFX 96',
@@ -43,7 +44,7 @@ function getStatusLabel(status: string): string {
 function formatShortDate(iso: string | null | undefined): string {
   if (!iso) return '—'
   try {
-    const d = new Date(iso)
+    const d = parseDisplayDate(iso)
     if (Number.isNaN(d.getTime())) return '—'
     return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
   } catch {

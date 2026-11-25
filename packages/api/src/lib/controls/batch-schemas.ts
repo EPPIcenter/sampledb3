@@ -73,6 +73,11 @@ export const createBatchWithSpecimensSchema = z.object({
   specimens: z.array(batchSpecimenInputSchema).min(1),
 })
 
+/** Several batches (e.g. one per density from a composition CSV), created all-or-nothing. */
+export const createBatchesWithSpecimensSchema = z.object({
+  batches: z.array(createBatchWithSpecimensSchema).min(1),
+})
+
 export const addSpecimensToBatchSchema = z.object({
   specimens: z.array(batchSpecimenInputSchema).min(1),
 })

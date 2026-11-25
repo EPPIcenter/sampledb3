@@ -2,7 +2,7 @@ import type { Database } from '../../db/client'
 import { location } from '../../db/schema'
 import { inArray } from 'drizzle-orm'
 import { resolveContainerPlacements } from '../container-placement'
-import { chunkArray } from './helpers'
+import { chunkArray, SQL_IN_CHUNK_SIZE } from '../sql-helpers'
 
 export type StorageStatistics = {
   byLocation: Array<{ location: string; count: number }>
@@ -22,7 +22,7 @@ async function loadLocationMap(database: Database, locationIds: number[]) {
     return { byLocation, byRootLocation }
   }
 
-  const locationChunks = chunkArray(locationIds, 500)
+  const locationChunks = chunkArray(locationIds, SQL_IN_CHUNK_SIZE)
   const locationChunkResults = await Promise.all(
     locationChunks.map(async (chunk) => {
       return database.select().from(location).where(inArray(location.id, chunk))
@@ -45,7 +45,7 @@ async function loadLocationMap(database: Database, locationIds: number[]) {
   })
 
   if (parentIdsToLoad.size > 0) {
-    const parentChunks = chunkArray(Array.from(parentIdsToLoad), 500)
+    const parentChunks = chunkArray(Array.from(parentIdsToLoad), SQL_IN_CHUNK_SIZE)
     for (const chunk of parentChunks) {
       const parentLocations = await database
         .select()
@@ -65,7 +65,7 @@ async function loadLocationMap(database: Database, locationIds: number[]) {
     })
 
     while (additionalParents.size > 0) {
-      const parentChunks = chunkArray(Array.from(additionalParents), 500)
+      const parentChunks = chunkArray(Array.from(additionalParents), SQL_IN_CHUNK_SIZE)
       additionalParents = new Set<number>()
       for (const chunk of parentChunks) {
         const parentLocations = await database
@@ -134,7 +134,7 @@ export async function computeStorageStatistics(
   const locationIds: number[] = []
 
   if (finalContainerIds.length > 0) {
-    for (const chunk of chunkArray(finalContainerIds, 500)) {
+    for (const chunk of chunkArray(finalContainerIds, SQL_IN_CHUNK_SIZE)) {
       const placementMap = await resolveContainerPlacements(database, chunk)
       for (const containerId of chunk) {
         const placement = placementMap.get(containerId)

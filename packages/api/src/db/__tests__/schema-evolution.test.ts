@@ -36,6 +36,12 @@ function createTablesForLaterMigrations(sqlite: Database): void {
     study_id INTEGER NOT NULL,
     name TEXT NOT NULL
   )`)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS sheet (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    box_id INTEGER,
+    bag_id INTEGER
+  )`)
 }
 
 describe('schema evolution', () => {
@@ -98,7 +104,7 @@ describe('schema evolution', () => {
       'CREATE TABLE settings (key TEXT, user_id INTEGER, value TEXT, PRIMARY KEY (key, user_id))',
     )
     sqlite.exec('CREATE TABLE storage_container (id INTEGER PRIMARY KEY)')
-    sqlite.exec('CREATE TABLE sheet (id INTEGER PRIMARY KEY, name TEXT)')
+    sqlite.exec('CREATE TABLE sheet (id INTEGER PRIMARY KEY, name TEXT, box_id INTEGER, bag_id INTEGER)')
     sqlite.exec(`CREATE TABLE paper (
       id INTEGER PRIMARY KEY REFERENCES storage_container(id),
       sheet_id INTEGER NOT NULL REFERENCES sheet(id),
@@ -123,7 +129,7 @@ describe('schema evolution', () => {
     sqlite.exec('INSERT INTO schema_version (version) VALUES (1)')
     sqlite.exec('CREATE TABLE study (id INTEGER PRIMARY KEY)')
     sqlite.exec('CREATE TABLE storage_container (id INTEGER PRIMARY KEY)')
-    sqlite.exec('CREATE TABLE sheet (id INTEGER PRIMARY KEY, name TEXT)')
+    sqlite.exec('CREATE TABLE sheet (id INTEGER PRIMARY KEY, name TEXT, box_id INTEGER, bag_id INTEGER)')
     sqlite.exec(`CREATE TABLE paper (
       id INTEGER PRIMARY KEY REFERENCES storage_container(id),
       sheet_id INTEGER NOT NULL REFERENCES sheet(id),
@@ -141,7 +147,7 @@ describe('schema evolution', () => {
     sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
     sqlite.exec('INSERT INTO schema_version (version) VALUES (2)')
     sqlite.exec(`CREATE TABLE storage_container (id INTEGER PRIMARY KEY)`)
-    sqlite.exec(`CREATE TABLE sheet (id INTEGER PRIMARY KEY, name TEXT)`)
+    sqlite.exec(`CREATE TABLE sheet (id INTEGER PRIMARY KEY, name TEXT, box_id INTEGER, bag_id INTEGER)`)
     sqlite.exec(`CREATE TABLE paper (
       id INTEGER PRIMARY KEY REFERENCES storage_container(id),
       sheet_id INTEGER NOT NULL REFERENCES sheet(id),
@@ -181,7 +187,7 @@ describe('schema evolution', () => {
     sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
     sqlite.exec('INSERT INTO schema_version (version) VALUES (2)')
     sqlite.exec(`CREATE TABLE storage_container (id INTEGER PRIMARY KEY)`)
-    sqlite.exec(`CREATE TABLE sheet (id INTEGER PRIMARY KEY, name TEXT)`)
+    sqlite.exec(`CREATE TABLE sheet (id INTEGER PRIMARY KEY, name TEXT, box_id INTEGER, bag_id INTEGER)`)
     sqlite.exec(`CREATE TABLE paper (
       id INTEGER PRIMARY KEY REFERENCES storage_container(id),
       sheet_id INTEGER NOT NULL REFERENCES sheet(id),
@@ -257,6 +263,80 @@ describe('schema evolution', () => {
     expect(getRecordedSchemaVersion(sqlite)).toBe(4)
     const names = sqlite.prepare('SELECT name FROM study_subject ORDER BY id').all() as Array<{ name: string }>
     expect(names.map((r) => r.name)).toEqual(['S1', 'S1 '])
+    sqlite.close()
+  })
+
+  it('migration 006 makes sheet names unique per box but not per bag', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (5)')
+    createTablesForLaterMigrations(sqlite)
+    sqlite.exec(`INSERT INTO sheet (id, name, box_id, bag_id) VALUES (1, 'S1', 1, NULL), (2, 'S1', NULL, 7), (3, 'S1', NULL, 7)`)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(() => sqlite.exec(`INSERT INTO sheet (id, name, box_id) VALUES (4, 'S1', 1)`)).toThrow(/UNIQUE/)
+    sqlite.exec(`INSERT INTO sheet (id, name, bag_id) VALUES (5, 'S1', 7)`)
+    sqlite.close()
+  })
+
+  it('migration 006 aborts when a box has two sheets with the same name', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (5)')
+    createTablesForLaterMigrations(sqlite)
+    sqlite.exec(`INSERT INTO sheet (id, name, box_id) VALUES (1, 'S1', 1), (2, 'S1', 1)`)
+
+    expect(() => evolveOperationalSchema(sqlite)).toThrow(/Rename one of them first/)
+    expect(getRecordedSchemaVersion(sqlite)).toBe(5)
+    sqlite.close()
+  })
+
+  /** The CREATE TABLE text SQLite stored for qpcr_well_result. */
+  function qpcrWellResultDdl(sqlite: Database): string {
+    const row = sqlite.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='qpcr_well_result'").get() as
+      | { sql: string }
+      | null
+    return row?.sql ?? ''
+  }
+
+  it('names the qPCR well result unique constraint as the Drizzle schema does, fresh or migrated', () => {
+    const fresh = new Database(testDbPath)
+    evolveOperationalSchema(fresh)
+    expect(qpcrWellResultDdl(fresh)).toContain('CONSTRAINT qpcr_well_result_run_well_target_unique UNIQUE')
+    fresh.close()
+    unlinkSync(testDbPath)
+
+    const migrated = new Database(testDbPath)
+    migrated.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    migrated.exec('INSERT INTO schema_version (version) VALUES (6)')
+    evolveOperationalSchema(migrated)
+    expect(getRecordedSchemaVersion(migrated)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(qpcrWellResultDdl(migrated)).toContain('CONSTRAINT qpcr_well_result_run_well_target_unique UNIQUE')
+    migrated.close()
+  })
+
+  it('migration 007 leaves an existing qpcr_well_result table and its unnamed UNIQUE as they are', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (6)')
+    const existing = `CREATE TABLE qpcr_well_result (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      qpcr_run_id INTEGER NOT NULL,
+      well_position TEXT NOT NULL,
+      target_name TEXT,
+      UNIQUE (qpcr_run_id, well_position, target_name)
+    )`
+    sqlite.exec(existing)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(qpcrWellResultDdl(sqlite)).toBe(existing)
+    sqlite.exec(`INSERT INTO qpcr_well_result (qpcr_run_id, well_position, target_name) VALUES (1, 'A01', 'T')`)
+    expect(() =>
+      sqlite.exec(`INSERT INTO qpcr_well_result (qpcr_run_id, well_position, target_name) VALUES (1, 'A01', 'T')`),
+    ).toThrow(/UNIQUE/)
     sqlite.close()
   })
 

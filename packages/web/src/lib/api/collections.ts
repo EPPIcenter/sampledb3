@@ -146,7 +146,7 @@ export const collectionsApi = {
     api.get<{ bag: BagResponse; contents: { sheets: Array<SheetResponse & { papers: PaperEntry[] }> } }>(`/collections/bags/${id}`),
   getSheet: (id: number) =>
     api.get<{ sheet: SheetResponse; papers: PaperEntry[] }>(`/collections/sheets/${id}`),
-  check: (data: { collections: Array<{ identifier: string; type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet' }> }) =>
+  check: (data: { collections: Array<{ identifier: string; type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' }> }) =>
     api.post<{ results: Array<{ identifier: string; type: string; exists: boolean; id: number | null }> }>('/collections/check', data),
   /** Resolve collection by name and type; returns found + id/location when existing (for batch creation). */
   resolve: (data: { name: string; type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box' }) =>

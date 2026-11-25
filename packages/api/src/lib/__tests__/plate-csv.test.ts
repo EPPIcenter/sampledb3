@@ -131,5 +131,14 @@ describe('plate-csv', () => {
       const result = parsePlateCSV(csv, singleColumnConfig)
       expect(result[0]).toEqual({ wellPosition: 'A01', barcode: 'MT001' })
     })
+
+    it('reads quoted scanner exports', () => {
+      const csv = '"Well","Barcode"\r\n"A01","FR123"\r\n"B2","FR, 456"'
+      const result = parsePlateCSV(csv, singleColumnConfig)
+      expect(result).toEqual([
+        { wellPosition: 'A01', barcode: 'FR123' },
+        { wellPosition: 'B02', barcode: 'FR, 456' },
+      ])
+    })
   })
 })

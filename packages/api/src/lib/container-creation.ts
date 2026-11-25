@@ -41,6 +41,9 @@ export function pickContainerQuantity(src: ContainerQuantity): ContainerQuantity
   return Object.keys(quantity).length > 0 ? quantity : undefined
 }
 
+/** `conflict` marks a failure that clashes with stored data: an occupied position or a barcode in use. */
+export type CreateContainerResult = { success: boolean; containerId?: number; error?: string; conflict?: true }
+
 export type CreateContainerForSpecimenOptions = {
   userId?: number
   /** Mutable map of collection keys to ids; updated when collections are auto-created. */
@@ -149,7 +152,7 @@ async function createMicronixTube(
   placement: Extract<EnsuredPlacement, { containerType: 'micronix_tube' }>,
   database: DatabaseOrTransaction,
   options?: CreateContainerForSpecimenOptions
-): Promise<{ success: boolean; containerId?: number; error?: string }> {
+): Promise<CreateContainerResult> {
   try {
     const dbForValidation = database as unknown as Database
     const position = normalizePosition(placement.position)
@@ -159,7 +162,7 @@ async function createMicronixTube(
       position,
     })
     if (occupancy.occupied && position) {
-      return { success: false, error: occupiedGridPositionMessage(position, 'micronix_plate') }
+      return { success: false, error: occupiedGridPositionMessage(position, 'micronix_plate'), conflict: true }
     }
 
     if (placement.barcode) {
@@ -169,7 +172,7 @@ async function createMicronixTube(
         .where(eq(micronixTube.barcode, placement.barcode))
         .get()
       if (existing) {
-        return { success: false, error: `Barcode '${placement.barcode}' already exists` }
+        return { success: false, error: `Barcode '${placement.barcode}' already exists`, conflict: true }
       }
     }
 
@@ -205,7 +208,7 @@ async function createCryovialTube(
   placement: Extract<EnsuredPlacement, { containerType: 'cryovial_tube' }>,
   database: DatabaseOrTransaction,
   options?: CreateContainerForSpecimenOptions
-): Promise<{ success: boolean; containerId?: number; error?: string }> {
+): Promise<CreateContainerResult> {
   try {
     const dbForValidation = database as unknown as Database
     const position = normalizePosition(placement.position)
@@ -215,7 +218,7 @@ async function createCryovialTube(
       position,
     })
     if (occupancy.occupied && position) {
-      return { success: false, error: occupiedGridPositionMessage(position, 'cryovial_box') }
+      return { success: false, error: occupiedGridPositionMessage(position, 'cryovial_box'), conflict: true }
     }
 
     if (placement.barcode) {
@@ -225,7 +228,7 @@ async function createCryovialTube(
         .where(eq(cryovialTube.barcode, placement.barcode))
         .get()
       if (existing) {
-        return { success: false, error: `Barcode '${placement.barcode}' already exists` }
+        return { success: false, error: `Barcode '${placement.barcode}' already exists`, conflict: true }
       }
     }
 
@@ -261,7 +264,7 @@ async function createPaper(
   placement: Extract<EnsuredPlacement, { containerType: 'paper' }>,
   database: DatabaseOrTransaction,
   options?: CreateContainerForSpecimenOptions
-): Promise<{ success: boolean; containerId?: number; error?: string }> {
+): Promise<CreateContainerResult> {
   try {
     const dbForValidation = database as unknown as Database
     const inserted = await insertStorageContainer(
@@ -295,7 +298,7 @@ async function createStaticWell(
   placement: Extract<EnsuredPlacement, { containerType: 'static_well' }>,
   database: DatabaseOrTransaction,
   options?: CreateContainerForSpecimenOptions
-): Promise<{ success: boolean; containerId?: number; error?: string }> {
+): Promise<CreateContainerResult> {
   try {
     const dbForValidation = database as unknown as Database
     const position = normalizePosition(placement.position)
@@ -305,7 +308,7 @@ async function createStaticWell(
       position,
     })
     if (occupancy.occupied && position) {
-      return { success: false, error: occupiedGridPositionMessage(position, 'micronix_plate') }
+      return { success: false, error: occupiedGridPositionMessage(position, 'micronix_plate'), conflict: true }
     }
 
     const inserted = await insertStorageContainer(
@@ -339,7 +342,7 @@ export async function createContainerForSpecimen(
   data: ContainerWriteInput,
   database: DatabaseOrTransaction,
   options?: CreateContainerForSpecimenOptions | number
-): Promise<{ success: boolean; containerId?: number; error?: string }> {
+): Promise<CreateContainerResult> {
   const opts: CreateContainerForSpecimenOptions =
     typeof options === 'number' ? { userId: options } : (options ?? {})
   const dbForValidation = database as unknown as Database

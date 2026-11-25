@@ -4,11 +4,12 @@ import type { Database } from '../db/client'
 import { errorLogs } from '../db/schema'
 import { logFrontendError, cleanupOldErrorLogs, type ErrorLogContext } from '../lib/error-logger'
 import { handleRouteError } from '../lib/error-handler'
-import { eq, and, desc, sql, like, or } from 'drizzle-orm'
+import { eq, and, desc, sql, or } from 'drizzle-orm'
 import { createAdminMiddleware, createAuthMiddleware, createOptionalAuthMiddleware } from '../middleware/auth'
 import { rateLimit } from '../middleware/rate-limit'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
+import { likeContains } from '../lib/sql-like'
 
 // Schema for frontend error submission
 const frontendErrorSchema = z.object({
@@ -134,8 +135,8 @@ export function createErrorLogsRoutes(database: Database): Hono {
       if (search) {
         conditions.push(
           or(
-            like(errorLogs.message, `%${search}%`),
-            like(errorLogs.errorCode, `%${search}%`)
+            likeContains(errorLogs.message, search),
+            likeContains(errorLogs.errorCode, search)
           )!
         )
       }

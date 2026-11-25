@@ -4,6 +4,10 @@ import path from 'path'
 
 const appBuildId = process.env.VITE_APP_BUILD_ID || process.env.APP_BUILD_ID || 'local-dev'
 
+// Run tests west of UTC so a calendar date parsed as UTC midnight shows the day before and
+// fails, wherever CI runs. Test workers inherit this.
+process.env.TZ = 'America/Los_Angeles'
+
 /**
  * Vitest Configuration
  * 

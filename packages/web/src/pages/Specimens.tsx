@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import DataTable, { Column } from '../components/DataTable'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import SpecimenFilter, { type SpecimenFilters } from '../components/SpecimenFilter'
@@ -15,6 +15,7 @@ import {
   getQueryErrorMessage,
 } from '../ui'
 import '../styles/subject-specimen.css'
+import { formatDate } from '../lib/date-utils'
 
 type SpecimenListRow = Specimen & {
   study?: { shortCode?: string }
@@ -55,7 +56,12 @@ export default function Specimens() {
   const [page, setPage] = useState(1)
   const pageSize = 50
 
-  const [filters, setFilters] = useState<SpecimenFilters>(() => filtersFromSearchParams(searchParams))
+  // The URL is the source of truth, so "Clear Filters" and back/forward update the table.
+  const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams])
+  // Back to page 1 whenever the filters change, including from outside (Clear Filters).
+  useEffect(() => {
+    setPage(1)
+  }, [searchParams])
 
   const listParams = useMemo(() => filtersToParams(filters), [filters])
   const specimensQuery = useSpecimens(listParams)
@@ -65,10 +71,8 @@ export default function Specimens() {
     isEmpty: specimensQuery.isSuccess && specimens.length === 0,
   })
 
-  const handleFilterChange = (newFilters: SpecimenFilters) => {
-    setFilters(newFilters)
-    setPage(1)
-
+  /** Write filters to the URL: a new history entry (so Back undoes it), or a replaced one. */
+  const handleFilterChange = (newFilters: SpecimenFilters, options?: { replace?: boolean }) => {
     const params: Record<string, string> = {}
     if (newFilters.study) params.study = newFilters.study
     if (newFilters.sourceType) params.source_type = newFilters.sourceType
@@ -79,13 +83,12 @@ export default function Specimens() {
     if (newFilters.createdTo) params.created_to = newFilters.createdTo
     if (newFilters.search) params.search = newFilters.search
 
-    setSearchParams(params)
+    // Applying unchanged filters must not add a history entry that Back would have to skip.
+    if (new URLSearchParams(params).toString() === searchParams.toString()) return
+    setSearchParams(params, { replace: options?.replace })
   }
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return '—'
-    return new Date(dateString).toLocaleDateString()
-  }
+  const formatTableDate = (dateString?: string) => (dateString ? formatDate(dateString, 'numeric') : '—')
 
   const columns: Column<SpecimenListRow>[] = [
     {
@@ -111,13 +114,13 @@ export default function Specimens() {
       key: 'collectionDate',
       label: 'Collected',
       sortable: true,
-      render: (value) => formatDate(value as string),
+      render: (value) => formatTableDate(value as string),
     },
     {
       key: 'created',
       label: 'Created',
       sortable: true,
-      render: (value) => formatDate(value as string),
+      render: (value) => formatTableDate(value as string),
     },
   ]
 
@@ -172,8 +175,9 @@ export default function Specimens() {
         <div className="subject-specimen-reveal subject-specimen-reveal-3">
           <SpecimenFilter
             filters={filters}
-            onChange={setFilters}
-            onSubmit={handleFilterChange}
+            // Search typing replaces the history entry instead of adding one per keystroke.
+            onSearchChange={(search) => handleFilterChange({ ...filters, search }, { replace: true })}
+            onSubmit={(next) => handleFilterChange(next)}
             isLoading={specimensQuery.isPending}
           />
         </div>

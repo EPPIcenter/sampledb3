@@ -1,7 +1,8 @@
 import { z } from 'zod'
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, ne } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { controlDefinition, strain } from '../../db/schema'
+import { ConflictError } from '../error-handler'
 
 export const strainCompositionEntrySchema = z.object({
   strainId: z.number().int(),
@@ -172,15 +173,26 @@ export async function resolveStrainComposition(
   return { ok: true, strainsWithNames, strainNameMap }
 }
 
+/** 409 for a blood definition whose density and strain mix another definition already has. */
+export class DuplicateControlCompositionError extends ConflictError {
+  constructor(existingDefinition: typeof controlDefinition.$inferSelect) {
+    super('A control definition with this combination of density and strains already exists', {
+      existingDefinition,
+    })
+    this.name = 'DuplicateControlCompositionError'
+  }
+}
+
 export async function findBloodControlDefinitionByComposition(
   database: Database,
   criteria: CompositionCriteria,
-  options?: CompositionMatchOptions,
+  options?: CompositionMatchOptions & { /** Skip this definition, e.g. the one being edited. */ excludeId?: number },
 ): Promise<(typeof controlDefinition.$inferSelect) | null> {
+  const isBlood = eq(controlDefinition.controlType, 'blood')
   const definitions = await database
     .select()
     .from(controlDefinition)
-    .where(eq(controlDefinition.controlType, 'blood'))
+    .where(options?.excludeId === undefined ? isBlood : and(isBlood, ne(controlDefinition.id, options.excludeId)))
 
   for (const definition of definitions) {
     if (definitionCompositionMatches(definition.properties, criteria, options)) {

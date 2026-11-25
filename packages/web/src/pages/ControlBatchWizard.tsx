@@ -17,6 +17,7 @@ import {
 import { useUser } from '../contexts/UserContext'
 import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/blood-controls.css'
+import { localToday } from '../lib/date-utils'
 
 /** Strains for composition (used for multi-batch CSV flow). */
 export type CompositionStrains = Array<{ id: number; percentage?: number }>
@@ -136,7 +137,7 @@ export default function ControlBatchWizard() {
     controlDefinitionId: null,
     controlDefinition: null,
     name: '',
-    productionDate: new Date().toISOString().split('T')[0],
+    productionDate: localToday(),
   })
   
   const [compositionStrains, setCompositionStrains] = useState<CompositionStrains | null>(null)
@@ -165,7 +166,7 @@ export default function ControlBatchWizard() {
       controlDefinitionId: data.batch.controlDefinitionId,
       controlDefinition: data.controlDefinition,
       name: data.batch.name,
-      productionDate: data.batch.productionDate || new Date().toISOString().split('T')[0],
+      productionDate: data.batch.productionDate || localToday(),
       properties: data.batch.properties,
     })
   }, [batchBootstrapQuery.data])

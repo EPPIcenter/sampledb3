@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getSpecimenTypeIcon, getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
-import type { SubjectSummarySpecimen } from '../lib/api/subjects';interface SimpleTimelineProps {
+import type { SubjectSummarySpecimen } from '../lib/api/subjects'
+import { formatDate, parseDisplayDate, toLocalDateString } from '../lib/date-utils'
+
+interface SimpleTimelineProps {
   specimens: SubjectSummarySpecimen[]
 }
 
@@ -33,13 +36,13 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
   const sortedSpecimens = [...specimens].sort((a, b) => {
     const dateA = a.collectionDate || a.created
     const dateB = b.collectionDate || b.created
-    return new Date(dateA).getTime() - new Date(dateB).getTime()
+    return parseDisplayDate(dateA).getTime() - parseDisplayDate(dateB).getTime()
   })
 
   // Group specimens by date
   const groupedByDate = sortedSpecimens.reduce((groups, specimen) => {
     const dateKey = specimen.collectionDate || specimen.created
-    const dateOnly = new Date(dateKey).toDateString() // Gets date without time
+    const dateOnly = toLocalDateString(parseDisplayDate(dateKey))
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- dynamic key may be missing
     if (!groups[dateOnly]) {
       groups[dateOnly] = []
@@ -47,15 +50,6 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
     groups[dateOnly].push(specimen)
     return groups
   }, {} as Record<string, typeof sortedSpecimens>)
-
-  const formatDateHeader = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
-  }
 
   const formatContainerUnits = (specimen: SubjectSummarySpecimen) => {
     if (!specimen.unitBreakdown || Object.keys(specimen.unitBreakdown).length === 0) {
@@ -170,7 +164,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
               {/* Date header */}
               <div className="px-1.5">
                 <span className="text-xs font-medium text-app-text-muted">
-                  {dateSpecimens[0].collectionDate ? 'Collected' : 'Created'}: {formatDateHeader(displayDate)}
+                  {dateSpecimens[0].collectionDate ? 'Collected' : 'Created'}: {formatDate(displayDate)}
                 </span>
               </div>
               

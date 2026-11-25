@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import QpcrExperimentDetail from '../QpcrExperimentDetail'
 import { qpcrExperimentsApi } from '../../lib/api/qpcr'
 import { settingsApi } from '../../lib/api/settings'
+import { containersApi } from '../../lib/api/containers'
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
@@ -34,6 +36,11 @@ vi.mock('../../lib/api/settings', async () => {
       getValue: mockSettingsApiGetValue(),
     },
   })
+})
+
+vi.mock('../../lib/api/containers', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('containers', { containersApi: { get: vi.fn() } })
 })
 
 vi.mock('../../contexts/UserContext', async () => {
@@ -78,5 +85,58 @@ describe('QpcrExperimentDetail', () => {
       expect(screen.getByText(/Could not load experiment/i)).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
     })
+  })
+
+  it('refetches the cached experiment after a well edit', async () => {
+    const emptyWell = {
+      id: 1, qpcrExperimentId: 1, wellPosition: 'A01', barcode: null, storageContainerId: null, specimenId: null,
+      contentType: 'unknown', standardDensity: null, cq: null, startingQuantity: null, cqMean: null, rawSampleName: null,
+    }
+    vi.mocked(qpcrExperimentsApi.get).mockResolvedValue({ ...mockDetail, wells: [emptyWell] } as never)
+    vi.mocked(qpcrExperimentsApi.updateWells).mockResolvedValue({
+      wells: [{ ...emptyWell, contentType: 'negative' }],
+    } as never)
+    const user = userEvent.setup()
+    await render(<QpcrExperimentDetail />)
+
+    await user.click(await screen.findByRole('button', { name: 'Set all empty to NTC' }))
+
+    await waitFor(() => expect(qpcrExperimentsApi.updateWells).toHaveBeenCalled())
+    // The page's experiment query is refetched, so a later visit does not show the old wells.
+    await waitFor(() => expect(qpcrExperimentsApi.get).toHaveBeenCalledTimes(2))
+  })
+
+  it("keeps the selected well's container when an earlier well's reply arrives late", async () => {
+    const well = (id: number, wellPosition: string, storageContainerId: number) => ({
+      id, qpcrExperimentId: 1, wellPosition, barcode: `MT-${wellPosition}`, storageContainerId, specimenId: null,
+      contentType: 'unknown', standardDensity: null, cq: null, startingQuantity: null, cqMean: null, rawSampleName: null,
+    })
+    vi.mocked(qpcrExperimentsApi.get).mockResolvedValue({
+      ...mockDetail,
+      wells: [well(1, 'A01', 101), well(2, 'B01', 102)],
+    } as never)
+    const replies = new Map<number, (value: unknown) => void>()
+    vi.mocked(containersApi.get).mockImplementation(
+      (containerId: number) => new Promise((resolve) => { replies.set(containerId, resolve) }) as never,
+    )
+    const container = (id: number, plateName: string) => ({
+      container: { id, containerType: 'micronix_tube', barcode: `MT-${id}`, collection: { id: 1, name: plateName, position: 'A01' } },
+      specimen: null,
+      source: null,
+    })
+    const user = userEvent.setup()
+    await render(<QpcrExperimentDetail />)
+
+    await user.click(await screen.findByRole('button', { name: /^Well A01/ }))
+    await waitFor(() => expect(replies.has(101)).toBe(true))
+    await user.click(screen.getByRole('button', { name: /^Well B01/ }))
+    await waitFor(() => expect(replies.has(102)).toBe(true))
+
+    replies.get(102)!(container(102, 'Plate B'))
+    expect(await screen.findByText(/Plate B/)).toBeInTheDocument()
+    replies.get(101)!(container(101, 'Plate A'))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByText(/Plate A/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Plate B/)).toBeInTheDocument()
   })
 })

@@ -1,4 +1,5 @@
 import { parseCsv } from './csv'
+import type { SubjectDateFilter, SubjectDateSelection } from './export'
 
 export interface ExportFilterColumnSpec {
   key: string
@@ -198,4 +199,27 @@ export function parseBarcodeExportFilterCsv(csvText: string): string[] {
   }
 
   return barcodes
+}
+
+/**
+ * Fold subject-list filter rows into one collection-date selection per subject name.
+ * A subject on several rows keeps every date (one per visit). A row with no date selects
+ * all of that subject's dates, and wins over the subject's dated rows.
+ */
+export function subjectDateSelections(rows: SingleStudyExportFilterRow[]): Map<string, SubjectDateSelection> {
+  const selections = new Map<string, SubjectDateSelection>()
+  for (const row of rows) {
+    const existing = selections.get(row.subject_name)
+    if (existing?.kind === 'all') continue
+    const dateFilter: SubjectDateFilter | null = row.collection_date
+      ? { exact: row.collection_date }
+      : row.date_from || row.date_to
+        ? { from: row.date_from, to: row.date_to }
+        : null
+    selections.set(
+      row.subject_name,
+      dateFilter ? { kind: 'dates', filters: [...(existing?.filters ?? []), dateFilter] } : { kind: 'all' },
+    )
+  }
+  return selections
 }

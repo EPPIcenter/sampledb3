@@ -1,31 +1,40 @@
-import { useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react'
+import { useContext, useState, useEffect, useMemo, useCallback, useRef, ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { authApi, type User } from '../lib/api/auth'
+import { setSessionExpiredHandler } from '../lib/api/client'
 import { addRecentUser } from '../lib/localUserHistory'
 import { UserContext } from './user-context-instance'
-
-// Run refresh once per app load; cache result for remounts (e.g. Strict Mode)
-let userDidInit = false
-let userCachedUser: User | null = null
-let userCachedLoading = true
-let userCachedError: string | null = null
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const queryClient = useQueryClient()
+  const currentUserId = useRef<number | null>(null)
+  // Strict Mode runs mount effects twice on the same instance; refs survive, so this loads the user once.
+  const didInit = useRef(false)
+
   const setUser = useCallback((u: User | null) => {
+    // Cached queries include per-user data (personal export configs, settings); never show
+    // one user's cache to the next after a logout, login, or switch.
+    const nextId = u?.id ?? null
+    if (currentUserId.current !== null && currentUserId.current !== nextId) {
+      queryClient.clear()
+    }
+    currentUserId.current = nextId
     setUserState(u)
-    userCachedUser = u
-    userCachedLoading = false
-    userCachedError = null
-  }, [])
+  }, [queryClient])
+
+  // A 401 from a data request means the session is gone: sign out so AuthGuard redirects.
+  useEffect(() => {
+    setSessionExpiredHandler(() => setUser(null))
+    return () => setSessionExpiredHandler(null)
+  }, [setUser])
 
   const refreshUser = useCallback(async () => {
     setLoading(true)
     setError(null)
-    userCachedLoading = true
-    userCachedError = null
     try {
       const response = await authApi.getCurrentUser()
       const userData = response.user
@@ -41,19 +50,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
           const errMsg = axiosErr.response?.data?.error || 'Failed to load user'
           setError(errMsg)
           setUser(null)
-          userCachedError = errMsg
         }
       } else {
-        const errMsg = 'Failed to load user'
-        setError(errMsg)
+        setError('Failed to load user')
         setUser(null)
-        userCachedError = errMsg
       }
     } finally {
       setLoading(false)
-      userCachedLoading = false
     }
-  }, [])
+  }, [setUser])
 
   const switchUser = useCallback(async (userId: number, password: string) => {
     try {
@@ -101,17 +106,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
       // Calling refreshUser() could fail and log the user out even though they're still logged in
       throw new Error(errorMessage)
     }
-  }, [])
+  }, [setUser])
 
   useEffect(() => {
-    if (!userDidInit) {
-      userDidInit = true
-      void refreshUser()
-    } else {
-      setUser(userCachedUser)
-      setLoading(userCachedLoading)
-      setError(userCachedError)
-    }
+    if (didInit.current) return
+    didInit.current = true
+    void refreshUser()
   }, [refreshUser])
 
   // Permission helpers

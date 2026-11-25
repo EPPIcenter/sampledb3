@@ -31,6 +31,39 @@ function readRequestIdHeader(headers: unknown): string | undefined {
   return undefined
 }
 
+type SessionExpiredHandler = () => void
+let sessionExpiredHandler: SessionExpiredHandler | null = null
+
+/**
+ * Called when a data request gets 401 (session expired or revoked). The user context
+ * registers a handler that signs the user out, so the app redirects to login instead of
+ * showing "Could not load" everywhere.
+ */
+export function setSessionExpiredHandler(handler: SessionExpiredHandler | null): void {
+  sessionExpiredHandler = handler
+}
+
+/**
+ * Auth requests whose 401 is an answer, not an expired session: bad credentials, a wrong
+ * current password, not signed in yet, or a session check. Other /auth/* requests (user
+ * and session admin, profile updates) are data requests.
+ */
+const SELF_REPORTING_AUTH_REQUESTS = new Set([
+  'POST /auth/login',
+  'POST /auth/self-register',
+  'POST /auth/logout',
+  'POST /auth/switch',
+  'GET /auth/me',
+  'GET /auth/current',
+  'PATCH /auth/me/password',
+])
+
+function reportsOwn401(method: string | undefined, url: string | undefined): boolean {
+  if (!url) return false
+  const path = url.split('?')[0].replace(/^\/?api(?=\/)/, '').replace(/^\/?/, '/').replace(/\/$/, '')
+  return SELF_REPORTING_AUTH_REQUESTS.has(`${(method ?? 'get').toUpperCase()} ${path}`)
+}
+
 function attachRequestIdInterceptor(instance: AxiosInstance): void {
   instance.interceptors.request.use((config) => {
     const headers = config.headers ?? {}
@@ -58,6 +91,19 @@ function attachRequestIdInterceptor(instance: AxiosInstance): void {
   )
 }
 
+function attachSessionExpiryInterceptor(instance: AxiosInstance): void {
+  instance.interceptors.response.use(undefined, (error: unknown) => {
+    if (
+      axios.isAxiosError(error) &&
+      error.response?.status === 401 &&
+      !reportsOwn401(error.config?.method, error.config?.url)
+    ) {
+      sessionExpiredHandler?.()
+    }
+    return Promise.reject(error)
+  })
+}
+
 /** Shared axios instance (raw). Prefer `api` for typed, unwrapped JSON calls. */
 export const axiosApi: AxiosInstance = axios.create({
   baseURL: '/api',
@@ -68,6 +114,7 @@ export const axiosApi: AxiosInstance = axios.create({
 })
 
 attachRequestIdInterceptor(axiosApi)
+attachSessionExpiryInterceptor(axiosApi)
 
 async function unwrap<T>(promise: Promise<AxiosResponse<T>>): Promise<T> {
   const response = await promise

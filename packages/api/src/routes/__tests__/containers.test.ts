@@ -16,6 +16,8 @@ import {
   createTestLocation,
   createTestUnit,
   createTestStorageType,
+  createTestCryovialBox,
+  createTestCryovialTube,
 } from '../../__tests__/helpers/factories'
 import { cryovialBox, cryovialTube, specimen, storageContainer, micronixPlate, micronixTube, box, sheet, paper, staticWell } from '../../db/schema'
 import { eq } from 'drizzle-orm'
@@ -199,6 +201,28 @@ describe('Containers API', () => {
       expect(res.status).toBe(200)
       const row = await ctx.db.select().from(cryovialTube).where(eq(cryovialTube.id, container.id)).get()
       expect(row?.barcode).toBe('NEW-CRYO-1')
+    })
+
+    it('clears the comment when it is emptied', async () => {
+      const now = utcNow()
+      const boxRecord = await createTestCryovialBox(ctx.db, { name: `BOX-CMT-${Date.now()}`, locationId: testLocation.id })
+      const testStudy = await createTestStudy(ctx.db, { title: 'C Study', shortCode: 'CST' + Date.now() })
+      const subj = await createTestStudySubject(ctx.db, { studyId: testStudy.id, name: 'S1' })
+      const [spec] = await ctx.db
+        .insert(specimen)
+        .values({ studySubjectId: subj.id, specimenTypeId: testSpecimenType.id, created: now, lastUpdated: now })
+        .returning()
+      const [container] = await ctx.db
+        .insert(storageContainer)
+        .values({ specimenId: spec.id, unitId: testUnit.id, totalQuantity: 1, remainingQuantity: 1, comment: 'hemolyzed', created: now, lastUpdated: now })
+        .returning()
+      await createTestCryovialTube(ctx.db, { containerId: container.id, collectionId: boxRecord.id, barcode: 'CMT-1', position: 'A01' })
+
+      const res = await ctx.request(`/api/containers/${container.id}`, { method: 'PATCH', json: { comment: '' } })
+
+      expect(res.status).toBe(200)
+      const row = await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, container.id)).get()
+      expect(row?.comment).toBeNull()
     })
 
     it('returns 400 when cryovial_tube barcode is already in use', async () => {

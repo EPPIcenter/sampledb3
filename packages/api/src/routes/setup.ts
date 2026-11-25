@@ -3,6 +3,7 @@ import { users, specimenType, unit, storageType, location, strain, specimenTypeC
 import { sql, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
+import { BCRYPT_COST } from '../lib/auth/auth-service'
 import { rateLimit } from '../middleware/rate-limit'
 import {
   setContainerDefaults,
@@ -110,7 +111,7 @@ const initSchema = z.object({
       }
 
       // Hash outside the transaction: bcrypt yields to the event loop.
-      const passwordHash = await bcrypt.hash(adminPassword, 10)
+      const passwordHash = await bcrypt.hash(adminPassword, BCRYPT_COST)
 
       await withWriteTransaction(database, async (database) => {
         // Re-check inside the transaction so concurrent setups cannot both proceed

@@ -15,6 +15,8 @@ import {
   createTestUnit,
   createTestStudy,
   createTestStudySubject,
+  createTestBox,
+  createTestSheet,
 } from '../../__tests__/helpers/factories'
 import { setScannerConfigurations } from '../../lib/settings'
 import { eq } from 'drizzle-orm'
@@ -120,6 +122,14 @@ describe('Collections API', () => {
       expect(data.results[0].exists).toBe(false)
     })
 
+    it('rejects sheets, whose names only identify a record within a box or bag', async () => {
+      const res = await ctx.request('/api/collections/check', {
+        method: 'POST',
+        json: { collections: [{ identifier: 'Sheet-1', type: 'sheet' }] },
+      })
+      expect(res.status).toBe(400)
+    })
+
     it('returns 400 for invalid body', async () => {
       const res = await ctx.request('/api/collections/check', {
         method: 'POST',
@@ -152,6 +162,32 @@ describe('Collections API', () => {
         json: { mappings: [], moves: [] },
       })
       expect(res.status).toBe(401)
+    })
+  })
+
+  describe('POST /api/collections/sheets/move', () => {
+    it('returns a typed 409 when the target box already has a sheet with that name', async () => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const loc = await createTestLocation(ctx.db, {
+        name: 'Loc',
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+      const boxA = await createTestBox(ctx.db, { name: 'BoxA', locationId: loc.id })
+      const boxB = await createTestBox(ctx.db, { name: 'BoxB', locationId: loc.id })
+      const moving = await createTestSheet(ctx.db, { name: 'Sheet-1', boxId: boxA.id })
+      await createTestSheet(ctx.db, { name: 'Sheet-1', boxId: boxB.id })
+
+      const res = await ctx.request('/api/collections/sheets/move', {
+        method: 'POST',
+        json: { sheetIds: [moving.id], targetCollectionId: boxB.id, targetCollectionType: 'box' },
+      })
+
+      expect(res.status).toBe(409)
+      expect(await res.json()).toEqual({
+        error: "The target box already has a sheet named 'Sheet-1'. Rename one of them first.",
+        errorCode: 'CONFLICT',
+      })
     })
   })
 

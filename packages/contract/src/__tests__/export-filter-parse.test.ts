@@ -3,6 +3,7 @@ import {
   parseBarcodeExportFilterCsv,
   parseMultiStudyExportFilterCsv,
   parseSingleStudyExportFilterCsv,
+  subjectDateSelections,
 } from '../export-filter-parse'
 
 describe('parseMultiStudyExportFilterCsv', () => {
@@ -60,3 +61,28 @@ describe('parseBarcodeExportFilterCsv', () => {
     expect(() => parseBarcodeExportFilterCsv('position\nA01')).toThrow(/barcode/)
   })
 })
+
+describe('subjectDateSelections', () => {
+  it('keeps every date for a subject listed once per visit', () => {
+    const selections = subjectDateSelections([
+      { subject_name: 'A', collection_date: '2024-01-01' },
+      { subject_name: 'A', date_from: '2024-02-01', date_to: '2024-02-28' },
+    ])
+    expect(selections.get('A')).toEqual({
+      kind: 'dates',
+      filters: [{ exact: '2024-01-01' }, { from: '2024-02-01', to: '2024-02-28' }],
+    })
+  })
+
+  it('selects all dates when any row for the subject has no date, in either order', () => {
+    const selections = subjectDateSelections([
+      { subject_name: 'A', collection_date: '2024-01-01' },
+      { subject_name: 'A' },
+      { subject_name: 'B' },
+      { subject_name: 'B', collection_date: '2024-01-01' },
+    ])
+    expect(selections.get('A')).toEqual({ kind: 'all' })
+    expect(selections.get('B')).toEqual({ kind: 'all' })
+  })
+})
+

@@ -3,6 +3,7 @@ import { setupAuthenticatedRouteTest, type AuthenticatedRouteTestContext } from 
 import { createQpcrExperimentsRoutes } from '../qpcr-experiments'
 import { utcNow } from '../../lib/datetime'
 import { qpcrExperiment, qpcrExperimentTarget, qpcrExperimentWell } from '../../db/schema'
+import { qpcrAmplificationData } from '../../db/schema'
 
 describe('qPCR Experiments Template', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -44,6 +45,64 @@ describe('qPCR Experiments Template', () => {
       expect(detail.experiment.targets[0].targetName).toBe('varATS')
       expect(detail.experiment.targets[0].fluorophore).toBe('FAM')
       expect(detail.experiment.targets[0].reporter).toBe('FAM')
+    })
+  })
+
+  describe('PATCH / targets', () => {
+    it('rejects duplicate target names and keeps the existing targets', async () => {
+      const createRes = await ctx.request('/api/qpcr-experiments', {
+        method: 'POST',
+        json: { name: 'Dup targets', templateFormat: 'biorad' },
+      })
+      const created = (await createRes.json()) as { id: number }
+
+      const res = await ctx.request(`/api/qpcr-experiments/${created.id}`, {
+        method: 'PATCH',
+        json: { targets: [{ targetName: '' }, { targetName: 'varATS' }] },
+      })
+
+      expect(res.status).toBe(400)
+      const detail = (await (await ctx.request(`/api/qpcr-experiments/${created.id}`)).json()) as {
+        experiment: { targets: Array<{ targetName: string }> }
+      }
+      expect(detail.experiment.targets.map((t) => t.targetName)).toEqual(['varATS'])
+    })
+  })
+
+  describe('POST /:id/results', () => {
+    it('keeps amplification rows for results that have no target name', async () => {
+      const XLSX = await import('xlsx')
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.aoa_to_sheet([
+          ['Well', 'Well Position', 'Sample Name', 'Task', 'CT'],
+          [1, 'A1', 'S1', 'UNKNOWN', 22.1],
+        ]),
+        'Results',
+      )
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.aoa_to_sheet([
+          ['Well', 'Well Position', 'Cycle', 'Rn', 'Delta Rn'],
+          [1, 'A1', 1, 0.5, 0.01],
+          [1, 'A1', 2, 0.6, 0.02],
+        ]),
+        'Amplification Data',
+      )
+      const fileContent = (XLSX.write(wb, { type: 'buffer', bookType: 'xls' }) as Buffer).toString('base64')
+      const created = (await (
+        await ctx.request('/api/qpcr-experiments', { method: 'POST', json: { name: 'Amp', templateFormat: 'quant_studio' } })
+      ).json()) as { id: number }
+
+      const res = await ctx.request(`/api/qpcr-experiments/${created.id}/results`, {
+        method: 'POST',
+        json: { fileContent, fileName: 'run.xls', instrumentType: 'QuantStudio' },
+      })
+
+      expect(res.status).toBeLessThan(300)
+      const amp = await ctx.db.select().from(qpcrAmplificationData).all()
+      expect(amp).toHaveLength(2)
     })
   })
 
