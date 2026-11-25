@@ -125,7 +125,8 @@ export function handleRouteError(error: unknown, c: Context): Response {
       return c.json({
         ...error.fields,
         error: error.message,
-        errorCode: 'CONFLICT'
+        errorCode: 'CONFLICT',
+        ...(error.details !== undefined && { details: error.details }),
       }, 409)
     }
 
@@ -204,8 +205,12 @@ export class NotFoundError extends Error {
 }
 
 export class ConflictError extends Error {
-  /** `fields` are added to the 409 body next to `error` (e.g. the record that conflicts). */
-  constructor(message: string, public readonly fields: Record<string, unknown> = {}) {
+  /** `details` goes in the 409 body as `details`; `fields` are added next to `error` (e.g. the record that conflicts). */
+  constructor(
+    message: string,
+    public readonly details?: unknown,
+    public readonly fields: Record<string, unknown> = {}
+  ) {
     super(message)
     this.name = 'ConflictError'
   }

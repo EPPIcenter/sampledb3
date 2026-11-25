@@ -176,7 +176,7 @@ export async function resolveStrainComposition(
 /** 409 for a blood definition whose density and strain mix another definition already has. */
 export class DuplicateControlCompositionError extends ConflictError {
   constructor(existingDefinition: typeof controlDefinition.$inferSelect) {
-    super('A control definition with this combination of density and strains already exists', {
+    super('A control definition with this combination of density and strains already exists', undefined, {
       existingDefinition,
     })
     this.name = 'DuplicateControlCompositionError'

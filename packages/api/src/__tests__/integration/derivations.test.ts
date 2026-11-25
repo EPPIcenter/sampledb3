@@ -16,6 +16,7 @@ import { setContainerDefaults } from '../../lib/settings'
 import { specimenTypeContainerType, containerTypeUnit, storageContainer, micronixTube } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { utcNow } from '../../lib/datetime'
+import { failInsertsWithUniqueViolation } from '../helpers/constraint-race'
 
 const BASE = '/api/derivations'
 
@@ -133,6 +134,27 @@ describe('Derivation Workflow Integration Tests', () => {
     const list = (await listRes.json()) as { derivations: unknown[]; count: number }
     expect(list.count).toBe(1)
     expect(list.derivations).toHaveLength(1)
+  })
+
+  it('returns 409 when the child container write hits a constraint', async () => {
+    const { parentContainerId, targetPlateId } = await createParentContainerFixture(ctx.db)
+    failInsertsWithUniqueViolation(ctx.sqlite, 'micronix_tube')
+
+    const res = await ctx.request(`${BASE}/containers/${parentContainerId}/derive`, {
+      method: 'POST',
+      json: {
+        derivationType: 'aliquot',
+        specimenTypeName: 'DNA',
+        container: {
+          containerType: 'micronix_tube',
+          barcode: 'MT-CHILD',
+          collection: { type: 'micronix_plate', id: targetPlateId, position: 'A01' },
+        },
+      },
+    })
+
+    expect(res.status).toBe(409)
+    expect(await ctx.db.select().from(storageContainer)).toHaveLength(1)
   })
 
   it('returns derivation source for the child container', async () => {

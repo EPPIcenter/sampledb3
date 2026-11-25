@@ -761,7 +761,7 @@ describe('Controls API', () => {
       const conflicts = [
         // The second batch reuses the first one's name, tube barcode, or position.
         { second: batch(def200.id, 'B100', 'MT2', 'A02'), error: "Control batch 2 ('B100'): Batch name 'B100' already exists. No control batches were created." },
-        { second: batch(def200.id, 'B200', 'MT1', 'A02'), error: "Control batch 2 ('B200'): Barcode 'MT1' already exists. No control batches were created." },
+        { second: batch(def200.id, 'B200', 'MT1', 'A02'), error: "Control batch 2 ('B200'): Barcode 'MT1' already exists. Use a different barcode. No control batches were created." },
         {
           second: batch(def200.id, 'B200', 'MT2', 'A01'),
           error: "Control batch 2 ('B200'): Position A01 is already used in this plate. Use a different position or plate. No control batches were created.",
@@ -828,7 +828,7 @@ describe('Controls API', () => {
 
       const conflicts = [
         { json: batch(def200.id, 'B100', 'MT2', 'A02'), error: "Batch name 'B100' already exists" },
-        { json: batch(def200.id, 'B200', 'MT1', 'A02'), error: "Barcode 'MT1' already exists" },
+        { json: batch(def200.id, 'B200', 'MT1', 'A02'), error: "Barcode 'MT1' already exists. Use a different barcode." },
         { json: batch(def200.id, 'B200', 'MT2', 'A01'), error: 'Position A01 is already used in this plate. Use a different position or plate.' },
       ]
       for (const { json, error } of conflicts) {

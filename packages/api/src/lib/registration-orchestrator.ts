@@ -1,154 +1,193 @@
 /**
- * Registration orchestrator — validate/create entry points for bulk specimen registration.
- * Prepare logic lives in registration-prepare.ts.
+ * POST /specimens/bulk and its validate route. Each row's Source is resolved here; Specimens and
+ * Containers go through Specimen registration (ADR 0010), and validation is the same
+ * registration, rolled back.
  */
 import type { Database } from '../db/client'
-import { specimen } from '../db/schema'
-import { withWriteTransaction } from '../db/write-transaction'
-import { createContainerForSpecimen, pickContainerQuantity } from './container-creation'
-import { findExistingStudySpecimen, findExistingControlSpecimen } from './specimen-helpers'
-import { utcNow } from './datetime'
+import type { specimen } from '../db/schema'
+import { ConflictError } from './error-handler'
+import { validateSpecimenData } from './validation'
+import { withRolledBackTransaction, withWriteTransaction } from '../db/write-transaction'
 import {
-  toContainerWriteInput,
-  type BulkCombinedContainerInput,
-} from './container-write-placement'
-import {
-  bulkSpecimenPayloadKey,
-  prepareRegistrationBatchForSpecimens,
-  type BulkSpecimenValidateRow,
-  type BulkSpecimenValidateError,
-  type BulkSpecimenValidateResult,
-  type BulkSpecimenCreateResult,
-} from './registration-prepare'
+  RefusedWithErrors,
+  registerSpecimens,
+  SpecimenRegistrationError,
+  type RegistrationContainer,
+  type RegistrationEntry,
+  type RegistrationError,
+  type RegistrationResult,
+} from './specimen-registration'
 
-export type {
-  BulkSpecimenContainerInput,
-  BulkSpecimenValidateRow,
-  BulkSpecimenValidateError,
-  BulkSpecimenValidateResult,
-  BulkSpecimenCreateResult,
-  PreparedBulkSpecimenRow,
-  SpecimenContainerRegistrationResult,
-} from './registration-prepare'
+export type BulkSpecimenContainerInput = Omit<RegistrationContainer, 'containerType'> & {
+  containerType?: RegistrationContainer['containerType']
+}
 
-export {
-  bulkCombinedCollectionMessages,
-  bulkSpecimenPayloadKey,
-  prepareRegistrationBatchForSpecimens,
-  prepareCombinedSubjectContainerBatch,
-  validateSpecimenContainerRegistration,
-} from './registration-prepare'
-import { insertedRow } from './inserted-row'
+export type BulkSpecimenValidateRow = {
+  sourceType: 'subject' | 'control'
+  sourceId?: number
+  studyShortCode?: string
+  subjectName?: string
+  specimenTypeName: string
+  collectionDate?: string
+  container?: BulkSpecimenContainerInput
+}
+
+export type BulkSpecimenValidateError = {
+  index: number
+  message: string
+}
+
+export type BulkSpecimenValidateResult = {
+  valid: boolean
+  errors: BulkSpecimenValidateError[]
+}
+
+export type BulkSpecimenCreateResult = {
+  specimens: Array<typeof specimen.$inferSelect>
+  created: number
+  containersCreated: number
+}
+
+/** A row's container, if it names a container type; rows without one register only the Specimen. */
+function rowContainers(row: BulkSpecimenValidateRow): RegistrationContainer[] {
+  const container = row.container
+  if (!container?.containerType) return []
+  return [container as RegistrationContainer]
+}
+
+/** Resolve each row's Source and specimen type into a registration entry, or a row error. */
+async function toRegistrationEntries(
+  database: Database,
+  rows: BulkSpecimenValidateRow[],
+): Promise<{ entries: RegistrationEntry[]; rowOfEntry: number[]; errors: BulkSpecimenValidateError[] }> {
+  const entries: RegistrationEntry[] = []
+  const rowOfEntry: number[] = []
+  const errors: BulkSpecimenValidateError[] = []
+
+  for (let index = 0; index < rows.length; index++) {
+    const row = rows[index]
+    const validation = await validateSpecimenData(
+      {
+        sourceType: row.sourceType,
+        sourceId: row.sourceId,
+        studyShortCode: row.studyShortCode,
+        subjectName: row.subjectName,
+        specimenTypeName: row.specimenTypeName,
+        collectionDate: row.collectionDate,
+      },
+      database,
+    )
+    const resolved = validation.resolved
+    if (!validation.valid || !resolved) {
+      errors.push({ index, message: validation.error ?? 'Invalid specimen data' })
+      continue
+    }
+    const source =
+      resolved.studySubjectId != null
+        ? { subjectId: resolved.studySubjectId }
+        : resolved.controlBatchId != null
+          ? { controlBatchId: resolved.controlBatchId }
+          : null
+    if (!source) {
+      errors.push({ index, message: 'Invalid specimen data' })
+      continue
+    }
+    entries.push({
+      source,
+      specimenTypeId: resolved.specimenTypeId,
+      collectionDate: resolved.collectionDate,
+      containers: rowContainers(row),
+    })
+    rowOfEntry.push(index)
+  }
+
+  return { entries, rowOfEntry, errors }
+}
+
+function rowErrors(errors: RegistrationError[], rowOfEntry: number[]): BulkSpecimenValidateError[] {
+  return errors.map((error) => ({ index: rowOfEntry[error.entryIndex], message: error.message }))
+}
+
+/** The rows could not all be registered; errors are keyed to the rows. */
+class BulkSpecimensRejected extends RefusedWithErrors<BulkSpecimenValidateError> {}
 
 /**
- * Validate bulk specimen rows without creating records.
- * Used by POST /specimens/bulk/validate.
+ * Resolve every row, then register the rows that resolved. Runs inside the caller's transaction,
+ * so the Source and specimen type reads see what the registration sees, and throws
+ * BulkSpecimensRejected with every row's problems: the ones found resolving the rows and the
+ * ones registration finds in the rest. The caller's transaction then rolls back.
  */
-export async function validateBulkSpecimenRows(
+async function registerBulkSpecimenRows(
   database: Database,
-  rows: BulkSpecimenValidateRow[]
-): Promise<BulkSpecimenValidateResult> {
-  const result = await prepareRegistrationBatchForSpecimens(database, rows)
-  return {
-    valid: result.valid,
-    errors: result.valid ? [] : result.errors,
+  rows: BulkSpecimenValidateRow[],
+  userId: number | undefined,
+): Promise<RegistrationResult> {
+  const { entries, rowOfEntry, errors } = await toRegistrationEntries(database, rows)
+
+  let registration: RegistrationResult | null = null
+  try {
+    registration = await registerSpecimens(database, entries, { userId })
+  } catch (error) {
+    if (!(error instanceof SpecimenRegistrationError)) throw error
+    const mapped = rowErrors(error.errors, rowOfEntry)
+    // A constraint hit is a conflict only when it is all that is wrong; rows that did not
+    // resolve make the input invalid, and the constraint is listed with them.
+    if (error.status === 409 && errors.length === 0) throw new BulkSpecimensRejected(409, mapped)
+    errors.push(...mapped)
   }
+  if (errors.length > 0 || !registration) {
+    errors.sort((a, b) => a.index - b.index)
+    throw new BulkSpecimensRejected(400, errors)
+  }
+  return registration
 }
 
 /**
- * Create bulk specimen rows after the same validation as validateBulkSpecimenRows.
- * Used by POST /specimens/bulk.
+ * Validate bulk specimen rows without creating records: the registration POST /specimens/bulk
+ * would run, rolled back. Used by POST /specimens/bulk/validate.
+ */
+export async function validateBulkSpecimenRows(
+  database: Database,
+  rows: BulkSpecimenValidateRow[],
+): Promise<BulkSpecimenValidateResult> {
+  const errors = await withRolledBackTransaction(database, async (tx) => {
+    try {
+      await registerBulkSpecimenRows(tx, rows, undefined)
+      return []
+    } catch (error) {
+      if (error instanceof BulkSpecimensRejected) return error.errors
+      throw error
+    }
+  })
+  return { valid: errors.length === 0, errors }
+}
+
+/**
+ * Register bulk specimen rows, all or nothing. Used by POST /specimens/bulk.
+ * Reports the errors validateBulkSpecimenRows reports for the same rows.
+ * Throws ConflictError when a write hits a database constraint.
  */
 export async function createBulkSpecimenRows(
   database: Database,
   rows: BulkSpecimenValidateRow[],
-  userId?: number
+  userId?: number,
 ): Promise<
   | { success: true; result: BulkSpecimenCreateResult }
   | { success: false; errors: BulkSpecimenValidateError[] }
 > {
-  const prep = await prepareRegistrationBatchForSpecimens(database, rows)
-  if (!prep.valid) {
-    return { success: false, errors: prep.errors }
-  }
-
-  const { prepared } = prep
-  const now = utcNow()
-
-  const orderedPayloadKeys = prepared.map(({ row, resolved }) => bulkSpecimenPayloadKey(row, resolved))
-  const payloadKeyToFirstIndex = new Map<string, number>()
-  for (let idx = 0; idx < orderedPayloadKeys.length; idx++) {
-    const key = orderedPayloadKeys[idx]
-    if (!payloadKeyToFirstIndex.has(key)) payloadKeyToFirstIndex.set(key, idx)
-  }
-  const uniqueSpecimenOrder: number[] = []
-  const indexToUniqueIndex: number[] = []
-  for (let idx = 0; idx < orderedPayloadKeys.length; idx++) {
-    const first = payloadKeyToFirstIndex.get(orderedPayloadKeys[idx]) ?? idx
-    if (first === idx) uniqueSpecimenOrder.push(idx)
-    indexToUniqueIndex.push(uniqueSpecimenOrder.indexOf(first))
-  }
-
-  // Specimens and their containers commit together: a container failure must not leave bare specimens.
-  return withWriteTransaction(database, async (dbTx) => {
-    const specimenRecordsByUniqueIndex: Array<typeof specimen.$inferSelect> = []
-    let newCount = 0
-    for (const uniqueIdx of uniqueSpecimenOrder) {
-      const { row, resolved } = prepared[uniqueIdx]
-      const studySubjectId = resolved.studySubjectId
-      const existing =
-        row.sourceType === 'subject' && studySubjectId != null
-          ? findExistingStudySpecimen(dbTx, studySubjectId, resolved.specimenTypeId, row.collectionDate)
-          : row.sourceType === 'control' && resolved.controlBatchId != null
-            ? findExistingControlSpecimen(dbTx, resolved.controlBatchId, resolved.specimenTypeId, row.collectionDate)
-            : null
-      if (existing) {
-        specimenRecordsByUniqueIndex.push(existing)
-      } else {
-        const insertResult = dbTx
-          .insert(specimen)
-          .values({
-            studySubjectId: resolved.studySubjectId,
-            controlBatchId: resolved.controlBatchId,
-            specimenTypeId: resolved.specimenTypeId,
-            collectionDate: row.collectionDate ?? null,
-            created: now,
-            lastUpdated: now,
-            createdBy: userId,
-            updatedBy: userId,
-          })
-          .returning()
-          .all()
-        specimenRecordsByUniqueIndex.push(insertedRow(insertResult, 'specimen'))
-        newCount += 1
-      }
-    }
-
-    const specimensOut = indexToUniqueIndex.map((ui) => specimenRecordsByUniqueIndex[ui])
-    let containersCount = 0
-    for (let i = 0; i < prepared.length; i++) {
-      const { row, index } = prepared[i]
-      const specimenRecord = specimensOut[i]
-      if (!row.container?.containerType) continue
-      const container = row.container as BulkCombinedContainerInput
-      const writeInput = toContainerWriteInput(container)
-      const containerResult = await createContainerForSpecimen(specimenRecord.id, writeInput, dbTx, {
-        userId,
-        quantity: pickContainerQuantity(container),
-      })
-      if (!containerResult.success || !containerResult.containerId) {
-        throw new Error(containerResult.error ?? `Row ${index}: failed to create container`)
-      }
-      containersCount += 1
-    }
-
+  try {
+    const result = await withWriteTransaction(database, (tx) => registerBulkSpecimenRows(tx, rows, userId))
     return {
-      success: true as const,
+      success: true,
       result: {
-        specimens: specimensOut,
-        created: newCount,
-        containersCreated: containersCount,
+        specimens: result.entries.map((entry) => entry.specimen),
+        created: result.entries.filter((entry) => !entry.reused).length,
+        containersCreated: result.entries.reduce((sum, entry) => sum + entry.containerIds.length, 0),
       },
     }
-  })
+  } catch (error) {
+    if (!(error instanceof BulkSpecimensRejected)) throw error
+    if (error.status === 409) throw new ConflictError(error.message, { errors: error.errors })
+    return { success: false, errors: error.errors }
+  }
 }

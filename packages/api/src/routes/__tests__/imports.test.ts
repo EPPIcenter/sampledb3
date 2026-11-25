@@ -15,6 +15,7 @@ import {
 import { studySubject, specimen, specimenTypeContainerType, containerTypeUnit, micronixPlate, cryovialBox, settings, storageContainer } from '../../db/schema'
 import { setContainerDefaults } from '../../lib/settings'
 import { eq } from 'drizzle-orm'
+import { failInsertsWithUniqueViolation } from '../../__tests__/helpers/constraint-race'
 
 describe('Imports API', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -365,6 +366,24 @@ describe('Imports API', () => {
       const created = await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, containerId!)).get()
       expect(created).toBeDefined()
       expect(created!.unitId).toBe(testUnit.id)
+    })
+    it('returns 409 with every error when a full_file write hits a constraint', async () => {
+      await createTestStudy(ctx.db, { title: 'Race Study', shortCode: 'RACE' })
+      await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+      failInsertsWithUniqueViolation(ctx.sqlite, 'specimen')
+
+      const res = await ctx.request('/api/imports/bulk-combined', {
+        method: 'POST',
+        json: {
+          studyShortCode: 'RACE',
+          atomicMode: 'full_file',
+          subjects: [{ subjectName: 'SUBJ1', specimens: [{ specimenTypeName: 'Whole Blood', collectionDate: '2025-01-01' }] }],
+        },
+      })
+
+      expect(res.status).toBe(409)
+      const body = (await res.json()) as { details?: { errors?: unknown[] } }
+      expect(body.details?.errors).toEqual([expect.objectContaining({ subjectIndex: 0, specimenIndex: 0 })])
     })
   })
 

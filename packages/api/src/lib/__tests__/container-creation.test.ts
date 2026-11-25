@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import type { Database } from '../../db/client'
-import { validateContainerWriteFields, createContainerForSpecimen } from '../container-creation'
+import { createContainerForSpecimen } from '../container-creation'
+import { validateContainerWriteFields } from '../specimen-registration'
 import {
   createTestSpecimenType,
   createTestStorageType,
@@ -51,6 +52,24 @@ describe('container-creation', () => {
         })
         expect(result.valid).toBe(false)
         expect(result.error).toBe('Barcode is required for micronix tubes')
+      })
+
+      it('returns error when barcode is only whitespace', () => {
+        const result = validateContainerWriteFields({
+          containerType: 'micronix_tube',
+          barcode: '   ',
+          collection: { type: 'micronix_plate', name: 'Plate1', position: 'A01' },
+        })
+        expect(result).toEqual({ valid: false, field: 'barcode', error: 'Barcode is required for micronix tubes' })
+      })
+
+      it('returns error when collection name and barcode are only whitespace', () => {
+        const result = validateContainerWriteFields({
+          containerType: 'micronix_tube',
+          barcode: 'MT001',
+          collection: { type: 'micronix_plate', name: '  ', barcode: ' ', position: 'A01' },
+        })
+        expect(result).toEqual({ valid: false, field: 'collection', error: 'Collection name or barcode is required' })
       })
 
       it('returns error when collection name and barcode are missing', () => {
@@ -111,14 +130,20 @@ describe('container-creation', () => {
         expect(result.error).toBe('Sheet name is required for papers')
       })
 
-      it('rejects barcode on paper inbound path', () => {
+      it('returns error when collection name is only whitespace', () => {
         const result = validateContainerWriteFields({
           containerType: 'paper',
-          collection: { type: 'sheet', name: 'S1', parent: { type: 'box', name: 'Box1' } },
-          barcode: 'P-1',
-        } as Parameters<typeof validateContainerWriteFields>[0])
-        expect(result.valid).toBe(false)
-        expect(result.error).toContain('sublabel')
+          collection: { type: 'sheet', name: 'L1', parent: { type: 'box', name: '   ' } },
+        })
+        expect(result).toEqual({ valid: false, field: 'collection', error: 'Collection name is required for papers' })
+      })
+
+      it('returns error when sheet name is only whitespace', () => {
+        const result = validateContainerWriteFields({
+          containerType: 'paper',
+          collection: { type: 'sheet', name: '   ', parent: { type: 'box', name: 'Box1' } },
+        })
+        expect(result).toEqual({ valid: false, field: 'collection', error: 'Sheet name is required for papers' })
       })
     })
 
