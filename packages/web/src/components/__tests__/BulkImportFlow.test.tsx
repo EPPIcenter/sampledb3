@@ -2,10 +2,12 @@ import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vites
 import { render, screen, fireEvent, waitFor, act } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import BulkImportFlow from '../BulkImportFlow'
+import SetupGuard from '../SetupGuard'
 import { importsApi } from '../../lib/api/imports'
 import { specimenTypesApi } from '../../lib/api/reference-data'
 import { collectionsApi } from '../../lib/api/collections'
 import { specimensApi } from '../../lib/api/specimens'
+import { setupApi } from '../../lib/api/settings'
 
 vi.mock('../LocationPicker', () => ({
   default: ({ onChange }: { onChange: (id: number | null) => void }) => (
@@ -48,6 +50,15 @@ vi.mock('../../lib/api/collections', async () => {
   const { bulkImportFlowMock } = await import('../../__tests__/helpers/mock-api-templates')
   const { collectionsApi } = bulkImportFlowMock()
   return createMockedDomainModule('collections', { collectionsApi })
+})
+
+vi.mock('../../lib/api/settings', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('settings', {
+    setupApi: {
+      status: vi.fn().mockResolvedValue({ initialized: true }),
+    },
+  })
 })
 
 describe('BulkImportFlow', () => {
@@ -580,6 +591,59 @@ describe('BulkImportFlow', () => {
           }),
         ],
       })
+    })
+
+    it('shows the import result under SetupGuard after a successful import invalidates every query', async () => {
+      let resolveRefetch!: (value: { initialized: boolean }) => void
+      vi.mocked(setupApi.status)
+        .mockResolvedValueOnce({ initialized: true })
+        .mockImplementationOnce(
+          () =>
+            new Promise<{ initialized: boolean }>((resolve) => {
+              resolveRefetch = resolve
+            }),
+        )
+      vi.mocked(collectionsApi.check).mockImplementation(({ collections }) =>
+        Promise.resolve({ results: collections.map((c) => ({ ...c, exists: true, id: 1 })) }),
+      )
+      vi.mocked(specimensApi.createBulk).mockResolvedValue({ created: 1, containersCreated: 1, specimens: [] })
+
+      const user = userEvent.setup()
+      await render(
+        <SetupGuard>
+          <BulkImportFlow fixedStudyShortCode="ST" />
+        </SetupGuard>,
+        { initialEntries: ['/import?step=upload'] },
+      )
+
+      const importTypeSelect = await screen.findByLabelText(/import type/i)
+      await user.selectOptions(importTypeSelect, 'specimens')
+      await user.selectOptions(screen.getByLabelText(/container type/i), 'micronix_tube')
+
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      await user.upload(
+        fileInput,
+        new File(
+          ['subject_name,specimen_type_name,plate_name,barcode,position\nS1,Serum,P1,MT1,A01'],
+          'i.csv',
+          { type: 'text/csv' },
+        ),
+      )
+      await act(async () => {
+        fireEvent.submit(fileInput.closest('form')!)
+      })
+
+      await waitFor(() => {
+        expect(setupApi.status).toHaveBeenCalledTimes(2)
+      })
+      await act(async () => {
+        resolveRefetch({ initialized: true })
+        await Promise.resolve()
+      })
+
+      expect(await screen.findByText(/import successful/i)).toBeInTheDocument()
+      expect(screen.getByText(/created: 1 specimen and 1 container/i)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /validate & continue/i })).not.toBeInTheDocument()
     })
   })
 })

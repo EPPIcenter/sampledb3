@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { PageError, getQueryErrorMessage } from '../ui'
 import { useSetupStatus } from '../hooks/useAuthWorkflow'
@@ -6,27 +6,46 @@ import { useSetupStatus } from '../hooks/useAuthWorkflow'
 export default function SetupGuard({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const prevPathRef = useRef(location.pathname)
+  const [prevPathname, setPrevPathname] = useState(location.pathname)
+  const [recheckingAfterSetup, setRecheckingAfterSetup] = useState(false)
   const statusQuery = useSetupStatus()
+  const { refetch } = statusQuery
+
+  if (prevPathname !== location.pathname) {
+    const leavingSetup = prevPathname === '/setup' && location.pathname !== '/setup'
+    setPrevPathname(location.pathname)
+    if (leavingSetup) {
+      setRecheckingAfterSetup(true)
+    } else if (location.pathname === '/setup' && recheckingAfterSetup) {
+      setRecheckingAfterSetup(false)
+    }
+  }
+
+  // Re-check when leaving /setup (e.g. after initialize → /login) and hold the app until it answers.
+  useEffect(() => {
+    if (!recheckingAfterSetup) return
+    let cancelled = false
+    void refetch().finally(() => {
+      if (!cancelled) setRecheckingAfterSetup(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [recheckingAfterSetup, refetch])
 
   useEffect(() => {
-    if (statusQuery.data?.initialized === false && location.pathname !== '/setup') {
+    if (
+      !recheckingAfterSetup &&
+      statusQuery.data?.initialized === false &&
+      location.pathname !== '/setup'
+    ) {
       navigate('/setup', { replace: true })
     }
-  }, [statusQuery.data?.initialized, location.pathname, navigate])
+  }, [recheckingAfterSetup, statusQuery.data?.initialized, location.pathname, navigate])
 
-  // Re-check when leaving /setup (e.g. after initialize → /login).
-  useEffect(() => {
-    if (prevPathRef.current === '/setup' && location.pathname !== '/setup') {
-      void statusQuery.refetch()
-    }
-    prevPathRef.current = location.pathname
-  }, [location.pathname, statusQuery])
-
-  const isChecking =
-    statusQuery.isPending || (statusQuery.isFetching && statusQuery.isRefetching)
-
-  if (isChecking && !statusQuery.isError) {
+  // Block only before the initial status has loaded or during the deliberate post-/setup re-check.
+  // Background refetches (e.g. from invalidateAfterBulkWrite) must not unmount the app.
+  if (recheckingAfterSetup || statusQuery.isPending) {
     return (
       <div className="min-h-screen bg-app-surface flex items-center justify-center">
         <div className="text-center">
