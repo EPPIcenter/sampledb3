@@ -157,6 +157,7 @@ export function logRequest(params: {
   status: number
   duration: number
   requestId: string
+  connectedAppId?: string
 }): void {
   logInfo('HTTP request', {
     type: 'request',
@@ -165,6 +166,7 @@ export function logRequest(params: {
     status: params.status,
     duration: params.duration,
     requestId: params.requestId,
+    ...(params.connectedAppId ? { connectedAppId: params.connectedAppId } : {}),
   })
 }
 

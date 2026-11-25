@@ -1,6 +1,14 @@
 import type { Context, Next } from 'hono'
 import { generateRequestId, logRequest } from '../lib/observability'
 
+declare module 'hono' {
+  interface ContextVariableMap {
+    requestId?: string
+    /** Public id of the Connected app authenticating an MCP request, recorded in request logs. */
+    connectedAppId?: string
+  }
+}
+
 export const REQUEST_ID_HEADER = 'X-Request-Id'
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/
@@ -26,12 +34,14 @@ export function requestContextMiddleware() {
     const start = Date.now()
     await next()
 
+    const connectedAppId = c.get('connectedAppId')
     logRequest({
       method: c.req.method,
       path: new URL(c.req.url).pathname,
       status: c.res.status,
       duration: Date.now() - start,
       requestId,
+      ...(connectedAppId ? { connectedAppId } : {}),
     })
   }
 }
