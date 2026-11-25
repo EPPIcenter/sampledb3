@@ -145,7 +145,7 @@ export function createCrudRoutes<
   const routes = new Hono()
   const authMiddleware = createAuthMiddleware(database)
   const adminMiddleware = createAdminMiddleware(database)
-  const createMiddleware = createRole === 'member' ? createMemberMiddleware(database) : adminMiddleware
+  const middlewareForCreate = createRole === 'member' ? createMemberMiddleware(database) : adminMiddleware
 
   // GET / - List all
   routes.get('/', authMiddleware, async (c) => {
@@ -200,7 +200,7 @@ export function createCrudRoutes<
   })
 
   // POST / - Create (admin only unless createRole says otherwise)
-  routes.post('/', createMiddleware, async (c) => {
+  routes.post('/', middlewareForCreate, async (c) => {
     try {
       const body = await c.req.json()
       const data = createSchema.parse(body)

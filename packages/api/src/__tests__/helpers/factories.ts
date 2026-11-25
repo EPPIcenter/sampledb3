@@ -316,6 +316,7 @@ export async function createTestLocation(db: Database, data: {
   description?: string
   canContainCollections?: boolean
   path?: string
+  createdBy?: number
 }) {
   const now = utcNow()
   const insertResult = await db.insert(location).values({
@@ -325,6 +326,7 @@ export async function createTestLocation(db: Database, data: {
     description: data.description,
     canContainCollections: data.canContainCollections ?? false,
     path: data.path ?? data.name,
+    createdBy: data.createdBy,
     created: now,
     lastUpdated: now,
   }).returning()

@@ -42,6 +42,10 @@ describe('Locations API', () => {
     ctx.cleanup()
   })
 
+  function loadLocation(id: number) {
+    return ctx.db.select().from(location).where(eq(location.id, id)).get()
+  }
+
   describe('GET /api/locations', () => {
     it('returns 200 and locations array with pagination', async () => {
       const res = await ctx.request('/api/locations', {
@@ -151,10 +155,6 @@ describe('Locations API', () => {
       return createTestLocation(ctx.db, { name: 'Shelf', storageTypeId: String(storageType.id), canContainCollections: true })
     }
 
-    async function loadLocation(id: number) {
-      return ctx.db.select().from(location).where(eq(location.id, id)).get()
-    }
-
     it('returns 409 naming how many Collections the Location holds, and changes nothing', async () => {
       const shelf = await collectionLocation()
       await createTestMicronixPlate(ctx.db, { name: 'P1', locationId: shelf.id })
@@ -230,10 +230,6 @@ describe('Locations API', () => {
     async function freezer(name = 'Freezer 1') {
       const storageType = await createTestStorageType(ctx.db, { name: `${name} type` })
       return createTestLocation(ctx.db, { name, storageTypeId: String(storageType.id), canContainCollections: true })
-    }
-
-    function loadLocation(id: number) {
-      return ctx.db.select().from(location).where(eq(location.id, id)).get()
     }
 
     function locationsNamed(name: string) {
@@ -399,12 +395,8 @@ describe('Locations API', () => {
 
       it('lets a member delete an empty Location that someone else created', async () => {
         const parent = await freezer()
-        const created = await ctx.request('/api/locations', {
-          method: 'POST',
-          cookie: ctx.cookies.admin,
-          json: { parentId: parent.id, name: 'Shelf 1' },
-        })
-        const { location: shelf } = (await created.json()) as { location: { id: number } }
+        const admin = await ctx.db.select().from(users).where(eq(users.email, 'admin@test.com')).get()
+        const shelf = await createTestLocation(ctx.db, { name: 'Shelf 1', parentId: parent.id, createdBy: admin!.id })
 
         const res = await ctx.request(`/api/locations/${shelf.id}`, { method: 'DELETE' })
 
