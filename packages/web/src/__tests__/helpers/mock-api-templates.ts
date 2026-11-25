@@ -191,6 +191,7 @@ export function settingsPageMock(): MockApiOverrides {
         pagination_settings: null,
         password_requirements: null,
         session_settings: null,
+        connected_apps: { enabled: false },
         export_configurations: null,
         scanner_configurations: null,
         table_view_configurations: null,

@@ -16,6 +16,8 @@ import {
   setPasswordRequirements,
   getSessionSettings,
   setSessionSettings,
+  getConnectedAppsSettings,
+  setConnectedAppsSettings,
   getExportConfigurations,
   getSharedExportConfigurations,
   getPersonalExportConfigurations,
@@ -31,6 +33,7 @@ import {
   type PaginationSettings,
   type PasswordRequirements,
   type SessionSettings,
+  type ConnectedAppsSettings,
   type ExportConfigurations,
   type ScannerConfigurations,
   type TableViewConfigurations,
@@ -49,11 +52,12 @@ export function createSettingsRoutes(database: Database) {
       const user = c.get('user')
       const userId = user?.id
 
-      const [containerDefaults, paginationSettings, passwordRequirements, sessionSettings, exportConfigurations, scannerConfigurations, tableViewConfigurations] = await Promise.all([
+      const [containerDefaults, paginationSettings, passwordRequirements, sessionSettings, connectedApps, exportConfigurations, scannerConfigurations, tableViewConfigurations] = await Promise.all([
         getContainerDefaults(database),
         getPaginationSettings(database, userId),
         getPasswordRequirements(database),
         getSessionSettings(database),
+        getConnectedAppsSettings(database),
         getExportConfigurations(database, userId),
         getScannerConfigurations(database, userId),
         getTableViewConfigurations(database),
@@ -64,6 +68,7 @@ export function createSettingsRoutes(database: Database) {
       pagination_settings: paginationSettings,
       password_requirements: passwordRequirements,
       session_settings: sessionSettings,
+      connected_apps: connectedApps,
       export_configurations: exportConfigurations,
       scanner_configurations: scannerConfigurations,
       table_view_configurations: tableViewConfigurations,
@@ -116,6 +121,12 @@ export function createSettingsRoutes(database: Database) {
             return c.json({ error: 'scope is only supported for export_configurations and scanner_configurations' }, 400)
           }
           value = await getSessionSettings(database)
+          break
+        case 'connected_apps':
+          if (scope !== 'effective') {
+            return c.json({ error: 'scope is only supported for export_configurations and scanner_configurations' }, 400)
+          }
+          value = await getConnectedAppsSettings(database)
           break
         case 'export_configurations':
           if (scope === 'shared') {
@@ -206,6 +217,10 @@ const sessionSettingsSchema = z.object({
   maxAgeSeconds: z.number().int().positive(),
 })
 
+const connectedAppsSettingsSchema = z.object({
+  enabled: z.boolean(),
+})
+
 const exportConfigurationsSchema = z.object({
   configurations: z.array(z.object({
     name: z.string().min(1),
@@ -266,7 +281,7 @@ const tableViewConfigurationsSchema = z.object({
     delete actualBody.userId // Remove userId from body before validation
 
     // Admin-only settings
-    const adminOnlyKeys = ['container_defaults', 'password_requirements', 'session_settings', 'table_view_configurations']
+    const adminOnlyKeys = ['container_defaults', 'password_requirements', 'session_settings', 'connected_apps', 'table_view_configurations']
     if (adminOnlyKeys.includes(key) && !isAdmin) {
       return c.json({ error: 'Forbidden: Admin access required' }, 403)
     }
@@ -323,6 +338,12 @@ const tableViewConfigurationsSchema = z.object({
         const validated = sessionSettingsSchema.parse(actualBody)
         await setSessionSettings(database, validated as SessionSettings)
         clearSettingsCache(database, 'session_settings')
+        return c.json({ key, value: validated })
+      }
+      case 'connected_apps': {
+        const validated = connectedAppsSettingsSchema.parse(actualBody)
+        await setConnectedAppsSettings(database, validated as ConnectedAppsSettings)
+        clearSettingsCache(database, 'connected_apps')
         return c.json({ key, value: validated })
       }
       case 'export_configurations': {

@@ -3,39 +3,25 @@ import {
   bulkCombinedValidateRequestSchema,
   bulkCombinedValidateResponseSchema,
   bulkCombinedImportResponseSchema,
+  mapBulkImportTemplateCsv,
 } from '@sampledb/contract'
-import { buildBulkCombinedRequestPayload } from '../bulk-import-payload'
 
 describe('bulk import contract conformance', () => {
-  it('web-built validate payload satisfies bulkCombinedValidateRequestSchema', () => {
-    const payload = buildBulkCombinedRequestPayload(
-      [
-        {
-          studyShortCode: 'STUDY1',
-          subjectName: 'SUBJ-1',
-          specimenTypeName: 'Whole Blood',
-          collectionDate: '2025-01-01',
-          container: {
-            containerType: 'micronix_tube',
-            collectionName: 'Plate-A',
-            barcode: 'BC-1',
-            position: 'A01',
-          },
-        },
-        {
-          studyShortCode: 'STUDY1',
-          subjectName: 'SUBJ-2',
-          specimenTypeName: 'Plasma',
-        },
-      ],
-      {
-        containerType: 'micronix_tube',
-        fixedStudyShortCode: 'STUDY1',
-        missingCollections: [{ name: 'Plate-A', locationId: 42, barcode: 'PLT-A' }],
-        atomicMode: 'full_file',
-      }
-    )
+  it('template-mapped validate payload satisfies bulkCombinedValidateRequestSchema', () => {
+    const csv = [
+      'subject_name,specimen_type_name,collection_date,plate_name,barcode,position',
+      'SUBJ-1,Whole Blood,2025-01-01,Plate-A,BC-1,A01',
+    ].join('\n')
+    const mapped = mapBulkImportTemplateCsv(csv, {
+      containerType: 'micronix_tube',
+      defaultStudyShortCode: 'STUDY1',
+      collections: [{ type: 'micronix_plate', name: 'Plate-A', locationId: 42, barcode: 'PLT-A' }],
+      atomicMode: 'full_file',
+    })
+    expect(mapped.ok).toBe(true)
+    if (!mapped.ok) return
 
+    const payload = mapped.validateRequest
     const result = bulkCombinedValidateRequestSchema.safeParse(payload)
     expect(result.success).toBe(true)
     const container = payload.subjects[0]!.specimens[0]!.container
@@ -54,22 +40,15 @@ describe('bulk import contract conformance', () => {
   })
 
   it('rejects payloads with invalid atomicMode', () => {
-    const payload = buildBulkCombinedRequestPayload(
-      [
-        {
-          studyShortCode: 'S',
-          subjectName: 'Sub1',
-          specimenTypeName: 'T',
-        },
-      ],
-      {
-        containerType: 'none',
-        fixedStudyShortCode: 'S',
-        missingCollections: [],
-        atomicMode: 'per_subject',
-      }
-    )
+    const mapped = mapBulkImportTemplateCsv('subject_name,specimen_type_name\nSub1,T', {
+      containerType: 'none',
+      defaultStudyShortCode: 'S',
+      atomicMode: 'per_subject',
+    })
+    expect(mapped.ok).toBe(true)
+    if (!mapped.ok) return
 
+    const payload = mapped.validateRequest
     const malformed = { ...payload, atomicMode: 'invalid_mode' as typeof payload.atomicMode }
     const result = bulkCombinedValidateRequestSchema.safeParse(malformed)
     expect(result.success).toBe(false)

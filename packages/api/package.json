@@ -17,10 +17,11 @@
     "data-fix": "bun src/scripts/data-fix.ts"
   },
   "dependencies": {
-    "@sampledb/contract": "workspace:*",
     "@hono/swagger-ui": "^0.5.3",
     "@hono/zod-openapi": "^1.2.0",
     "@hono/zod-validator": "^0.7.6",
+    "@modelcontextprotocol/server": "^2.4.0",
+    "@sampledb/contract": "workspace:*",
     "bcryptjs": "^3.0.3",
     "drizzle-kit": "^0.31.8",
     "drizzle-orm": "^0.45.1",
@@ -30,6 +31,7 @@
     "zod": "^4.3.5"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.4.0",
     "@types/node": "^25.0.3",
     "@typescript-eslint/eslint-plugin": "^8.51.0",
     "@typescript-eslint/parser": "^8.51.0",

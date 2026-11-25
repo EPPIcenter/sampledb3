@@ -71,28 +71,41 @@ export function useBulkImportTemplateSpecimenTypes(options: {
   }
 }
 
+export type FetchBulkImportMissingCollectionsParams =
+  | { collections: readonly BulkImportCollectionRef[] }
+  | {
+      rows: CSVRow[]
+      getRowCollectionRef: (row: CSVRow) => BulkImportCollectionRef | undefined
+    }
+
 /**
  * Resolve which Collections the CSV rows reference that the server does not have yet.
  * Each row's name and barcode come from their own columns (see getBulkImportRowCollectionRef),
  * so one row yields at most one Collection to create. Throws on API failure.
  */
-export async function fetchBulkImportMissingCollections(params: {
-  rows: CSVRow[]
-  getRowCollectionRef: (row: CSVRow) => BulkImportCollectionRef | undefined
-}): Promise<BulkImportMissingCollection[]> {
-  const { rows, getRowCollectionRef } = params
-
+export async function fetchBulkImportMissingCollections(
+  params: FetchBulkImportMissingCollectionsParams,
+): Promise<BulkImportMissingCollection[]> {
   // One entry per Collection: rows that share a name (or, without a name, a barcode) share it.
   const refs = new Map<string, BulkImportCollectionRef>()
-  for (const row of rows) {
-    const ref = getRowCollectionRef(row)
-    if (!ref) continue
+  const addRef = (ref: BulkImportCollectionRef) => {
     const key = ref.name ? `${ref.type}:name:${ref.name}` : `${ref.type}:barcode:${ref.barcode ?? ''}`
     const existing = refs.get(key)
     if (!existing) {
-      refs.set(key, ref)
+      refs.set(key, { ...ref })
     } else if (!existing.barcode && ref.barcode) {
       existing.barcode = ref.barcode
+    }
+  }
+
+  if ('collections' in params) {
+    for (const ref of params.collections) {
+      addRef(ref)
+    }
+  } else {
+    for (const row of params.rows) {
+      const ref = params.getRowCollectionRef(row)
+      if (ref) addRef(ref)
     }
   }
 

@@ -11,6 +11,7 @@ vi.mock('../../lib/api/settings', async () => {
       pagination_settings: { defaultPageSize: 10, maxPageSize: 100 },
       password_requirements: { minLength: 8 },
       session_settings: { maxAgeSeconds: 604800 },
+      connected_apps: { enabled: false },
       export_configurations: { configurations: [] },
       scanner_configurations: { configurations: [] },
       table_view_configurations: null,

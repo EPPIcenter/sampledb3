@@ -1,16 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   parseBulkImportCSV,
-  mapBulkImportRowsToPayload,
   getBulkImportRequiredFields,
   getBulkImportOptionalFields,
   getBulkImportCollectionType,
-  getBulkImportRowCollectionName,
-  resolveBulkImportPaperParent,
   getBulkImportRowCollectionRef,
-  parseBulkImportCsvFileRows,
-  validateBulkImportRequiredCells,
-  validateBulkImportCollectionBarcodes,
+  parseSubjectsBulkImportCsv,
 } from '../bulk-import-validation'
 
 describe('bulk-import-validation', () => {
@@ -90,101 +85,6 @@ describe('bulk-import-validation', () => {
     })
   })
 
-  describe('mapBulkImportRowsToPayload', () => {
-    it('maps subjects rows to API payload', () => {
-      const rows = [
-        { study_short_code: 'ST1', subject_name: 'Subj1' },
-      ] as unknown as { [key: string]: string }[]
-      const data = mapBulkImportRowsToPayload(rows, {
-        importType: 'subjects',
-        containerType: 'none',
-      })
-      expect(data).toHaveLength(1)
-      expect(data[0]).toEqual({ studyShortCode: 'ST1', name: 'Subj1' })
-    })
-
-    it('maps specimen rows including optional container fields', () => {
-      const rows = [
-        {
-          study_short_code: 'ST1',
-          subject_name: 'Subj1',
-          specimen_type_name: 'WB',
-          box_name: 'B1',
-          position: 'A01',
-        },
-      ] as { [key: string]: string }[]
-      const data = mapBulkImportRowsToPayload(rows, {
-        importType: 'specimens',
-        containerType: 'cryovial_tube',
-      })
-      expect(data).toHaveLength(1)
-      const container = (data[0] as { container?: Record<string, unknown> }).container
-      expect(container?.collectionName).toBe('B1')
-      expect(container?.barcode).toBeUndefined()
-      expect(container?.comment).toBeUndefined()
-    })
-
-    it('maps micronix rows even when barcode is empty (server validates)', () => {
-      const rows = [
-        {
-          study_short_code: 'ST1',
-          subject_name: 'Subj1',
-          specimen_type_name: 'DNA',
-          plate_name: 'P1',
-          barcode: '',
-          position: 'A01',
-        },
-      ] as { [key: string]: string }[]
-      const data = mapBulkImportRowsToPayload(rows, {
-        importType: 'specimens',
-        containerType: 'micronix_tube',
-      })
-      expect(data).toHaveLength(1)
-      const container = (data[0] as { container?: Record<string, unknown> }).container
-      expect(container?.barcode).toBeUndefined()
-      expect(container?.position).toBe('A01')
-    })
-  })
-
-  describe('getBulkImportRowCollectionName', () => {
-    it('returns plate_name for micronix_tube from type-specific column', () => {
-      expect(getBulkImportRowCollectionName({ plate_name: 'Plate1' }, 'micronix_tube')).toBe('Plate1')
-    })
-    it('returns box_name for cryovial_tube', () => {
-      expect(
-        getBulkImportRowCollectionName({ box_name: 'BOX-1' }, 'cryovial_tube')
-      ).toBe('BOX-1')
-    })
-    it('returns undefined when type-specific column is empty', () => {
-      expect(getBulkImportRowCollectionName({ plate_name: '' }, 'micronix_tube')).toBeUndefined()
-    })
-    it('does not use collection_name; legacy column is ignored', () => {
-      expect(
-        getBulkImportRowCollectionName(
-          { collection_name: 'LegacyOnly' } as { [k: string]: string },
-          'micronix_tube'
-        )
-      ).toBeUndefined()
-    })
-    it('returns box_name for paper when box_name is populated', () => {
-      expect(
-        getBulkImportRowCollectionName({ box_name: 'Box-A', bag_name: '' }, 'paper')
-      ).toBe('Box-A')
-    })
-    it('returns bag_name for paper when bag_name is populated', () => {
-      expect(
-        getBulkImportRowCollectionName({ box_name: '', bag_name: 'Bag-A' }, 'paper')
-      ).toBe('Bag-A')
-    })
-  })
-
-  describe('resolveBulkImportPaperParent', () => {
-    it('rejects both box_name and bag_name', () => {
-      const result = resolveBulkImportPaperParent({ box_name: 'B1', bag_name: 'G1' })
-      expect(result).toEqual({ error: 'Provide either box_name or bag_name, not both' })
-    })
-  })
-
   describe('getBulkImportRowCollectionRef', () => {
     it('returns bag type for paper bag rows', () => {
       expect(getBulkImportRowCollectionRef({ bag_name: 'Bag-A' }, 'paper')).toEqual({
@@ -220,110 +120,26 @@ describe('bulk-import-validation', () => {
     })
   })
 
-  describe('validateBulkImportRequiredCells', () => {
-    it('reports an empty micronix barcode with its spreadsheet row after a blank row', () => {
-      const csv =
-        'subject_name,specimen_type_name,plate_name,barcode,position\n' +
-        'S1,Serum,P1,MT1,A01\n' +
-        ',,,,\n' +
-        'S2,Serum,P1,,A02\n'
-      const { rows, fileRows } = parseBulkImportCsvFileRows(csv)
-      expect(
-        validateBulkImportRequiredCells(rows, fileRows, {
-          importType: 'specimens',
-          containerType: 'micronix_tube',
-          fixedStudyShortCode: 'ST',
-        })
-      ).toEqual([{ fileRows: [4], error: 'Missing required value: barcode' }])
-    })
-
-    it('accepts collection_barcode without plate_name for micronix tubes and requires at least one', () => {
-      const withBarcode = parseBulkImportCsvFileRows(
-        'subject_name,specimen_type_name,collection_barcode,barcode,position\nS1,Serum,PB1,MT1,A01'
-      )
-      expect(
-        validateBulkImportRequiredCells(withBarcode.rows, withBarcode.fileRows, {
-          importType: 'combined',
-          containerType: 'micronix_tube',
-          fixedStudyShortCode: 'ST',
-        })
-      ).toEqual([])
-
-      const withoutEither = parseBulkImportCsvFileRows(
-        'subject_name,specimen_type_name,plate_name,barcode,position\nS1,Serum,,MT1,A01'
-      )
-      expect(
-        validateBulkImportRequiredCells(withoutEither.rows, withoutEither.fileRows, {
-          importType: 'specimens',
-          containerType: 'micronix_tube',
-          fixedStudyShortCode: 'ST',
-        })
-      ).toEqual([{ fileRows: [2], error: 'Missing required value: plate_name (or collection_barcode)' }])
-    })
-
-    it('validates paper parent (box_name or bag_name, not both) and sheet_name', () => {
-      const csv =
-        'study_short_code,subject_name,specimen_type_name,box_name,bag_name,sheet_name\n' +
-        'ST,S1,DBS,B1,G1,Sheet1\n' +
-        'ST,S2,DBS,,,\n'
-      const { rows, fileRows } = parseBulkImportCsvFileRows(csv)
-      expect(
-        validateBulkImportRequiredCells(rows, fileRows, {
-          importType: 'specimens',
-          containerType: 'paper',
-        })
-      ).toEqual([
-        { fileRows: [2], error: 'Provide either box_name or bag_name, not both' },
-        { fileRows: [3], error: 'Missing required value: box_name or bag_name' },
-        { fileRows: [3], error: 'Missing required value: sheet_name' },
-      ])
+  describe('parseSubjectsBulkImportCsv', () => {
+    it('maps subjects rows with spreadsheet row numbers', () => {
+      const result = parseSubjectsBulkImportCsv('study_short_code,subject_name\nST1,Subj1\n,\nST1,Subj2')
+      expect(result).toEqual({
+        ok: true,
+        subjects: [
+          { studyShortCode: 'ST1', name: 'Subj1' },
+          { studyShortCode: 'ST1', name: 'Subj2' },
+        ],
+        fileRows: [2, 4],
+      })
     })
 
     it('requires study_short_code when fixedStudyShortCode is absent', () => {
-      const { rows, fileRows } = parseBulkImportCsvFileRows('study_short_code,subject_name\n,S1')
-      expect(
-        validateBulkImportRequiredCells(rows, fileRows, {
-          importType: 'subjects',
-          containerType: 'none',
-        })
-      ).toEqual([{ fileRows: [2], error: 'Missing required value: study_short_code' }])
-    })
-  })
-
-  describe('validateBulkImportCollectionBarcodes', () => {
-    it('allows one blank row and one non-blank barcode row for the same Collection name', () => {
-      const csv =
-        'plate_name,collection_barcode\n' +
-        'Plate-New,\n' +
-        'Plate-New,PB-999\n' +
-        'Plate-New,PB-999\n'
-      const { rows, fileRows } = parseBulkImportCsvFileRows(csv)
-      expect(
-        validateBulkImportCollectionBarcodes(rows, fileRows, {
-          importType: 'combined',
-          containerType: 'micronix_tube',
-        })
-      ).toEqual([])
-    })
-
-    it('reports a row error when two rows give different non-blank barcodes for one Collection name', () => {
-      const csv =
-        'plate_name,collection_barcode\n' +
-        'Plate-New,PB-111\n' +
-        ',\n' +
-        'Plate-New,PB-222\n'
-      const { rows, fileRows } = parseBulkImportCsvFileRows(csv)
-      expect(
-        validateBulkImportCollectionBarcodes(rows, fileRows, {
-          importType: 'combined',
-          containerType: 'micronix_tube',
-        })
-      ).toEqual([
-        {
-          fileRows: [4],
-          error: "Collection 'Plate-New' has conflicting collection_barcode 'PB-222' (row 2 has 'PB-111')",
-        },
-      ])
+      const result = parseSubjectsBulkImportCsv('study_short_code,subject_name\n,S1')
+      expect(result).toEqual({
+        ok: false,
+        errors: [{ fileRows: [2], error: 'Missing required value: study_short_code' }],
+        fileRows: [2],
+      })
     })
   })
 })

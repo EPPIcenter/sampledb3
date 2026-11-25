@@ -54,15 +54,15 @@ describe('bulk-csv-workflow', () => {
       containerType: 'micronix_tube',
       missingCollections: [],
       atomicMode: 'full_file',
-      fileRows: [2, 5],
     }
-    const specimenErrors = await runBulkCsvServerValidation(
-      [
-        { sourceType: 'subject', studyShortCode: 'ST1', subjectName: 'S1', specimenTypeName: 'Blood' },
-        { sourceType: 'subject', studyShortCode: 'ST1', subjectName: 'S2', specimenTypeName: 'Blood' },
-      ],
-      specimenCtx,
-    )
+    const specimenCsv = [
+      'study_short_code,subject_name,specimen_type_name,plate_name,barcode,position',
+      'ST1,S1,Blood,P1,B1,A01',
+      '',
+      '',
+      'ST1,S2,Blood,P1,B2,A02',
+    ].join('\n')
+    const specimenErrors = await runBulkCsvServerValidation(specimenCsv, specimenCtx)
     expect(specimenErrors).toEqual([{ fileRows: [5], error: 'container.barcode: Required' }])
 
     vi.mocked(subjectsApi.validateBulk).mockResolvedValue({
@@ -74,12 +74,9 @@ describe('bulk-csv-workflow', () => {
       containerType: '',
       missingCollections: [],
       atomicMode: 'full_file',
-      fileRows: [3],
     }
-    const subjectErrors = await runBulkCsvServerValidation(
-      [{ studyShortCode: 'ST1', name: '' }],
-      subjectCtx,
-    )
+    const subjectCsv = 'study_short_code,subject_name\n\nST1,S1'
+    const subjectErrors = await runBulkCsvServerValidation(subjectCsv, subjectCtx)
     expect(subjectErrors).toEqual([{ fileRows: [3], error: 'name: Too small' }])
 
     vi.mocked(importsApi.bulkCombinedValidate).mockResolvedValue({
@@ -92,12 +89,17 @@ describe('bulk-csv-workflow', () => {
       fixedStudyShortCode: 'ST1',
       missingCollections: [],
       atomicMode: 'full_file',
-      fileRows: [7],
     }
-    const combinedErrors = await runBulkCsvServerValidation(
-      [{ subjectName: 'S1', specimenTypeName: 'Blood' }],
-      combinedCtx,
-    )
+    const combinedCsv = [
+      'subject_name,specimen_type_name,plate_name,barcode,position',
+      '',
+      '',
+      '',
+      '',
+      '',
+      'S1,Blood,P1,B1,A01',
+    ].join('\n')
+    const combinedErrors = await runBulkCsvServerValidation(combinedCsv, combinedCtx)
     expect(combinedErrors).toEqual([{ fileRows: [7], error: 'container.barcode: Required' }])
   })
 
@@ -107,8 +109,13 @@ describe('bulk-csv-workflow', () => {
       containerType: 'micronix_tube',
       missingCollections: [],
       atomicMode: 'full_file',
-      fileRows: [2, 4],
     }
+    const csv = [
+      'study_short_code,subject_name,specimen_type_name,plate_name,barcode,position',
+      'ST1,S1,Blood,P1,B1,A01',
+      '',
+      'ST1,S2,Blood,P1,B2,A02',
+    ].join('\n')
     const err = {
       response: {
         status: 400,
@@ -118,7 +125,7 @@ describe('bulk-csv-workflow', () => {
         },
       },
     }
-    expect(formatBulkCsvRequestError(err, [{}, {}], ctx, 'Validation failed')).toEqual([
+    expect(formatBulkCsvRequestError(err, csv, ctx, 'Validation failed')).toEqual([
       { fileRows: [4], error: 'container.barcode: Required' },
     ])
   })

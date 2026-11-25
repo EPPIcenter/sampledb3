@@ -767,6 +767,38 @@ describe('schema evolution', () => {
     sqlite.close()
   })
 
+  it('migration 013 creates empty oauth_clients, oauth_authorization_codes, and connected_apps tables with hash indexes', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (12)')
+    createTablesForLaterMigrations(sqlite)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(13)
+
+    const tables = sqlite
+      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('oauth_clients', 'oauth_authorization_codes', 'connected_apps') ORDER BY name`)
+      .all() as Array<{ name: string }>
+    expect(tables.map((t) => t.name)).toEqual([
+      'connected_apps',
+      'oauth_authorization_codes',
+      'oauth_clients',
+    ])
+
+    for (const table of ['oauth_clients', 'oauth_authorization_codes', 'connected_apps']) {
+      const count = sqlite.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }
+      expect(count.n).toBe(0)
+    }
+
+    const migration = listNumberedMigrations().find((m) => m.version === 13)
+    expect(migration).toBeDefined()
+    // Re-running migration 013 must be a safe no-op
+    runSqlMigration(sqlite, 13, migration!.path)
+    sqlite.close()
+  })
+
   it('fail-hard: invalid migration leaves schema_version unchanged', () => {
     const sqlite = new Database(testDbPath)
     sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')

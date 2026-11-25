@@ -22,6 +22,10 @@ export interface SessionSettings {
   maxAgeSeconds: number
 }
 
+export interface ConnectedAppsSettings {
+  enabled: boolean
+}
+
 export interface ExportConfiguration {
   name: string
   columns: string[]
@@ -65,6 +69,7 @@ export interface AllSettings {
   pagination_settings: PaginationSettings | null
   password_requirements: PasswordRequirements | null
   session_settings: SessionSettings | null
+  connected_apps: ConnectedAppsSettings | null
   export_configurations: ExportConfigurations | null
   scanner_configurations: ScannerConfigurations | null
   table_view_configurations: TableViewConfigurations | null
@@ -76,6 +81,7 @@ export type SettingValue =
   | { type: 'pagination_settings'; value: PaginationSettings }
   | { type: 'password_requirements'; value: PasswordRequirements }
   | { type: 'session_settings'; value: SessionSettings }
+  | { type: 'connected_apps'; value: ConnectedAppsSettings }
   | { type: 'export_configurations'; value: ExportConfigurations }
   | { type: 'scanner_configurations'; value: ScannerConfigurations }
   | { type: 'table_view_configurations'; value: TableViewConfigurations }
@@ -89,6 +95,7 @@ export type SettingValueByKey<T extends string> =
   T extends 'pagination_settings' ? PaginationSettings :
   T extends 'password_requirements' ? PasswordRequirements :
   T extends 'session_settings' ? SessionSettings :
+  T extends 'connected_apps' ? ConnectedAppsSettings :
   T extends 'export_configurations' ? ExportConfigurations :
   T extends 'scanner_configurations' ? ScannerConfigurations :
   T extends 'table_view_configurations' ? TableViewConfigurations :

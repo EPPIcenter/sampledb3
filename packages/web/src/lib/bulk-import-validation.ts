@@ -1,15 +1,22 @@
 /**
- * CSV parsing and display helpers for the bulk import flow.
- * Server validate endpoints are the source of truth for row rules.
+ * Display and subjects-only helpers for the bulk import flow.
+ * Template column definitions and CSV-to-request mapping live in @sampledb/contract.
  */
+import {
+  BULK_IMPORT_CONTAINER_TEMPLATES,
+  getBulkImportOptionalColumns,
+  getBulkImportRequiredColumns,
+  getBulkImportRowCollectionRef as contractGetBulkImportRowCollectionRef,
+  parseBulkImportTemplateCsv,
+  type BulkImportCollectionRef,
+  type BulkImportCollectionType,
+  type BulkImportCsvRow,
+  type BulkImportTemplateError,
+} from '@sampledb/contract'
 import type { ContainerType } from './container-types'
-import { getCollectionNameColumn } from './container-columns'
-import type { FlatBulkImportContainer } from './bulk-import-payload'
-import { parseCsvFileRows } from './csv-file-rows'
 
-export interface CSVRow {
-  [key: string]: string
-}
+export type CSVRow = BulkImportCsvRow
+export type { BulkImportCollectionRef, BulkImportCollectionType }
 
 /** An import error and the spreadsheet rows it concerns (header is row 1); none for a file-wide error. */
 export interface BulkImportValidationError {
@@ -23,24 +30,22 @@ export function formatBulkImportError({ fileRows, error }: BulkImportValidationE
   return `${fileRows.length === 1 ? 'Row' : 'Rows'} ${fileRows.join(', ')}: ${error}`
 }
 
+export function templateErrorsToValidationErrors(
+  errors: readonly BulkImportTemplateError[],
+): BulkImportValidationError[] {
+  return errors.map((e) => ({
+    fileRows: e.rowIndex != null ? [e.rowIndex] : [],
+    error: e.message,
+  }))
+}
+
 export type ImportType = 'subjects' | 'specimens' | 'combined'
 
-export type BulkImportCollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
-
 export function getBulkImportCollectionType(
-  containerType: ContainerType | 'none' | ''
+  containerType: ContainerType | 'none' | '',
 ): BulkImportCollectionType | null {
-  switch (containerType) {
-    case 'micronix_tube':
-    case 'static_well':
-      return 'micronix_plate'
-    case 'cryovial_tube':
-      return 'cryovial_box'
-    case 'paper':
-      return 'box'
-    default:
-      return null
-  }
+  if (!containerType || containerType === 'none') return null
+  return BULK_IMPORT_CONTAINER_TEMPLATES[containerType].collectionTypes[0] ?? null
 }
 
 export function getBulkImportRequiredFields(opts: {
@@ -49,46 +54,20 @@ export function getBulkImportRequiredFields(opts: {
   fixedStudyShortCode?: string
 }): string[] {
   const { importType, containerType, fixedStudyShortCode } = opts
-  const base = fixedStudyShortCode
-    ? ['subject_name', 'specimen_type_name']
-    : ['study_short_code', 'subject_name', 'specimen_type_name']
-  if (!containerType || containerType === 'none' || importType === 'subjects') {
-    if (importType === 'subjects') {
-      return fixedStudyShortCode ? ['subject_name'] : ['study_short_code', 'subject_name']
-    }
-    return base
+  if (importType === 'subjects') {
+    return fixedStudyShortCode ? ['subject_name'] : ['study_short_code', 'subject_name']
   }
-  const containerFields: Record<ContainerType, string[]> = {
-    micronix_tube: ['plate_name', 'barcode', 'position'],
-    cryovial_tube: ['box_name', 'position'],
-    // A paper row names its box or its bag, never both.
-    paper: ['box_name or bag_name', 'sheet_name'],
-    static_well: ['plate_name', 'position'],
-  }
-  return [...base, ...containerFields[containerType]]
+  return getBulkImportRequiredColumns({
+    containerType: containerType || 'none',
+    defaultStudyShortCode: fixedStudyShortCode,
+  })
 }
 
 export function getBulkImportOptionalFields(
-  containerType: ContainerType | 'none' | ''
+  containerType: ContainerType | 'none' | '',
 ): string[] {
   if (!containerType || containerType === 'none') return []
-  const optionalFields: Record<ContainerType, string[]> = {
-    micronix_tube: ['comment'],
-    cryovial_tube: ['barcode', 'comment'],
-    paper: ['sublabel', 'comment'],
-    static_well: ['comment'],
-  }
-  return optionalFields[containerType]
-}
-
-function trimCell(s: string | undefined): string {
-  return (s ?? '').trim()
-}
-
-function normalizeHeader(header: string): string {
-  const lower = header.trim().toLowerCase()
-  if (lower === 'well_position' || lower === 'well') return 'position'
-  return lower
+  return [...getBulkImportOptionalColumns(containerType)]
 }
 
 export function parseBulkImportCSV(text: string): CSVRow[] {
@@ -100,258 +79,72 @@ export function parseBulkImportCSV(text: string): CSVRow[] {
  * `fileRows[i]` is the spreadsheet row of `rows[i]`, counting the header as row 1.
  */
 export function parseBulkImportCsvFileRows(text: string): { rows: CSVRow[]; fileRows: number[] } {
-  // Shared RFC 4180 parser: quoted commas ("low vol, hemolyzed"), quotes, CRLF, and BOM.
-  const parsed = parseCsvFileRows(text)
-  if (!parsed) return { rows: [], fileRows: [] }
-
-  const headers = parsed.header.map((h) => normalizeHeader(h.trim()))
-  const rows = parsed.rows.map(({ cells }) => {
-    const row: CSVRow = {}
-    headers.forEach((header, j) => {
-      row[header] = cells[j]?.trim() ?? ''
-    })
-    return row
-  })
-  return { rows, fileRows: parsed.rows.map((r) => r.fileRow) }
-}
-
-/** Resolve paper parent from bulk import CSV row (exactly one of box_name or bag_name). */
-export function resolveBulkImportPaperParent(
-  row: CSVRow
-):
-  | { parentCollectionType: 'box' | 'bag'; collectionName: string }
-  | { error: string }
-  | undefined {
-  const boxName = trimCell(row.box_name)
-  const bagName = trimCell(row.bag_name)
-  if (boxName && bagName) {
-    return { error: 'Provide either box_name or bag_name, not both' }
+  const parsed = parseBulkImportTemplateCsv(text)
+  return {
+    rows: parsed.rows.map((r) => r.row),
+    fileRows: parsed.rows.map((r) => r.fileRow),
   }
-  if (boxName) {
-    return { parentCollectionType: 'box', collectionName: boxName }
-  }
-  if (bagName) {
-    return { parentCollectionType: 'bag', collectionName: bagName }
-  }
-  return undefined
-}
-
-/** Get collection name/identifier from a CSV row (type-specific column only: plate_name, box_name, or bag_name). */
-export function getBulkImportRowCollectionName(
-  row: CSVRow,
-  containerType: ContainerType | 'none' | ''
-): string | undefined {
-  if (containerType === 'paper') {
-    const parent = resolveBulkImportPaperParent(row)
-    if (!parent || 'error' in parent) return undefined
-    return parent.collectionName
-  }
-  const column = getCollectionNameColumn(containerType)
-  if (!column) return undefined
-  const t = trimCell(row[column])
-  return t || undefined
-}
-
-/**
- * The Collection a row places its container in. `name` comes from the name column
- * (plate_name, box_name, or bag_name) and `barcode` from collection_barcode; a value is
- * never reclassified by its shape.
- */
-export interface BulkImportCollectionRef {
-  type: BulkImportCollectionType
-  name?: string
-  barcode?: string
 }
 
 /** Per-row Collection reference for missing-collection resolution (supports mixed box/bag paper rows). */
 export function getBulkImportRowCollectionRef(
   row: CSVRow,
-  containerType: ContainerType | 'none' | ''
+  containerType: ContainerType | 'none' | '',
 ): BulkImportCollectionRef | undefined {
-  if (containerType === 'paper') {
-    const parent = resolveBulkImportPaperParent(row)
-    if (!parent || 'error' in parent) return undefined
-    return { type: parent.parentCollectionType, name: parent.collectionName }
-  }
-  const type = getBulkImportCollectionType(containerType)
-  if (!type) return undefined
-  const name = getBulkImportRowCollectionName(row, containerType)
-  // Only plates and cryovial boxes carry barcodes.
-  const barcode = trimCell(row.collection_barcode) || undefined
-  if (!name && !barcode) return undefined
-  return {
-    type,
-    ...(name ? { name } : {}),
-    ...(barcode ? { barcode } : {}),
-  }
+  if (!containerType || containerType === 'none') return undefined
+  return contractGetBulkImportRowCollectionRef(row, containerType)
 }
 
-function getRowCollectionName(
-  row: CSVRow,
-  containerType: ContainerType | 'none' | ''
-): string | undefined {
-  return getBulkImportRowCollectionName(row, containerType)
+function trimCell(s: string | undefined): string {
+  return (s ?? '').trim()
 }
 
-/**
- * Check that every row has non-blank values for the required cells of this import type.
- * Runs before collection lookup or server validation so empty required cells report their
- * spreadsheet row immediately instead of triggering a 400 schema rejection.
- */
-export function validateBulkImportRequiredCells(
-  rows: CSVRow[],
-  fileRows: number[],
-  opts: {
-    importType: ImportType
-    containerType: ContainerType | 'none' | ''
-    fixedStudyShortCode?: string
+/** Parse and validate a subjects-only bulk import CSV. */
+export function parseSubjectsBulkImportCsv(
+  text: string,
+  fixedStudyShortCode?: string,
+):
+  | { ok: true; subjects: Array<{ studyShortCode: string; name: string }>; fileRows: number[] }
+  | { ok: false; errors: BulkImportValidationError[]; fileRows: number[] } {
+  const defaultStudy = fixedStudyShortCode?.trim() || undefined
+  let parsed: ReturnType<typeof parseBulkImportTemplateCsv>
+  try {
+    parsed = parseBulkImportTemplateCsv(text)
+  } catch (error) {
+    return {
+      ok: false,
+      errors: [{ fileRows: [], error: error instanceof Error ? error.message : 'Failed to parse CSV' }],
+      fileRows: [],
+    }
   }
-): BulkImportValidationError[] {
-  const { importType, containerType, fixedStudyShortCode } = opts
+  if (parsed.rows.length === 0) {
+    return {
+      ok: false,
+      errors: [{ fileRows: [], error: 'CSV file is empty or has no data rows' }],
+      fileRows: [],
+    }
+  }
+
+  const fileRows = parsed.rows.map((r) => r.fileRow)
   const errors: BulkImportValidationError[] = []
+  const subjects: Array<{ studyShortCode: string; name: string }> = []
 
-  rows.forEach((row, index) => {
-    const fileRow = fileRows[index] ?? index + 2
-    const add = (error: string) => errors.push({ fileRows: [fileRow], error })
-
-    if (!fixedStudyShortCode && !trimCell(row.study_short_code)) {
-      add('Missing required value: study_short_code')
+  for (const { row, fileRow } of parsed.rows) {
+    const studyShortCode = trimCell(row.study_short_code) || defaultStudy
+    const name = trimCell(row.subject_name)
+    if (!studyShortCode) {
+      errors.push({ fileRows: [fileRow], error: 'Missing required value: study_short_code' })
     }
-    if (!trimCell(row.subject_name)) {
-      add('Missing required value: subject_name')
+    if (!name) {
+      errors.push({ fileRows: [fileRow], error: 'Missing required value: subject_name' })
     }
-
-    if (importType === 'subjects') return
-
-    if (!trimCell(row.specimen_type_name)) {
-      add('Missing required value: specimen_type_name')
-    }
-
-    if (!containerType || containerType === 'none') return
-
-    if (containerType === 'paper') {
-      const parent = resolveBulkImportPaperParent(row)
-      if (!parent) {
-        add('Missing required value: box_name or bag_name')
-      } else if ('error' in parent) {
-        add(parent.error)
-      }
-      if (!trimCell(row.sheet_name)) {
-        add('Missing required value: sheet_name')
-      }
-      return
-    }
-
-    const nameCol = getCollectionNameColumn(containerType) ?? 'plate_name'
-    if (!trimCell(row[nameCol]) && !trimCell(row.collection_barcode)) {
-      add(`Missing required value: ${nameCol} (or collection_barcode)`)
-    }
-    if (containerType === 'micronix_tube' && !trimCell(row.barcode)) {
-      add('Missing required value: barcode')
-    }
-    if (!trimCell(row.position)) {
-      add('Missing required value: position')
-    }
-  })
-
-  return errors
-}
-
-/**
- * Report a row error when two rows name the same Collection with different non-blank
- * collection_barcode values, rather than silently picking one.
- */
-export function validateBulkImportCollectionBarcodes(
-  rows: CSVRow[],
-  fileRows: number[],
-  opts: {
-    importType: ImportType
-    containerType: ContainerType | 'none' | ''
-  }
-): BulkImportValidationError[] {
-  if (opts.importType === 'subjects' || !opts.containerType || opts.containerType === 'none') {
-    return []
-  }
-
-  const errors: BulkImportValidationError[] = []
-  const seen = new Map<string, { barcode: string; fileRow: number }>()
-
-  rows.forEach((row, index) => {
-    const ref = getBulkImportRowCollectionRef(row, opts.containerType)
-    if (!ref?.name || !ref.barcode) return
-
-    const fileRow = fileRows[index] ?? index + 2
-    const key = `${ref.type}:name:${ref.name}`
-    const first = seen.get(key)
-    if (!first) {
-      seen.set(key, { barcode: ref.barcode, fileRow })
-    } else if (first.barcode !== ref.barcode) {
-      errors.push({
-        fileRows: [fileRow],
-        error: `Collection '${ref.name}' has conflicting collection_barcode '${ref.barcode}' (row ${first.fileRow} has '${first.barcode}')`,
-      })
-    }
-  })
-
-  return errors
-}
-
-/** Map parsed CSV rows to API payloads (no business-rule validation). */
-export function mapBulkImportRowsToPayload(
-  rows: CSVRow[],
-  opts: {
-    importType: ImportType
-    containerType: ContainerType | 'none' | ''
-    fixedStudyShortCode?: string
-  }
-): Record<string, unknown>[] {
-  const { importType, containerType, fixedStudyShortCode } = opts
-  const data: Record<string, unknown>[] = []
-
-  for (const row of rows) {
-    if (importType === 'subjects') {
-      data.push({
-        studyShortCode: fixedStudyShortCode || row.study_short_code,
-        name: row.subject_name,
-      })
-    } else {
-      const spec: Record<string, unknown> = {
-        sourceType: 'subject' as const,
-        studyShortCode: fixedStudyShortCode ?? row.study_short_code,
-        subjectName: row.subject_name,
-        specimenTypeName: row.specimen_type_name,
-        collectionDate: row.collection_date || undefined,
-      }
-      if (containerType !== 'none' && containerType !== '') {
-        let container: FlatBulkImportContainer = {
-          containerType,
-          collectionBarcode: trimCell(row.collection_barcode) || undefined,
-          barcode: trimCell(row.barcode) || undefined,
-          position: trimCell(row.position) || undefined,
-          sheetName: trimCell(row.sheet_name) || undefined,
-          sublabel: trimCell(row.sublabel) || undefined,
-          comment: trimCell(row.comment) || undefined,
-        }
-        if (containerType === 'paper') {
-          const parent = resolveBulkImportPaperParent(row)
-          if (parent && !('error' in parent)) {
-            container = {
-              ...container,
-              parentCollectionType: parent.parentCollectionType,
-              collectionName: parent.collectionName,
-            }
-          }
-        } else {
-          container = {
-            ...container,
-            collectionName: getRowCollectionName(row, containerType),
-          }
-        }
-        spec.container = container
-      }
-      data.push(spec)
+    if (studyShortCode && name) {
+      subjects.push({ studyShortCode, name })
     }
   }
 
-  return data
+  if (errors.length > 0) {
+    return { ok: false, errors, fileRows }
+  }
+  return { ok: true, subjects, fileRows }
 }
