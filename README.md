@@ -45,7 +45,22 @@ bun run build
 bun run start
 ```
 
-Before pushing, run `bun run ci:verify`, the same checks the `Checks` workflow runs on every PR. Install the pre-commit hook with `bun run setup:hooks`; it typechecks the packages your staged files touch and lints the staged API and web files.
+Before pushing, run `bun run ci:verify`. The `Checks` workflow runs the same command on every PR. It runs these steps in order and stops at the first one that fails:
+
+1. `bun run typecheck` typechecks the contract, API, and web packages.
+2. `bun run lint` runs ESLint on `src` in the API and web packages.
+3. `bun run build` builds the API, web, and docs packages.
+4. `bun run test` runs the contract, API, and web unit tests.
+5. `packages/docs/scripts/check-stale-claims.sh` fails if the user guide in `packages/docs` contains a string from the script's list of known-wrong claims.
+
+Install the pre-commit hook once per clone with `bun run setup:hooks`. On each commit, `.githooks/pre-commit-checks.sh` reads the staged files, skipping staged deletions, and does the following:
+
+- It typechecks the API package when a staged file is under `packages/api/`, and the web package when one is under `packages/web/`.
+- It typechecks the contract, API, and web packages when a staged file is under `packages/contract/`, or is `Dockerfile`, `.dockerignore`, `bun.lock`, the root `package.json`, or a `package.json` or `tsconfig*.json` in any other package under `packages/`.
+- It runs ESLint on the staged `.ts` files under `packages/api/src/` and the staged `.ts` and `.tsx` files under `packages/web/src/`.
+- It refuses the commit when one of the files it would lint also has unstaged edits, because ESLint reads the file on disk and not the staged copy.
+
+The hook does not build, run tests, or run the stale-claims check.
 
 ## Project Structure
 
@@ -70,10 +85,17 @@ Put local overrides in **`.env.local`** (gitignored) at the repo root. Bun’s a
 
 ## Testing
 
-- **Unit tests (API + web)**: `bun run test`
+- **Unit tests (contract, API, and web)**: `bun run test`
 - **End-to-end (Playwright)**: `bun run test:e2e`
-- **API**: `bun --filter @sampledb/api test` (Bun). Coverage: `bun --filter @sampledb/api test:coverage` (report in `packages/api/coverage/`). Target 90% lines; see `packages/api/src/__tests__/README.md`.
-- **Web**: `bun --filter @sampledb/web test` (Vitest). Coverage: `bun --filter @sampledb/web test:coverage`. Coverage excludes `src/lib/api/**` and `src/**/*.css` so the 90% target applies to testable code. Thresholds in `packages/web/vitest.config.ts` can be raised in steps toward 90%.
+- **API**: `bun --filter @sampledb/api test` (Bun). Coverage: `bun --filter @sampledb/api test:coverage` (report in `packages/api/coverage/`). Test helpers: `packages/api/src/__tests__/README.md`.
+- **Web**: `bun --filter @sampledb/web test` (Vitest). Coverage: `bun --filter @sampledb/web test:coverage`. Test helpers: `packages/web/src/__tests__/README.md`.
+
+### Coverage
+
+This is the one place coverage targets are written down; the config files point here. Both packages target 90% line coverage.
+
+- **API**: no threshold is enforced. `coverageThreshold` in `packages/api/bunfig.toml` is commented out; set it to make `test:coverage` fail below that line coverage. The thresholds in `packages/api/vitest.config.ts` apply only to Vitest coverage runs, and Vitest cannot run the tests that touch `bun:sqlite`.
+- **Web**: the thresholds in `packages/web/vitest.config.ts` are a floor that fails `test:coverage`. Raise them in steps toward 90%. Coverage excludes `src/lib/api/**` and `src/**/*.css`, so the target applies to testable code.
 
 ## Database Configuration
 
