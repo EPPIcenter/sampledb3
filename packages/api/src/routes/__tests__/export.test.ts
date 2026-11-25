@@ -687,6 +687,370 @@ describe('Export API', () => {
     })
   })
 
+  describe('Location filter', () => {
+    /**
+     * Two Studies with Containers across a nested Location tree:
+     *   Freezer 3 -> Shelf 1 -> Rack A (and an Empty Shelf under Freezer 3)
+     *   Freezer 4 (elsewhere)
+     *
+     * Study LOC1:
+     *   SubjIn:  micronix tube at Shelf 1, cryovial tube at Rack A
+     *   SubjOut: micronix tube at Freezer 4
+     * Study LOC2:
+     *   SubjIn:  micronix tube at Rack A
+     *   SubjOut: micronix tube at Freezer 4
+     */
+    async function seedLocations() {
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'Blood' })
+      const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer -80' })
+
+      const freezer3 = await createTestLocation(ctx.db, {
+        name: 'Freezer 3',
+        storageTypeId: String(storageType.id),
+        canContainCollections: false,
+      })
+      const shelf1 = await createTestLocation(ctx.db, {
+        name: 'Shelf 1',
+        parentId: freezer3.id,
+        canContainCollections: true,
+        path: 'Freezer 3 / Shelf 1',
+      })
+      const rackA = await createTestLocation(ctx.db, {
+        name: 'Rack A',
+        parentId: shelf1.id,
+        canContainCollections: true,
+        path: 'Freezer 3 / Shelf 1 / Rack A',
+      })
+      const emptyShelf = await createTestLocation(ctx.db, {
+        name: 'Empty Shelf',
+        parentId: freezer3.id,
+        canContainCollections: true,
+        path: 'Freezer 3 / Empty Shelf',
+      })
+      const freezer4 = await createTestLocation(ctx.db, {
+        name: 'Freezer 4',
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+
+      const shelfPlate = await createTestMicronixPlate(ctx.db, { name: 'ShelfPlate', locationId: shelf1.id })
+      const rackBox = await createTestCryovialBox(ctx.db, { name: 'RackBox', locationId: rackA.id })
+      const rackPlate = await createTestMicronixPlate(ctx.db, { name: 'RackPlate', locationId: rackA.id })
+      const otherPlate = await createTestMicronixPlate(ctx.db, { name: 'OtherPlate', locationId: freezer4.id })
+
+      const study1 = await createTestStudy(ctx.db, { title: 'Loc Study 1', shortCode: 'LOC1' })
+      const subj1In = await createTestStudySubject(ctx.db, { studyId: study1.id, name: 'SubjIn' })
+      const subj1Out = await createTestStudySubject(ctx.db, { studyId: study1.id, name: 'SubjOut' })
+      const spec1In = await createTestSpecimen(ctx.db, specimenType.id, { studySubjectId: subj1In.id })
+      const spec1Out = await createTestSpecimen(ctx.db, specimenType.id, { studySubjectId: subj1Out.id })
+
+      const shelfTube = await createTestStorageContainer(ctx.db, { specimenId: spec1In.id, unitId: unit.id as number })
+      await createTestMicronixTube(ctx.db, { containerId: shelfTube.id, collectionId: shelfPlate.id, barcode: 'LOC1-SH' })
+
+      const rackCryo = await createTestStorageContainer(ctx.db, { specimenId: spec1In.id, unitId: unit.id as number })
+      await createTestCryovialTube(ctx.db, { containerId: rackCryo.id, collectionId: rackBox.id })
+
+      const elsewhere1 = await createTestStorageContainer(ctx.db, { specimenId: spec1Out.id, unitId: unit.id as number })
+      await createTestMicronixTube(ctx.db, { containerId: elsewhere1.id, collectionId: otherPlate.id, barcode: 'LOC1-OUT' })
+
+      const study2 = await createTestStudy(ctx.db, { title: 'Loc Study 2', shortCode: 'LOC2' })
+      const subj2In = await createTestStudySubject(ctx.db, { studyId: study2.id, name: 'SubjIn' })
+      const subj2Out = await createTestStudySubject(ctx.db, { studyId: study2.id, name: 'SubjOut' })
+      const spec2In = await createTestSpecimen(ctx.db, specimenType.id, { studySubjectId: subj2In.id })
+      const spec2Out = await createTestSpecimen(ctx.db, specimenType.id, { studySubjectId: subj2Out.id })
+
+      const study2RackTube = await createTestStorageContainer(ctx.db, { specimenId: spec2In.id, unitId: unit.id as number })
+      await createTestMicronixTube(ctx.db, { containerId: study2RackTube.id, collectionId: rackPlate.id, barcode: 'LOC2-RK' })
+
+      const elsewhere2 = await createTestStorageContainer(ctx.db, { specimenId: spec2Out.id, unitId: unit.id as number })
+      await createTestMicronixTube(ctx.db, { containerId: elsewhere2.id, collectionId: otherPlate.id, barcode: 'LOC2-OUT' })
+
+      return {
+        freezer3,
+        shelf1,
+        rackA,
+        emptyShelf,
+        freezer4,
+        shelfTubeId: shelfTube.id,
+        rackCryoId: rackCryo.id,
+        elsewhere1Id: elsewhere1.id,
+        study2RackTubeId: study2RackTube.id,
+        elsewhere2Id: elsewhere2.id,
+      }
+    }
+
+    it('GET /api/export/containers includes Containers at child Locations and excludes Containers stored elsewhere', async () => {
+      const { freezer3, shelfTubeId, rackCryoId } = await seedLocations()
+
+      const res = await ctx.request(`/api/export/containers?study=LOC1&format=json&location_id=${freezer3.id}`)
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        export_metadata: { count: number; filters: { location_id?: number } }
+        containers: Array<{ container_id: number }>
+      }
+      expect(data.containers.map((row) => row.container_id).sort((a, b) => a - b)).toEqual(
+        [shelfTubeId, rackCryoId].sort((a, b) => a - b),
+      )
+      expect(data.export_metadata.count).toBe(2)
+      expect(data.export_metadata.filters.location_id).toBe(freezer3.id)
+
+      const countRes = await ctx.request(`/api/export/containers?study=LOC1&count_only=true&location_id=${freezer3.id}`)
+      expect(countRes.status).toBe(200)
+      expect(await countRes.json()).toEqual({ count: 2 })
+    })
+
+    it('POST /api/export/containers filters by a parent Location and summarises the filtered selection', async () => {
+      const { freezer3, shelfTubeId, rackCryoId } = await seedLocations()
+
+      const res = await ctx.request('/api/export/containers', {
+        method: 'POST',
+        json: {
+          study: 'LOC1',
+          subject_names: ['SubjIn', 'SubjOut', 'Ghost'],
+          location_id: freezer3.id,
+          format: 'json',
+        },
+      })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as {
+        data: Array<{ container_id: number }>
+        summary: {
+          total_containers: number
+          subjects_with_results: Array<{ name: string; count: number }>
+          subjects_no_results: string[]
+          subjects_not_found: string[]
+        }
+      }
+      expect(body.data.map((row) => row.container_id).sort((a, b) => a - b)).toEqual(
+        [shelfTubeId, rackCryoId].sort((a, b) => a - b),
+      )
+      expect(body.summary).toEqual({
+        total_containers: 2,
+        subjects_with_results: [{ name: 'SubjIn', count: 2 }],
+        subjects_no_results: ['SubjOut'],
+        subjects_not_found: ['Ghost'],
+      })
+
+      const countRes = await ctx.request('/api/export/containers', {
+        method: 'POST',
+        json: {
+          study: 'LOC1',
+          subject_names: ['SubjIn', 'SubjOut', 'Ghost'],
+          location_id: freezer3.id,
+          count_only: true,
+        },
+      })
+      expect(countRes.status).toBe(200)
+      expect(await countRes.json()).toMatchObject({
+        count: 2,
+        summary: {
+          total_containers: 2,
+          subjects_not_found: ['Ghost'],
+        },
+      })
+    })
+
+    it('POST /api/export/containers/multi-study filters by a parent Location and summarises each Study', async () => {
+      const { freezer3, shelfTubeId, rackCryoId, study2RackTubeId } = await seedLocations()
+
+      const res = await ctx.request('/api/export/containers/multi-study', {
+        method: 'POST',
+        json: {
+          entries: [
+            { study_short_code: 'LOC1', subject_name: 'SubjIn' },
+            { study_short_code: 'LOC1', subject_name: 'SubjOut' },
+            { study_short_code: 'LOC2', subject_name: 'SubjIn' },
+            { study_short_code: 'LOC2', subject_name: 'SubjOut' },
+          ],
+          location_id: freezer3.id,
+          format: 'json',
+        },
+      })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as {
+        data: Array<{ container_id: number }>
+        summary: {
+          total_containers: number
+          studies: Array<{
+            study_code: string
+            containers: number
+            subjects_with_results: Array<{ name: string; count: number }>
+            subjects_no_results: string[]
+            subjects_not_found: string[]
+          }>
+        }
+      }
+      expect(body.data.map((row) => row.container_id).sort((a, b) => a - b)).toEqual(
+        [shelfTubeId, rackCryoId, study2RackTubeId].sort((a, b) => a - b),
+      )
+      expect(body.summary.total_containers).toBe(3)
+      expect(body.summary.studies).toMatchObject([
+        {
+          study_code: 'LOC1',
+          containers: 2,
+          subjects_with_results: [{ name: 'SubjIn', count: 2 }],
+          subjects_no_results: ['SubjOut'],
+          subjects_not_found: [],
+        },
+        {
+          study_code: 'LOC2',
+          containers: 1,
+          subjects_with_results: [{ name: 'SubjIn', count: 1 }],
+          subjects_no_results: ['SubjOut'],
+          subjects_not_found: [],
+        },
+      ])
+    })
+
+    it('handles an existing Location with nothing in it across Study and subject-list exports', async () => {
+      const { emptyShelf } = await seedLocations()
+
+      const getRes = await ctx.request(`/api/export/containers?study=LOC1&format=json&location_id=${emptyShelf.id}`)
+      expect(getRes.status).toBe(404)
+      expect(await getRes.json()).toMatchObject({ error: 'No containers found for this study', errorCode: 'NOT_FOUND' })
+
+      const getCountRes = await ctx.request(`/api/export/containers?study=LOC1&count_only=true&location_id=${emptyShelf.id}`)
+      expect(getCountRes.status).toBe(200)
+      expect(await getCountRes.json()).toEqual({ count: 0 })
+
+      const postRes = await ctx.request('/api/export/containers', {
+        method: 'POST',
+        json: { study: 'LOC1', subject_names: ['SubjIn', 'SubjOut'], location_id: emptyShelf.id, format: 'json' },
+      })
+      expect(postRes.status).toBe(200)
+      expect(await postRes.json()).toMatchObject({
+        data: [],
+        summary: {
+          total_containers: 0,
+          subjects_with_results: [],
+          subjects_no_results: ['SubjIn', 'SubjOut'],
+          subjects_not_found: [],
+        },
+      })
+
+      const multiRes = await ctx.request('/api/export/containers/multi-study', {
+        method: 'POST',
+        json: {
+          entries: [
+            { study_short_code: 'LOC1', subject_name: 'SubjIn' },
+            { study_short_code: 'LOC2', subject_name: 'SubjIn' },
+          ],
+          location_id: emptyShelf.id,
+          format: 'json',
+        },
+      })
+      expect(multiRes.status).toBe(200)
+      expect(await multiRes.json()).toMatchObject({
+        data: [],
+        summary: {
+          total_containers: 0,
+          studies: [
+            { study_code: 'LOC1', containers: 0, subjects_with_results: [], subjects_no_results: ['SubjIn'] },
+            { study_code: 'LOC2', containers: 0, subjects_with_results: [], subjects_no_results: ['SubjIn'] },
+          ],
+        },
+      })
+    })
+
+    it('refuses an unknown Location with a typed 404 (no error_logs row) instead of an empty file', async () => {
+      await seedLocations()
+      const unknownLocationId = 999_999
+      const rowsBefore = await ctx.db.select().from(errorLogs)
+
+      const getExportRes = await ctx.request(
+        `/api/export/containers?study=LOC1&format=json&location_id=${unknownLocationId}`,
+      )
+      expect(getExportRes.status).toBe(404)
+      expect(await getExportRes.json()).toEqual({
+        error: `Location with id ${unknownLocationId} not found`,
+        errorCode: 'NOT_FOUND',
+      })
+
+      const getCountRes = await ctx.request(
+        `/api/export/containers?study=LOC1&count_only=true&location_id=${unknownLocationId}`,
+      )
+      expect(getCountRes.status).toBe(404)
+      expect(await getCountRes.json()).toEqual({
+        error: `Location with id ${unknownLocationId} not found`,
+        errorCode: 'NOT_FOUND',
+      })
+
+      const postRes = await ctx.request('/api/export/containers', {
+        method: 'POST',
+        json: { study: 'LOC1', subject_names: ['SubjIn'], location_id: unknownLocationId, format: 'json' },
+      })
+      expect(postRes.status).toBe(404)
+      expect(await postRes.json()).toEqual({
+        error: `Location with id ${unknownLocationId} not found`,
+        errorCode: 'NOT_FOUND',
+      })
+
+      const postUnknownSubjRes = await ctx.request('/api/export/containers', {
+        method: 'POST',
+        json: { study: 'LOC1', subject_names: ['Ghost'], location_id: unknownLocationId, format: 'json' },
+      })
+      expect(postUnknownSubjRes.status).toBe(404)
+      expect(await postUnknownSubjRes.json()).toEqual({
+        error: `Location with id ${unknownLocationId} not found`,
+        errorCode: 'NOT_FOUND',
+      })
+
+      const multiRes = await ctx.request('/api/export/containers/multi-study', {
+        method: 'POST',
+        json: {
+          entries: [{ study_short_code: 'LOC1', subject_name: 'SubjIn' }],
+          location_id: unknownLocationId,
+          format: 'json',
+        },
+      })
+      expect(multiRes.status).toBe(404)
+      expect(await multiRes.json()).toEqual({
+        error: `Location with id ${unknownLocationId} not found`,
+        errorCode: 'NOT_FOUND',
+      })
+
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const rowsAfter = await ctx.db.select().from(errorLogs)
+      expect(rowsAfter.length).toBe(rowsBefore.length)
+    })
+
+    it.each(['abc', '0', '-1', '1.5'])(
+      'GET /api/export/containers returns 400 for invalid location_id=%s',
+      async (value) => {
+        await seedLocations()
+        const res = await ctx.request(`/api/export/containers?study=LOC1&count_only=true&location_id=${value}`)
+        expect(res.status).toBe(400)
+        expect(await res.json()).toMatchObject({ errorCode: 'VALIDATION_ERROR' })
+      },
+    )
+
+    it.each([0, -1, 1.5, 'abc', '1', true])(
+      'POST exports return 400 for invalid location_id=%p',
+      async (value) => {
+        await seedLocations()
+
+        const postRes = await ctx.request('/api/export/containers', {
+          method: 'POST',
+          json: { study: 'LOC1', subject_names: ['SubjIn'], location_id: value, format: 'json' },
+        })
+        expect(postRes.status).toBe(400)
+        expect(await postRes.json()).toMatchObject({ errorCode: 'VALIDATION_ERROR' })
+
+        const multiRes = await ctx.request('/api/export/containers/multi-study', {
+          method: 'POST',
+          json: {
+            entries: [{ study_short_code: 'LOC1', subject_name: 'SubjIn' }],
+            location_id: value,
+            format: 'json',
+          },
+        })
+        expect(multiRes.status).toBe(400)
+        expect(await multiRes.json()).toMatchObject({ errorCode: 'VALIDATION_ERROR' })
+      },
+    )
+  })
+
   describe('GET /api/export/available-types', () => {
     it('returns 400 when study parameter is missing', async () => {
       const res = await ctx.request('/api/export/available-types', { method: 'GET' })
