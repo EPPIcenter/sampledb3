@@ -27,7 +27,7 @@ import { exportInventoryCsv } from '../lib/export/inventory-csv'
 import { exportSpecimensCsv } from '../lib/export/specimens-csv'
 import type { ExportFilters, MultiStudyExportEntry } from '../lib/export/types'
 import { createAuthMiddleware } from '../middleware/auth'
-import { idListQueryParam } from '../lib/query-params'
+import { idListQueryParam, idQueryParam } from '../lib/query-params'
 import { keepNullsOnWire } from '../middleware/omit-on-wire'
 
 /** A POST export that returns JSON rows keeps its nulls, so every row has the same keys. */
@@ -118,12 +118,24 @@ function buildGetFilters(c: { req: { query: (key: string) => string | undefined;
   const tagIds = idListQueryParam('tag_ids', c.req.queries('tag_ids'))
   if (tagIds) filters.tag_ids = tagIds
 
+  const locationId = idQueryParam('location_id', c.req.query('location_id'))
+  if (locationId !== undefined) filters.location_id = locationId
+
   if (c.req.query('date_from')) filters.date_from = c.req.query('date_from') as string
   if (c.req.query('date_to')) filters.date_to = c.req.query('date_to') as string
   if (c.req.query('created_from')) filters.created_from = c.req.query('created_from') as string
   if (c.req.query('created_to')) filters.created_to = c.req.query('created_to') as string
 
   return filters
+}
+
+function parseLocationIdFromBody(body: Record<string, unknown>): number | undefined {
+  const raw = body.location_id
+  if (raw === undefined || raw === null) return undefined
+  if (typeof raw !== 'number' || !Number.isSafeInteger(raw) || raw < 1) {
+    throw new ValidationError(`Invalid location_id '${String(raw)}': use a positive whole number.`)
+  }
+  return raw
 }
 
 function buildPostFilters(body: Record<string, unknown>): Omit<ExportFilters, 'study' | 'subject_ids' | 'subject_dates'> {
@@ -141,6 +153,9 @@ function buildPostFilters(body: Record<string, unknown>): Omit<ExportFilters, 's
 
   const tagIds = parseTagIdsFromBody(body)
   if (tagIds) filters.tag_ids = tagIds
+
+  const locationId = parseLocationIdFromBody(body)
+  if (locationId !== undefined) filters.location_id = locationId
 
   if (typeof body.date_from === 'string') filters.date_from = body.date_from
   if (typeof body.date_to === 'string') filters.date_to = body.date_to

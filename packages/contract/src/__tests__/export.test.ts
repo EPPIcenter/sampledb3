@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import type { ContainerExportData } from '../export'
+import type { ContainerExportData, ExportFilters } from '../export'
 
 describe('export contract types', () => {
   it('accepts a representative container export row with tags', () => {
@@ -16,5 +16,14 @@ describe('export contract types', () => {
 
     expect(row.tags).toBe('Hold, QC')
     expect('state' in row).toBe(false)
+  })
+
+  it('accepts a Location filter on ExportFilters', () => {
+    const filters: ExportFilters = {
+      study: 'ST1',
+      location_id: 3,
+    }
+
+    expect(filters.location_id).toBe(3)
   })
 })
