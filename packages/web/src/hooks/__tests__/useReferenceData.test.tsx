@@ -2,18 +2,27 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactNode } from 'react'
-import { ToastProvider } from '../../contexts/ToastContext'
+import { ToastProvider, useToast } from '../../contexts/ToastContext'
 import {
   useSpecimenTypes,
   useSpecimenType,
   useCreateSpecimenType,
   useUpdateSpecimenType,
   useDeleteSpecimenType,
-  useStorageTypes,
+  useTags,
+  useCreateTag,
+  useDeleteTag,
+  specimenTypeKeys,
+  tagKeys,
 } from '../useReferenceData'
-import { specimenTypesApi, storageTypesApi } from '../../lib/api/reference-data'
-import type { SpecimenType } from '../../lib/api/types'
-import type { StorageType } from '../../lib/api/reference-data'
+import { exportWorkflowKeys } from '../useExportWorkflow'
+import { specimenTypesApi, tagsApi } from '../../lib/api/reference-data'
+import {
+  createInvalidationTestClient,
+  keysNotInvalidated,
+  observeQuery,
+  seedQueries,
+} from '../../__tests__/helpers/query-invalidation'
 
 // Mock the API module
 vi.mock('../../lib/api/reference-data', async () => {
@@ -26,12 +35,11 @@ vi.mock('../../lib/api/reference-data', async () => {
     update: vi.fn(),
     delete: vi.fn(),
   },
-  statesApi: {
+  tagsApi: {
     list: vi.fn(),
+    create: vi.fn(),
+    delete: vi.fn(),
   },
-  storageTypesApi: {
-    list: vi.fn(),
-  }
   })
 })
 
@@ -261,30 +269,87 @@ describe('useReferenceData Hooks', () => {
 
   // Note: useStates hook has been removed - states are deprecated
   // The test for useStates has been removed as the hook no longer exists
+})
 
-  describe('useStorageTypes', () => {
-    it('should fetch and return storage types', async () => {
-      const mockData = {
-        data: [
-          { id: 1, name: 'Freezer', description: 'Cold storage' },
-          { id: 2, name: 'Room Temp', description: 'Room temperature' },
-        ],
-      }
+// ADR 0001: a query hook used on a migrated screen leaves a read error to the screen, which
+// shows it inline, so the hook itself raises no toast.
+describe('read errors raise no toast', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
 
-      vi.mocked(storageTypesApi.list).mockResolvedValue(mockData as Awaited<ReturnType<typeof storageTypesApi.list>>)
+  const failure = Object.assign(new Error('Request failed'), { response: { data: { error: 'Server said no' } } })
 
-      const { result } = renderHook(() => useStorageTypes(), {
-        wrapper: createWrapper(),
-      })
+  it('useSpecimenType reports the error to its caller without a toast', async () => {
+    vi.mocked(specimenTypesApi.get).mockRejectedValue(failure)
 
-      await waitFor(() => {
-        expect(result.current.isSuccess).toBe(true)
-      })
-
-      expect(result.current.data).toEqual(mockData.data)
+    const { result } = renderHook(() => ({ query: useSpecimenType(1), toasts: useToast().toasts }), {
+      wrapper: createWrapper(),
     })
+
+    await waitFor(() => {
+      expect(result.current.query.isError).toBe(true)
+    })
+    expect(result.current.query.error).toBe(failure)
+    expect(result.current.toasts).toEqual([])
+  })
+
+  it('useTags reports the error to its caller without a toast', async () => {
+    vi.mocked(tagsApi.list).mockRejectedValue(failure)
+
+    const { result } = renderHook(() => ({ query: useTags(), toasts: useToast().toasts }), {
+      wrapper: createWrapper(),
+    })
+
+    await waitFor(() => {
+      expect(result.current.query.isError).toBe(true)
+    })
+    expect(result.current.query.error).toBe(failure)
+    expect(result.current.toasts).toEqual([])
   })
 })
 
+describe('Tag writes refresh other pages', () => {
+  function setup() {
+    const queryClient = createInvalidationTestClient()
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>{children}</ToastProvider>
+      </QueryClientProvider>
+    )
+    return { queryClient, wrapper }
+  }
 
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
 
+  it('a new Tag invalidates the export Tag filter and the Specimen form catalogs', async () => {
+    vi.mocked(tagsApi.create).mockResolvedValue({ id: 4, name: 'Hemolyzed' } as never)
+    const { queryClient, wrapper } = setup()
+    const otherPages = [[...exportWorkflowKeys.referenceData(), 'tags'], tagKeys.list(), specimenTypeKeys.list()]
+    seedQueries(queryClient, otherPages)
+
+    const { result } = renderHook(() => useCreateTag(), { wrapper })
+    result.current.mutate({ name: 'Hemolyzed' } as never)
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(keysNotInvalidated(queryClient, otherPages)).toEqual([])
+  })
+
+  it("a deleted Tag refreshes the Tag list without refetching the Tag's own query", async () => {
+    vi.mocked(tagsApi.delete).mockResolvedValue(undefined as never)
+    const { queryClient, wrapper } = setup()
+    const list = await observeQuery(queryClient, tagKeys.list())
+    const deleted = await observeQuery(queryClient, tagKeys.detail(4))
+
+    const { result } = renderHook(() => useDeleteTag(), { wrapper })
+    result.current.mutate(4)
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    await waitFor(() => expect(list.queryFn).toHaveBeenCalledTimes(2))
+    expect(deleted.queryFn).toHaveBeenCalledTimes(1)
+    list.unsubscribe()
+    deleted.unsubscribe()
+  })
+})

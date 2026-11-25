@@ -8,7 +8,7 @@ import { SkeletonCard } from '../ui'
 import { useStatistics } from '../hooks/useStatistics'
 import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/statistics.css'
-import { toLocalDateString } from '../lib/date-utils'
+import { toLocalDateString, parseDisplayDate, displayDateTime } from '../lib/date-utils'
 
 type BinSize = 'day' | 'week' | 'month' | 'quarter' | 'year'
 
@@ -173,7 +173,7 @@ export default function Statistics() {
 
   // Helper function to get bin key for a date based on bin size
   const getBinKey = (dateString: string, size: BinSize): string => {
-    const date = new Date(dateString)
+    const date = parseDisplayDate(dateString)
     const year = date.getFullYear()
     const month = date.getMonth() + 1
     const day = date.getDate()
@@ -206,7 +206,7 @@ export default function Statistics() {
   const formatBinKey = (key: string, size: BinSize): string => {
     switch (size) {
       case 'day': {
-        const date = new Date(key)
+        const date = parseDisplayDate(key)
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       }
       case 'week': {
@@ -229,10 +229,10 @@ export default function Statistics() {
 
   const collectionTimelineData = useMemo(() => {
     if (!data) return []
-    const minTimestamp = histogramMinDate ? new Date(histogramMinDate).getTime() : 0
+    const minTimestamp = histogramMinDate ? displayDateTime(histogramMinDate) : 0
     const grouped = data.specimens.collectionTimeline
       .filter(({ date }) => {
-        const dateTimestamp = new Date(date).getTime()
+        const dateTimestamp = displayDateTime(date)
         return dateTimestamp >= minTimestamp
       })
       .reduce((acc, { date, count }) => {
@@ -255,10 +255,10 @@ export default function Statistics() {
 
   const creationTimelineData = useMemo(() => {
     if (!data) return []
-    const minTimestamp = histogramMinDate ? new Date(histogramMinDate).getTime() : 0
+    const minTimestamp = histogramMinDate ? displayDateTime(histogramMinDate) : 0
     const grouped = data.specimens.creationTimeline
       .filter(({ date }) => {
-        const dateTimestamp = new Date(date).getTime()
+        const dateTimestamp = displayDateTime(date)
         return dateTimestamp >= minTimestamp
       })
       .reduce((acc, { date, count }) => {

@@ -4,16 +4,15 @@ import type { Database } from '../db/client'
 import {
   containerDerivation,
   storageContainer,
-  specimen,
 } from '../db/schema'
 import { and, eq } from 'drizzle-orm'
 import { createDerivation } from '../lib/derivations'
-import { resolveSpecimenSource } from '../lib/specimens/provenance'
-import { createDerivationRequestSchema } from '../lib/derivation-schemas'
-import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
-import { requireParam } from '../lib/common-validators'
-import { handleRouteError } from '../lib/error-handler'
-import { enrichContainersForApi } from '../lib/container-api-enrichment'
+import { createDerivationRequestSchema, derivationDateSchema } from '../lib/derivation-schemas'
+import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { requireParam, setsNoField } from '../lib/common-validators'
+import { handleRouteError, ValidationError } from '../lib/error-handler'
+import { enrichContainersForApi, toEnrichedContainerApi } from '../lib/container-api-enrichment'
+import { loadContainerReadViews, loadContainerReadViewsByIds } from '../lib/container-read-view'
 import { mapEnrichedContainerToWire } from '../lib/container-wire-mapper'
 
 /**
@@ -24,6 +23,7 @@ export function createDerivationsRoutes(database: Database): Hono {
   const derivations = new Hono()
   const authMiddleware = createAuthMiddleware(database)
   const memberMiddleware = createMemberMiddleware(database)
+  const adminMiddleware = createAdminMiddleware(database)
 
 // Create derivation from parent container
 derivations.post('/containers/:id/derive', memberMiddleware, async (c) => {
@@ -41,7 +41,21 @@ derivations.post('/containers/:id/derive', memberMiddleware, async (c) => {
       ...input,
     })
 
-    return c.json(result)
+    const views = await loadContainerReadViews(database, [result.parentContainer, result.childContainer])
+    const viewById = new Map(views.map((view) => [view.container.id, view]))
+    const parentView = viewById.get(result.parentContainer.id)
+    const childView = viewById.get(result.childContainer.id)
+    if (!parentView || !childView) {
+      throw new Error('Derived containers could not be loaded after creation')
+    }
+
+    return c.json({
+      derivation: result.derivation,
+      parentContainer: mapEnrichedContainerToWire(toEnrichedContainerApi(parentView)),
+      childContainer: mapEnrichedContainerToWire(toEnrichedContainerApi(childView)),
+      specimen: childView.specimen,
+      warnings: result.warnings,
+    })
   } catch (error) {
     return handleRouteError(error, c)
   }
@@ -95,62 +109,42 @@ derivations.get('/containers/:id/source', authMiddleware, async (c) => {
 
     if (record) {
       // Container is derived - return derivation source
-      const parent = await database
-        .select()
-        .from(storageContainer)
-        .where(eq(storageContainer.id, record.parentContainerId))
-        .get()
+      const views = await loadContainerReadViewsByIds(database, [record.parentContainerId])
+      const parentView = views.get(record.parentContainerId)
 
-      if (!parent) {
+      if (!parentView) {
         return c.json({ error: 'Parent container not found' }, 404)
       }
-
-      const parentSpecimen = await database
-        .select()
-        .from(specimen)
-        .where(eq(specimen.id, parent.specimenId))
-        .get()
 
       return c.json({
         type: 'derivation',
         derivation: record,
-        parentContainer: parent,
-        parentSpecimen,
+        parentContainer: mapEnrichedContainerToWire(toEnrichedContainerApi(parentView)),
+        parentSpecimen: parentView.specimen,
       })
     }
 
     // Container is not derived - return original source (subject or control)
-    const container = await database
-      .select()
-      .from(storageContainer)
-      .where(eq(storageContainer.id, id))
-      .get()
+    const views = await loadContainerReadViewsByIds(database, [id])
+    const view = views.get(id)
 
-    if (!container) {
+    if (!view) {
       return c.json({ error: 'Container not found' }, 404)
     }
 
-    const spec = await database
-      .select()
-      .from(specimen)
-      .where(eq(specimen.id, container.specimenId))
-      .get()
-
-    if (!spec) {
+    if (!view.specimen) {
       return c.json({ error: 'Specimen not found for container' }, 404)
     }
 
-    const sourceInfo = await resolveSpecimenSource(database, container.specimenId)
-
-    if (!sourceInfo) {
+    if (!view.source) {
       return c.json({ error: 'Source not found for container' }, 404)
     }
 
     return c.json({
       type: 'original',
-      source: sourceInfo,
-      container,
-      specimen: spec,
+      source: view.source,
+      container: mapEnrichedContainerToWire(toEnrichedContainerApi(view)),
+      specimen: view.specimen,
     })
   } catch (error) {
     return handleRouteError(error, c)
@@ -236,8 +230,8 @@ derivations.get('/containers/:id/derivation-chain', authMiddleware, async (c) =>
   }
 })
 
-// Update derivation metadata
-derivations.patch('/derivations/:id', memberMiddleware, async (c) => {
+// Update derivation metadata (admin-only: CONTEXT.md, Roles)
+derivations.patch('/derivations/:id', adminMiddleware, async (c) => {
   try {
     const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
@@ -246,12 +240,15 @@ derivations.patch('/derivations/:id', memberMiddleware, async (c) => {
 
     const body = await c.req.json()
     const schema = z.object({
-      derivationDate: z.string().optional(),
+      derivationDate: derivationDateSchema.optional(),
       protocol: z.string().optional(),
       notes: z.string().optional(),
       properties: z.record(z.string(), z.any()).optional(),
     })
     const data = schema.parse(body)
+    if (setsNoField(data)) {
+      throw new ValidationError('Nothing to update: send derivationDate, protocol, notes or properties.')
+    }
 
     const [updated] = await database
       .update(containerDerivation)
@@ -274,8 +271,8 @@ derivations.patch('/derivations/:id', memberMiddleware, async (c) => {
   }
 })
 
-// Delete derivation (relationship only)
-derivations.delete('/derivations/:id', memberMiddleware, async (c) => {
+// Delete derivation (relationship only; admin-only: CONTEXT.md, Roles)
+derivations.delete('/derivations/:id', adminMiddleware, async (c) => {
   try {
     const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {

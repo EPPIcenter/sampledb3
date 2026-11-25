@@ -1,23 +1,49 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query'
 import { specimenTypesApi, tagsApi, storageTypesApi, strainsApi } from '../lib/api/reference-data'
 import type { SpecimenType } from '../lib/api/types'
 import type { Tag, StorageType, Strain } from '../lib/api/reference-data'
 import { useToast } from '../contexts/ToastContext'
+import type { ReferenceDataType } from '../config/reference-data-config'
+import { invalidateAfterBulkWrite } from '../lib/query-client'
+import { referenceDataPageKeys } from './useReferenceDataPage'
 
 // Generic reference data keys factory
-function createReferenceDataKeys<T extends string>(type: T) {
+function createReferenceDataKeys<T extends ReferenceDataType>(type: T) {
   return {
     all: [type] as const,
     lists: () => [type, 'list'] as const,
     list: () => [type, 'list'] as const,
     details: () => [type, 'detail'] as const,
-    detail: (id: number) => [type, 'detail', id] as const,
+    detail: (id: number) => referenceDataDetailKey(type, id),
   }
+}
+
+function referenceDataDetailKey<T extends ReferenceDataType>(type: T, id: number) {
+  return [type, 'detail', id] as const
+}
+
+/**
+ * Refresh queries after a Reference data write. Reference data appears on most pages (a Tag on
+ * Containers and the export filters, a specimen type on Specimens, Collections and the Specimen
+ * form, a strain on Controls), so every query is invalidated. A deleted item's own queries are
+ * not refetched.
+ */
+export function invalidateAfterReferenceDataWrite(
+  queryClient: QueryClient,
+  deletedItem?: { type: ReferenceDataType; id: number }
+) {
+  const deleted: QueryKey[] = []
+  if (deletedItem) {
+    deleted.push(referenceDataDetailKey(deletedItem.type, deletedItem.id))
+    if (deletedItem.type === 'specimen-types') {
+      deleted.push(referenceDataPageKeys.containerTypes(deletedItem.id))
+    }
+  }
+  return invalidateAfterBulkWrite(queryClient, { deleted })
 }
 
 export const specimenTypeKeys = createReferenceDataKeys('specimen-types')
 export const tagKeys = createReferenceDataKeys('tags')
-export const storageTypeKeys = createReferenceDataKeys('storage-types')
 export const strainKeys = createReferenceDataKeys('strains')
 // compositionKeys - REMOVED: Compositions no longer used
 
@@ -64,19 +90,11 @@ export function useSpecimenTypesByContainerType(
   })
 }
 
+/** One specimen type. Raises no toast on a failed load: the caller shows the read error inline (ADR 0001). */
 export function useSpecimenType(id: number) {
-  const { error: showError } = useToast()
-  
   return useQuery({
     queryKey: specimenTypeKeys.detail(id),
-    queryFn: async () => {
-      try {
-        return await specimenTypesApi.get(id)
-      } catch (err: any) {
-        showError(err.response?.data?.error || 'Failed to load specimen type')
-        throw err
-      }
-    },
+    queryFn: () => specimenTypesApi.get(id),
     enabled: !!id,
   })
 }
@@ -95,7 +113,7 @@ export function useCreateSpecimenType() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: specimenTypeKeys.lists() })
+      void invalidateAfterReferenceDataWrite(queryClient)
       success('Specimen type created successfully')
     },
     onError: () => {
@@ -117,9 +135,8 @@ export function useUpdateSpecimenType() {
         throw err
       }
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: specimenTypeKeys.detail(data.id) })
-      queryClient.invalidateQueries({ queryKey: specimenTypeKeys.lists() })
+    onSuccess: () => {
+      void invalidateAfterReferenceDataWrite(queryClient)
       success('Specimen type updated successfully')
     },
     onError: () => {
@@ -141,8 +158,8 @@ export function useDeleteSpecimenType() {
         throw err
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: specimenTypeKeys.lists() })
+    onSuccess: (_result, id) => {
+      void invalidateAfterReferenceDataWrite(queryClient, { type: 'specimen-types', id })
       success('Specimen type deleted successfully')
     },
     onError: () => {
@@ -153,19 +170,13 @@ export function useDeleteSpecimenType() {
 
 // States
 // Tags (replaces States)
+/** Every Tag. Raises no toast on a failed load: the caller shows the read error inline (ADR 0001). */
 export function useTags() {
-  const { error: showError } = useToast()
-  
   return useQuery({
     queryKey: tagKeys.list(),
     queryFn: async () => {
-      try {
-        const res = await tagsApi.list()
-        return res.data
-      } catch (err: any) {
-        showError(err.response?.data?.error || 'Failed to load tags')
-        throw err
-      }
+      const res = await tagsApi.list()
+      return res.data
     },
   })
 }
@@ -184,7 +195,7 @@ export function useCreateTag() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: tagKeys.lists() })
+      void invalidateAfterReferenceDataWrite(queryClient)
       success('Tag created successfully')
     },
     onError: () => {
@@ -206,9 +217,8 @@ export function useUpdateTag() {
         throw err
       }
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: tagKeys.detail(data.id) })
-      queryClient.invalidateQueries({ queryKey: tagKeys.lists() })
+    onSuccess: () => {
+      void invalidateAfterReferenceDataWrite(queryClient)
       success('Tag updated successfully')
     },
     onError: () => {
@@ -230,8 +240,8 @@ export function useDeleteTag() {
         throw err
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: tagKeys.lists() })
+    onSuccess: (_result, id) => {
+      void invalidateAfterReferenceDataWrite(queryClient, { type: 'tags', id })
       success('Tag deleted successfully')
     },
     onError: () => {
@@ -241,23 +251,6 @@ export function useDeleteTag() {
 }
 
 // Storage Types
-export function useStorageTypes() {
-  const { error: showError } = useToast()
-  
-  return useQuery({
-    queryKey: storageTypeKeys.list(),
-    queryFn: async () => {
-      try {
-        const res = await storageTypesApi.list()
-        return res.data
-      } catch (err: any) {
-        showError(err.response?.data?.error || 'Failed to load storage types')
-        throw err
-      }
-    },
-  })
-}
-
 export function useCreateStorageType() {
   const queryClient = useQueryClient()
   const { success, error: showError } = useToast()
@@ -272,7 +265,7 @@ export function useCreateStorageType() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: storageTypeKeys.lists() })
+      void invalidateAfterReferenceDataWrite(queryClient)
       success('Storage type created successfully')
     },
     onError: () => {
@@ -294,9 +287,8 @@ export function useUpdateStorageType() {
         throw err
       }
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: storageTypeKeys.detail(data.id) })
-      queryClient.invalidateQueries({ queryKey: storageTypeKeys.lists() })
+    onSuccess: () => {
+      void invalidateAfterReferenceDataWrite(queryClient)
       success('Storage type updated successfully')
     },
     onError: () => {
@@ -318,8 +310,8 @@ export function useDeleteStorageType() {
         throw err
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: storageTypeKeys.lists() })
+    onSuccess: (_result, id) => {
+      void invalidateAfterReferenceDataWrite(queryClient, { type: 'storage-types', id })
       success('Storage type deleted successfully')
     },
     onError: () => {
@@ -366,7 +358,7 @@ export function useCreateStrain() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: strainKeys.lists() })
+      void invalidateAfterReferenceDataWrite(queryClient)
       success('Strain created successfully')
     },
     onError: () => {
@@ -388,9 +380,8 @@ export function useUpdateStrain() {
         throw err
       }
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: strainKeys.detail(data.id) })
-      queryClient.invalidateQueries({ queryKey: strainKeys.lists() })
+    onSuccess: () => {
+      void invalidateAfterReferenceDataWrite(queryClient)
       success('Strain updated successfully')
     },
     onError: () => {
@@ -412,8 +403,8 @@ export function useDeleteStrain() {
         throw err
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: strainKeys.lists() })
+    onSuccess: (_result, id) => {
+      void invalidateAfterReferenceDataWrite(queryClient, { type: 'strains', id })
       success('Strain deleted successfully')
     },
     onError: () => {

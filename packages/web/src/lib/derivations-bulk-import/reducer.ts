@@ -8,6 +8,7 @@ export function initialDerivationsBulkState(): DerivationsBulkState {
     csvContent: '',
     reviewHeaders: [],
     reviewRows: [],
+    reviewFileRows: [],
     validationResult: null,
     importResults: null,
     error: null,
@@ -35,6 +36,7 @@ export function derivationsBulkReducer(
         importResults: null,
         reviewHeaders: [],
         reviewRows: [],
+        reviewFileRows: [],
         collectionUpdates: {},
         error: null,
         step: 'upload',
@@ -55,6 +57,7 @@ export function derivationsBulkReducer(
         validationResult: event.result,
         reviewHeaders: event.headers,
         reviewRows: event.rows.map((row) => ({ ...row })),
+        reviewFileRows: [...event.fileRows],
         collectionUpdates: {},
         error: null,
         importResults: null,
@@ -95,6 +98,20 @@ export function selectMissingCollections(state: DerivationsBulkState): MissingDe
   )
 }
 
-export function selectCsvForImport(state: DerivationsBulkState): string {
-  return csvForImport(state.csvContent, state.reviewHeaders, state.reviewRows)
+export function selectCsvForImport(
+  state: DerivationsBulkState,
+  defaultContainerType?: 'micronix_tube' | 'cryovial_tube' | 'paper' | '',
+): string {
+  return csvForImport(
+    state.csvContent,
+    state.reviewHeaders,
+    state.reviewRows,
+    selectMissingCollections(state),
+    defaultContainerType,
+  )
+}
+
+/** The spreadsheet row of the API's row `index`, counting the header as row 1. */
+export function selectFileRow(state: DerivationsBulkState, index: number): number {
+  return state.reviewFileRows[index] ?? index + 2
 }

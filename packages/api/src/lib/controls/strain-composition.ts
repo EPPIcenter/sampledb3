@@ -21,8 +21,8 @@ export type ResolvedStrain = {
 
 export type CompositionCriteria = {
   strains: StrainCompositionEntry[]
-  targetDensity?: number
-  targetDensityUnitId?: number
+  targetDensity?: number | null
+  targetDensityUnitId?: number | null
 }
 
 export type CompositionMatchOptions = {
@@ -95,22 +95,20 @@ export function targetDensityMatches(
   criteria: Pick<CompositionCriteria, 'targetDensity' | 'targetDensityUnitId'>,
   mode: CompositionMatchOptions['densityMode'] = 'required',
 ): boolean {
-  const storedDensity = stored.targetDensity as number | undefined | null
-  const storedUnitId = stored.targetDensityUnitId as number | undefined | null
+  const storedDensity = (stored.targetDensity as number | undefined | null) ?? null
+  const criteriaDensity = criteria.targetDensity ?? null
+  const storedUnitId = (stored.targetDensityUnitId as number | undefined | null) ?? null
+  const criteriaUnitId = criteria.targetDensityUnitId ?? null
 
   if (mode === 'required') {
-    if (storedDensity !== criteria.targetDensity) return false
-  } else if (criteria.targetDensity !== undefined) {
-    if (storedDensity !== criteria.targetDensity) return false
-  } else if (storedDensity !== undefined && storedDensity !== null) {
+    if (storedDensity !== criteriaDensity) return false
+  } else if (criteriaDensity !== null) {
+    if (storedDensity !== criteriaDensity) return false
+  } else if (storedDensity !== null) {
     return false
   }
 
-  if (criteria.targetDensityUnitId !== undefined) {
-    if (storedUnitId !== criteria.targetDensityUnitId) return false
-  } else if (storedUnitId !== undefined && storedUnitId !== null) {
-    return false
-  }
+  if (storedUnitId !== criteriaUnitId) return false
 
   return true
 }

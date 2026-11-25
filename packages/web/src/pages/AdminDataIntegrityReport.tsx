@@ -4,8 +4,10 @@ import { useAdminIntegrityReport } from '../hooks/useAdmin'
 import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/admin.css'
 
-function typeLabel(type: EmptyCollectionItem['type']): string {
+function typeLabel(type: EmptyCollectionItem['type'] | 'sheet'): string {
   switch (type) {
+    case 'sheet':
+      return 'Sheet'
     case 'micronix_plate':
       return 'Micronix plate'
     case 'cryovial_box':
@@ -19,8 +21,10 @@ function typeLabel(type: EmptyCollectionItem['type']): string {
   }
 }
 
-function getCollectionDetailUrl(type: EmptyCollectionItem['type'], id: number): string {
+function getCollectionDetailUrl(type: EmptyCollectionItem['type'] | 'sheet', id: number): string {
   switch (type) {
+    case 'sheet':
+      return `/collections/sheets/${id}`
     case 'micronix_plate':
       return `/collections/micronix-plates/${id}`
     case 'cryovial_box':
@@ -321,15 +325,16 @@ export default function AdminDataIntegrityReport() {
       </IntegritySection>
 
       <IntegritySection
-        title="Duplicate barcodes (micronix)"
+        title="Duplicate tube barcodes"
         count={report.duplicateBarcodes.length}
-        description="Micronix tubes that share the same barcode (schema expects unique barcodes)."
+        description="Micronix and cryovial tubes that share a barcode, ignoring case and surrounding spaces. Scanning or looking up one of these barcodes stops and asks which tube you mean."
       >
         <div className="overflow-x-auto">
           <table className="admin-table min-w-full">
             <thead>
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Barcode</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Spellings</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Type</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Container IDs</th>
               </tr>
@@ -338,7 +343,10 @@ export default function AdminDataIntegrityReport() {
               {report.duplicateBarcodes.map((d, i) => (
                 <tr key={`${d.barcode}-${i}`} className="hover:bg-app-surface">
                   <td className="px-4 py-3 text-sm font-medium">{d.barcode}</td>
-                  <td className="px-4 py-3 text-sm">{d.containerType}</td>
+                  <td className="px-4 py-3 text-sm">
+                    {d.variants.length > 1 ? d.variants.map((v) => JSON.stringify(v)).join(', ') : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-sm">{d.containerTypes.join(', ')}</td>
                   <td className="px-4 py-3 text-sm">
                     {d.ids.map((id) => (
                       <Link key={id} to={`/containers/${id}`} className="text-[rgb(var(--app-accent))] hover:underline mr-2">
@@ -346,6 +354,235 @@ export default function AdminDataIntegrityReport() {
                       </Link>
                     ))}
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </IntegritySection>
+
+      <IntegritySection
+        title="Duplicate Specimens"
+        count={report.duplicateSpecimenIdentities.length}
+        description="Specimens of one Subject with the same Specimen type and collection date, which registration would treat as one collection event. Existing groups are listed for review; new registrations add Containers to the existing Specimen instead."
+      >
+        <div className="overflow-x-auto">
+          <table className="admin-table min-w-full">
+            <thead>
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Study</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Subject</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Specimen type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Collection date</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Specimen IDs</th>
+              </tr>
+            </thead>
+            <tbody className="bg-app-card divide-y divide-app-border">
+              {report.duplicateSpecimenIdentities.map((g) => (
+                <tr key={`${g.subjectId}-${g.specimenTypeId}-${g.collectionDate ?? ''}`} className="hover:bg-app-surface">
+                  <td className="px-4 py-3 text-sm">{g.studyShortCode}</td>
+                  <td className="px-4 py-3 text-sm">
+                    <Link to={`/subjects/${g.subjectId}`} className="text-[rgb(var(--app-accent))] hover:underline">
+                      {g.subjectName}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm">{g.specimenTypeName}</td>
+                  <td className="px-4 py-3 text-sm">{g.collectionDate ?? 'No date'}</td>
+                  <td className="px-4 py-3 text-sm">
+                    {g.specimenIds.map((id) => (
+                      <Link key={id} to={`/specimens/${id}`} className="text-[rgb(var(--app-accent))] hover:underline mr-2">
+                        {id}
+                      </Link>
+                    ))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </IntegritySection>
+
+      <IntegritySection
+        title="Subject names that differ only by case"
+        count={report.caseVariantSubjectNames.length}
+        description="Subjects in one study whose names are the same ignoring case. Subject names in a study ignore case, so merge or rename them."
+      >
+        <div className="overflow-x-auto">
+          <table className="admin-table min-w-full">
+            <thead>
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Study</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Subjects</th>
+              </tr>
+            </thead>
+            <tbody className="bg-app-card divide-y divide-app-border">
+              {report.caseVariantSubjectNames.map((g) => (
+                <tr key={g.subjects.map((subject) => subject.id).join('-')} className="hover:bg-app-surface">
+                  <td className="px-4 py-3 text-sm">{g.studyShortCode}</td>
+                  <td className="px-4 py-3 text-sm">
+                    {g.subjects.map((subject) => (
+                      <Link key={subject.id} to={`/subjects/${subject.id}`} className="text-[rgb(var(--app-accent))] hover:underline mr-2">
+                        {subject.name}
+                      </Link>
+                    ))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </IntegritySection>
+
+      <IntegritySection
+        title="Collection names that differ only by case or spaces"
+        count={report.caseVariantCollectionNames.length}
+        description="Plates, boxes or bags of one type, or sheets in one box or bag, whose names are the same ignoring case and surrounding spaces. Names are quoted to show spaces. Rename one, or delete it if it is empty."
+      >
+        <div className="overflow-x-auto">
+          <table className="admin-table min-w-full">
+            <thead>
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Collections</th>
+              </tr>
+            </thead>
+            <tbody className="bg-app-card divide-y divide-app-border">
+              {report.caseVariantCollectionNames.map((g) => (
+                <tr key={`${g.type}-${g.collections.map((c) => c.id).join('-')}`} className="hover:bg-app-surface">
+                  <td className="px-4 py-3 text-sm">{typeLabel(g.type)}</td>
+                  <td className="px-4 py-3 text-sm">
+                    {g.collections.map((c) => (
+                      <Link key={c.id} to={getCollectionDetailUrl(g.type, c.id)} className="text-[rgb(var(--app-accent))] hover:underline mr-2">
+                        {JSON.stringify(c.name)}
+                      </Link>
+                    ))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </IntegritySection>
+
+      <IntegritySection
+        title="Containers in a type their Specimen type does not allow"
+        count={report.containersInDisallowedContainerType.length}
+        description="Containers whose Container type is not one of the allowed Container types of their Specimen type. Allow the type for the Specimen type in Reference data, or correct the Container."
+      >
+        <div className="overflow-x-auto">
+          <table className="admin-table min-w-full">
+            <thead>
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Container ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Container type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Specimen</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Specimen type</th>
+              </tr>
+            </thead>
+            <tbody className="bg-app-card divide-y divide-app-border">
+              {report.containersInDisallowedContainerType.map((row) => (
+                <tr key={row.id} className="hover:bg-app-surface">
+                  <td className="px-4 py-3 text-sm">
+                    <Link to={`/containers/${row.id}`} className="text-[rgb(var(--app-accent))] hover:underline">
+                      {row.id}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm">{row.containerType}</td>
+                  <td className="px-4 py-3 text-sm">
+                    <Link to={`/specimens/${row.specimenId}`} className="text-[rgb(var(--app-accent))] hover:underline">
+                      {row.specimenId}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm">{row.specimenTypeName}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </IntegritySection>
+
+      <IntegritySection
+        title="Exhausted Containers with remaining quantity"
+        count={report.exhaustedContainersWithRemainingQuantity.length}
+        description="Containers whose comment says exhausted but whose remaining quantity is above 0, so they show as In Use. Set the remaining quantity to 0 if the material is used up, or correct the comment."
+      >
+        <div className="overflow-x-auto">
+          <table className="admin-table min-w-full">
+            <thead>
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Container ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Comment</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Remaining quantity</th>
+              </tr>
+            </thead>
+            <tbody className="bg-app-card divide-y divide-app-border">
+              {report.exhaustedContainersWithRemainingQuantity.map((row) => (
+                <tr key={row.id} className="hover:bg-app-surface">
+                  <td className="px-4 py-3 text-sm">
+                    <Link to={`/containers/${row.id}`} className="text-[rgb(var(--app-accent))] hover:underline">
+                      {row.id}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm">{row.comment}</td>
+                  <td className="px-4 py-3 text-sm">{row.remainingQuantity}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </IntegritySection>
+
+      <IntegritySection
+        title="Placeholder collection dates"
+        count={report.specimensWithPlaceholderCollectionDate.length}
+        description="Specimens dated 1970-01-01, 1999-09-09, 1899-12-30 or 1111-01-01, dates the old application stored for an unknown date. Clear the date, or enter the real one."
+      >
+        <div className="overflow-x-auto">
+          <table className="admin-table min-w-full">
+            <thead>
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Specimen ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Collection date</th>
+              </tr>
+            </thead>
+            <tbody className="bg-app-card divide-y divide-app-border">
+              {report.specimensWithPlaceholderCollectionDate.map((s) => (
+                <tr key={s.id} className="hover:bg-app-surface">
+                  <td className="px-4 py-3 text-sm">
+                    <Link to={`/specimens/${s.id}`} className="text-[rgb(var(--app-accent))] hover:underline">
+                      {s.id}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm">{s.collectionDate}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </IntegritySection>
+
+      <IntegritySection
+        title="Collection dates in the future"
+        count={report.specimensWithFutureCollectionDate.length}
+        description="Specimens whose collection date is after today, most likely from a spreadsheet fill-down. Correct the date by hand."
+      >
+        <div className="overflow-x-auto">
+          <table className="admin-table min-w-full">
+            <thead>
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Specimen ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Collection date</th>
+              </tr>
+            </thead>
+            <tbody className="bg-app-card divide-y divide-app-border">
+              {report.specimensWithFutureCollectionDate.map((s) => (
+                <tr key={s.id} className="hover:bg-app-surface">
+                  <td className="px-4 py-3 text-sm">
+                    <Link to={`/specimens/${s.id}`} className="text-[rgb(var(--app-accent))] hover:underline">
+                      {s.id}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm">{s.collectionDate}</td>
                 </tr>
               ))}
             </tbody>
@@ -379,6 +616,75 @@ export default function AdminDataIntegrityReport() {
                   <td className="px-4 py-3 text-sm font-medium">{loc.name}</td>
                   <td className="px-4 py-3 text-sm">{loc.storedPath ?? '—'}</td>
                   <td className="px-4 py-3 text-sm">{loc.expectedPath}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </IntegritySection>
+
+      <IntegritySection
+        title="Collection date not ISO"
+        count={report.specimensWithNonIsoCollectionDate.length}
+        description="Specimens whose collection date is not a real date written YYYY-MM-DD. Date filters, exports and study summaries can't read such a date, so they leave these Specimens out. Correct the date of each Specimen listed."
+      >
+        <div className="overflow-x-auto">
+          <table className="admin-table min-w-full">
+            <thead>
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Specimen ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Collection date</th>
+              </tr>
+            </thead>
+            <tbody className="bg-app-card divide-y divide-app-border">
+              {report.specimensWithNonIsoCollectionDate.map((s) => (
+                <tr key={s.id} className="hover:bg-app-surface">
+                  <td className="px-4 py-3 text-sm">
+                    <Link to={`/specimens/${s.id}`} className="text-[rgb(var(--app-accent))] hover:underline">
+                      {s.id}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm">{s.collectionDate}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </IntegritySection>
+
+      <IntegritySection
+        title="Containers with an invalid Grid position"
+        count={report.containersWithInvalidGridPosition.length}
+        description="Tubes or wells whose stored position is not a well or slot of their plate (A01–H12) or box (A01–J10), or is not in stored form (A1 instead of A01). They appear as unplaced, and their cell can be filled by another Container. Move each one to its real position, or clear the position."
+      >
+        <div className="overflow-x-auto">
+          <table className="admin-table min-w-full">
+            <thead>
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Container ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Collection ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Stored position</th>
+              </tr>
+            </thead>
+            <tbody className="bg-app-card divide-y divide-app-border">
+              {report.containersWithInvalidGridPosition.map((row) => (
+                <tr key={`${row.containerType}-${row.id}`} className="hover:bg-app-surface">
+                  <td className="px-4 py-3 text-sm">
+                    <Link to={`/containers/${row.id}`} className="text-[rgb(var(--app-accent))] hover:underline">
+                      {row.id}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm">{row.containerType}</td>
+                  <td className="px-4 py-3 text-sm">
+                    <Link
+                      to={getCollectionDetailUrl(row.containerType === 'cryovial_tube' ? 'cryovial_box' : 'micronix_plate', row.collectionId)}
+                      className="text-[rgb(var(--app-accent))] hover:underline"
+                    >
+                      {row.collectionId}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm font-mono">{row.position}</td>
                 </tr>
               ))}
             </tbody>

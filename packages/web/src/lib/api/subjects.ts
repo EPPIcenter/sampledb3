@@ -74,7 +74,7 @@ type SubjectsListResponse = {
 }
 
 export const subjectsApi = {
-  list: (params?: { page?: number; limit?: number }) =>
+  list: (params?: { page?: number; limit?: number; created_from?: string; created_to?: string }) =>
     api.get<SubjectsListResponse>('/subjects', { params }),
   get: (id: number) => api.get<SubjectResponse>(`/subjects/${id}`),
   getSummary: (id: number) => api.get<SubjectSummaryResponse>(`/subjects/${id}/summary`),
@@ -94,6 +94,8 @@ export const subjectsApi = {
   createWithSpecimens: (data: {
     studyShortCode: string
     subjectName: string
+    /** Refuse a name the study already has (409) instead of adding to that subject. */
+    newSubjectOnly?: boolean
     specimens: Array<{
       specimenTypeName: string
       collectionDate?: string
@@ -103,11 +105,7 @@ export const subjectsApi = {
     api.post<{
       subject: StudySubject
       subjectCreated: boolean
-      specimens: Array<{
-        specimen: Specimen
-        containerCreated: boolean
-        containerId?: number
-      }>
+      specimens: Array<Specimen & { containerCreated: boolean; containerId?: number }>
       summary: {
         subjectsCreated: number
         subjectsUpdated: number

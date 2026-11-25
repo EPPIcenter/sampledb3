@@ -3,10 +3,14 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 const logErrorFromException = vi.fn()
 const logErrorFromMessage = vi.fn()
 
-vi.mock('../error-logger', () => ({
-  logErrorFromException: (...args: unknown[]) => logErrorFromException(...args),
-  logErrorFromMessage: (...args: unknown[]) => logErrorFromMessage(...args),
-}))
+vi.mock('../error-logger', async () => {
+  const actual = await vi.importActual<typeof import('../error-logger')>('../error-logger')
+  return {
+    ...actual,
+    logErrorFromException: (...args: unknown[]) => logErrorFromException(...args),
+    logErrorFromMessage: (...args: unknown[]) => logErrorFromMessage(...args),
+  }
+})
 
 import { initializeGlobalErrorHandlers } from '../global-error-handlers'
 
@@ -72,6 +76,35 @@ describe('global-error-handlers', () => {
         expect.stringContaining('string reason'),
         'error',
         expect.objectContaining({ type: 'unhandledRejection', promise: true })
+      )
+    })
+  })
+
+  it('when unhandledrejection fires with a plain-object HTTP failure, listener includes request metadata', async () => {
+    const addSpy = vi.spyOn(window, 'addEventListener')
+    initializeGlobalErrorHandlers()
+    const rejectionCall = addSpy.mock.calls.find(([name]) => name === 'unhandledrejection')
+    addSpy.mockRestore()
+    const handler = rejectionCall![1] as (event: PromiseRejectionEvent) => void
+    const reason = {
+      isAxiosError: true,
+      config: { method: 'post', baseURL: '/api', url: '/specimens/bulk/validate', data: { secret: 1 } },
+      response: { status: 400, data: { error: 'Validation error', details: [{ path: ['specimens', 0], message: 'Bad' }] } },
+    }
+    const promise = Promise.reject(reason)
+    promise.catch(() => {})
+    handler({ reason, promise } as unknown as PromiseRejectionEvent)
+    await vi.waitFor(() => {
+      expect(logErrorFromMessage).toHaveBeenCalledWith(
+        expect.any(String),
+        'error',
+        expect.objectContaining({
+          type: 'unhandledRejection',
+          requestMethod: 'POST',
+          requestPath: '/api/specimens/bulk/validate',
+          responseStatus: 400,
+          responseError: 'Validation error',
+        }),
       )
     })
   })

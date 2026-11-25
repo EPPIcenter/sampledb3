@@ -73,9 +73,19 @@ export const createBatchWithSpecimensSchema = z.object({
   specimens: z.array(batchSpecimenInputSchema).min(1),
 })
 
-/** Several batches (e.g. one per density from a composition CSV), created all-or-nothing. */
+/**
+ * Several batches (e.g. one per density from a composition CSV), created all-or-nothing.
+ * A batch may omit its name; the server then names it inside the same transaction, so two
+ * batches for one definition and production date get different names.
+ */
 export const createBatchesWithSpecimensSchema = z.object({
-  batches: z.array(createBatchWithSpecimensSchema).min(1),
+  batches: z
+    .array(
+      createBatchWithSpecimensSchema.extend({
+        batch: createBatchWithSpecimensSchema.shape.batch.extend({ name: z.string().min(1).optional() }),
+      }),
+    )
+    .min(1),
 })
 
 export const addSpecimensToBatchSchema = z.object({

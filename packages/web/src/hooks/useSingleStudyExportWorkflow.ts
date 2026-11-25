@@ -13,6 +13,12 @@ export type SingleStudyExportSummary = {
   errors?: string[]
 }
 
+/**
+ * What the modal does after a submit: close once the file downloads, stay open to show the
+ * summary of a CSV-upload export, or stay open to show the error.
+ */
+export type SingleStudyExportOutcome = 'summary' | 'close' | 'error'
+
 export type SingleStudyExportSubmitParams = {
   columns: string[]
 }
@@ -55,9 +61,16 @@ export function useSingleStudyExportWorkflow(options: {
   const countDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const updateCountRef = useRef<() => Promise<void>>(() => Promise.resolve())
 
+  // Each count request takes the next number; only the latest one may update state.
+  const countRequestSeqRef = useRef(0)
+
   const updateCount = useCallback(async () => {
+    const requestSeq = ++countRequestSeqRef.current
+    const isLatest = () => requestSeq === countRequestSeqRef.current
+
     if (uploadMode === 'csv' && csvData.length === 0) {
       setCount(null)
+      setLoadingCount(false)
       return
     }
 
@@ -65,25 +78,26 @@ export function useSingleStudyExportWorkflow(options: {
       setLoadingCount(true)
       setError(null)
 
-      if (uploadMode === 'csv') {
-        const response = await exportApi.containersCountByNames({
-          study: studyCode,
-          subject_names: csvData.map((row) => row.subject_name),
-          subject_dates: buildSubjectDatesFromCsv(csvData),
-          date_tolerance: dateTolerance,
-          specimen_type_ids: filters.specimen_type_ids,
-          container_types: filters.container_types,
-          date_from: filters.date_from,
-          date_to: filters.date_to,
-          created_from: filters.created_from,
-          created_to: filters.created_to,
-        })
-        setCount(response.count)
-      } else {
-        const response = await exportApi.containersCount(filters)
-        setCount(response.count)
-      }
+      const response =
+        uploadMode === 'csv'
+          ? await exportApi.containersCountByNames({
+              study: studyCode,
+              subject_names: csvData.map((row) => row.subject_name),
+              subject_dates: buildSubjectDatesFromCsv(csvData),
+              date_tolerance: dateTolerance,
+              specimen_type_ids: filters.specimen_type_ids,
+              container_types: filters.container_types,
+              tag_ids: filters.tag_ids,
+              date_from: filters.date_from,
+              date_to: filters.date_to,
+              created_from: filters.created_from,
+              created_to: filters.created_to,
+            })
+          : await exportApi.containersCount(filters)
+      if (!isLatest()) return
+      setCount(response.count)
     } catch (err: unknown) {
+      if (!isLatest()) return
       console.error('Failed to get count:', err)
       const message =
         err && typeof err === 'object' && 'response' in err
@@ -92,7 +106,7 @@ export function useSingleStudyExportWorkflow(options: {
       setError(message || 'Failed to get count')
       setCount(null)
     } finally {
-      setLoadingCount(false)
+      if (isLatest()) setLoadingCount(false)
     }
   }, [filters, uploadMode, csvData, dateTolerance, studyCode])
 
@@ -200,7 +214,7 @@ export function useSingleStudyExportWorkflow(options: {
   }, [filters])
 
   const submitExport = useCallback(
-    async (params: SingleStudyExportSubmitParams): Promise<'summary' | 'close'> => {
+    async (params: SingleStudyExportSubmitParams): Promise<SingleStudyExportOutcome> => {
       try {
         setExporting(true)
         setError(null)
@@ -216,6 +230,7 @@ export function useSingleStudyExportWorkflow(options: {
             columns: params.columns,
             specimen_type_ids: filters.specimen_type_ids,
             container_types: filters.container_types,
+            tag_ids: filters.tag_ids,
             date_from: filters.date_from,
             date_to: filters.date_to,
             created_from: filters.created_from,
@@ -264,7 +279,7 @@ export function useSingleStudyExportWorkflow(options: {
             ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
             : undefined
         setError(message || 'Export failed')
-        return 'close'
+        return 'error'
       } finally {
         setExporting(false)
       }

@@ -1,4 +1,12 @@
 import { api } from './client'
+
+/** What a result upload stored, and the amplification rows it skipped because their well has no result row. */
+export interface QpcrResultsUploadResponse {
+  run: { id: number }
+  wellResultCount: number
+  amplificationCount: number
+  skippedAmplification: { rowCount: number; wellPositions: string[] }
+}
 // qPCR experiments
 export interface QpcrExperimentTarget {
   id: number
@@ -70,7 +78,7 @@ export const qpcrExperimentsApi = {
   updateWells: (id: number, data: { wellPosition?: string; positions?: string[]; contentType: 'empty' | 'negative' }) =>
     api.patch<{ wells: QpcrExperimentWell[] }>(`/qpcr-experiments/${id}/wells`, data),
   uploadResults: (id: number, data: { fileContent: string; fileName: string; instrumentType: 'Biorad_CFX' | 'QuantStudio' }) =>
-    api.post<{ run: { id: number }; wellResultCount: number; amplificationCount: number }>(`/qpcr-experiments/${id}/results`, data),
+    api.post<QpcrResultsUploadResponse>(`/qpcr-experiments/${id}/results`, data),
   delete: (id: number) =>
     api.delete<void>(`/qpcr-experiments/${id}`),
 }

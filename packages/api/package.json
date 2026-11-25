@@ -13,7 +13,8 @@
     "test:watch": "NODE_ENV=test bun test --watch src eslint-rules",
     "test:ui": "vitest --ui",
     "test:coverage": "NODE_ENV=test bun test src eslint-rules --coverage",
-    "demo:seed": "bun src/lib/demo-seed.ts"
+    "demo:seed": "bun src/lib/demo-seed.ts",
+    "data-fix": "bun src/scripts/data-fix.ts"
   },
   "dependencies": {
     "@sampledb/contract": "workspace:*",

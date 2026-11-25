@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '../../__tests__/helpers/render'
+import { render, screen, waitFor, within } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import MicronixPlateDetail from '../MicronixPlateDetail'
 import * as csv from '../../lib/csv'
@@ -60,7 +60,15 @@ describe('MicronixPlateDetail', () => {
     vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({
       plate: mockPlate,
       wells: mockWells,
+      unplaced: [],
     })
+  })
+
+  it('shows a loading state before the plate arrives', async () => {
+    vi.mocked(collectionsApi.getMicronixPlate).mockReturnValue(new Promise(() => {}))
+    await render(<MicronixPlateDetail />)
+    expect(screen.queryByText('Plate Layout')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /Unplaced/ })).not.toBeInTheDocument()
   })
 
   it('shows plate layout and loads grid by default', async () => {
@@ -146,5 +154,73 @@ describe('MicronixPlateDetail', () => {
     // Columns not in Minimal config should not appear
     expect(screen.queryByRole('columnheader', { name: /Subject Name/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: /Study Code/i })).not.toBeInTheDocument()
+  })
+
+  describe('with unplaced Containers', () => {
+    const unplacedTube = (id: number, barcode: string, position: string | null) => ({
+      type: 'micronix_tube' as const,
+      id,
+      barcode,
+      ...(position != null && { position }),
+      container: { specimenId: id, remainingQuantity: 1, tags: [], source: { type: 'subject', name: `Sub-${id}` } },
+    })
+
+    beforeEach(() => {
+      vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({
+        plate: mockPlate,
+        wells: mockWells,
+        unplaced: [
+          unplacedTube(301, 'MTX-BAD', 'A1145868849'),
+          unplacedTube(302, 'MTX-NOPOS-1', null),
+          unplacedTube(303, 'MTX-NOPOS-2', null),
+        ],
+      })
+    })
+
+    it('lists unplaced Containers in an Unplaced section labelled with their stored position', async () => {
+      await render(<MicronixPlateDetail />)
+
+      const heading = await screen.findByRole('heading', { name: 'Unplaced (3)' })
+      const section = heading.closest('section')!
+      const rows = within(section).getAllByRole('row').slice(1)
+      expect(rows.map((row) => within(row).getAllByRole('cell')[0]!.textContent)).toEqual([
+        'A1145868849',
+        'None',
+        'None',
+      ])
+      expect(within(section).getByRole('link', { name: 'MTX-NOPOS-1' })).toHaveAttribute('href', '/containers/302')
+      expect(within(section).getByText('Sub-303')).toBeInTheDocument()
+    })
+
+    it('includes unplaced Containers after the 96 wells in the table view', async () => {
+      await render(<MicronixPlateDetail />)
+      await screen.findByText('Plate Layout')
+      await userEvent.click(screen.getByRole('button', { name: /Table/i }))
+
+      const table = await screen.findByRole('table')
+      const rows = within(table).getAllByRole('row').slice(1)
+      expect(rows).toHaveLength(99)
+      expect(rows.slice(96).map((row) => within(row).getAllByRole('cell').map((c) => c.textContent))).toEqual([
+        ['In Use', 'A1145868849', 'MTX-BAD'],
+        ['In Use', '', 'MTX-NOPOS-1'],
+        ['In Use', '', 'MTX-NOPOS-2'],
+      ])
+      expect(screen.queryByRole('heading', { name: /Unplaced/ })).not.toBeInTheDocument()
+    })
+
+    it('exports unplaced Containers with the table', async () => {
+      const downloadSpy = vi.spyOn(csv, 'downloadCsv').mockImplementation(() => {})
+      await render(<MicronixPlateDetail />)
+      await screen.findByText('Plate Layout')
+      await userEvent.click(screen.getByRole('button', { name: /Table/i }))
+      await userEvent.click(await screen.findByRole('button', { name: /Export CSV/i }))
+
+      const [csvContent] = downloadSpy.mock.calls[0]!
+      expect(csvContent).toContain('A1145868849')
+      expect(csvContent).toContain('MTX-BAD')
+      expect(csvContent).toContain('MTX-NOPOS-1')
+      expect(csvContent).toContain('MTX-NOPOS-2')
+      downloadSpy.mockRestore()
+    })
   })
 })

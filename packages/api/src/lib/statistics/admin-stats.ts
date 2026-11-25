@@ -23,9 +23,11 @@ import {
 } from '../../db/schema'
 import { and, sql, isNull, gt } from 'drizzle-orm'
 import type { AdminStatistics } from './types'
+import { daysBefore } from '../datetime'
+import { timestampAtOrAfter } from '../sql-helpers'
 
 /** Admin dashboard entity and reference-data counts. */
-export async function getAdminStatistics(database: Database): Promise<AdminStatistics> {
+export async function getAdminStatistics(database: Database, now: Date = new Date()): Promise<AdminStatistics> {
   const [totalUsers, activeUsers, deletedUsers, usersByRole] = await Promise.all([
     database.select({ count: sql<number>`count(*)` }).from(users),
     database.select({ count: sql<number>`count(*)` }).from(users).where(isNull(users.deletedAt)),
@@ -40,11 +42,11 @@ export async function getAdminStatistics(database: Database): Promise<AdminStati
       .groupBy(users.role),
   ])
 
-  const now = Math.floor(Date.now() / 1000)
+  const nowSeconds = Math.floor(now.getTime() / 1000)
   const activeSessions = await database
     .select({ count: sql<number>`count(*)` })
     .from(sessions)
-    .where(gt(sessions.expiresAt, now))
+    .where(gt(sessions.expiresAt, nowSeconds))
 
   const [studiesCount, subjectsCount, specimensCount, containersCount] = await Promise.all([
     database.select({ count: sql<number>`count(*)` }).from(study),
@@ -77,12 +79,10 @@ export async function getAdminStatistics(database: Database): Promise<AdminStati
 
   const locationsCount = await database.select({ count: sql<number>`count(*)` }).from(location)
 
-  const sevenDaysAgo = new Date()
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
   const recentLogins = await database
     .select({ count: sql<number>`count(*)` })
     .from(users)
-    .where(and(isNull(users.deletedAt), sql`${users.lastLogin} >= ${sevenDaysAgo.toISOString()}`))
+    .where(and(isNull(users.deletedAt), timestampAtOrAfter(users.lastLogin, daysBefore(now, 7))))
 
   const usersByRoleMap: Record<string, number> = {}
   usersByRole.forEach((row: { role: string; count: number }) => {

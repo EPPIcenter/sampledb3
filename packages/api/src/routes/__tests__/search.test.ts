@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { eq } from 'drizzle-orm'
 import { authenticatedRequest } from '../../__tests__/helpers/test-client'
 import {
   setupAuthenticatedRouteTest,
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createSearchRoutes } from '../search'
+import { errorLogs } from '../../db/schema'
 import * as unifiedSearch from '../../lib/search/unified-search'
 
 describe('Search API', () => {
@@ -58,6 +60,18 @@ describe('Search API', () => {
       expect(data.error).toBe('Search failed')
       expect(data.query).toBe('flu')
       expect(data.details).toBe('db down')
+      vi.restoreAllMocks()
+    })
+
+    it('logs the cause of a failed search to error_logs', async () => {
+      vi.spyOn(unifiedSearch, 'searchUnified').mockRejectedValueOnce(new Error('db down'))
+
+      await ctx.request('/api/search?q=flu')
+
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const rows = await ctx.db.select().from(errorLogs).where(eq(errorLogs.message, 'Search failed'))
+      expect(rows).toHaveLength(1)
+      expect(rows[0].stack).toContain('db down')
       vi.restoreAllMocks()
     })
   })

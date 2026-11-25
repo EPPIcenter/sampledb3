@@ -10,15 +10,13 @@ import {
   type ReferenceDataConfig,
   type ReferenceDataType,
 } from '../config/reference-data-config'
-import { useStorageTypes } from '../hooks/useReferenceData'
+import { invalidateAfterReferenceDataWrite } from '../hooks/useReferenceData'
 import {
-  referenceDataPageKeys,
-  useReferenceDataAllLocations,
   useReferenceDataTab,
   useSpecimenTypeContainerTypes,
 } from '../hooks/useReferenceDataPage'
 import { specimenTypesApi } from '../lib/api/reference-data'
-import type { Location, SpecimenType } from '../lib/api/types'
+import type { SpecimenType } from '../lib/api/types'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/reference-data.css'
@@ -71,9 +69,6 @@ function ReferenceDataContent({
   const tabStatus = fromQuery(tabQuery)
   const data = (tabQuery.data ?? []) as unknown[]
 
-  const allLocationsQuery = useReferenceDataAllLocations((activeTab as string) === 'locations')
-  const allLocations = (allLocationsQuery.data ?? []) as Location[]
-
   const specimenTypeIds =
     activeTab === 'specimen-types'
       ? (data as SpecimenType[]).map((st) => st.id)
@@ -84,8 +79,6 @@ function ReferenceDataContent({
   )
   const containerTypeRelationships = containerTypesQuery.relationships
   const containerTypeUsageInfo = containerTypesQuery.usageInfo
-
-  const { data: storageTypes } = useStorageTypes()
 
   // Debounce search input
   useEffect(() => {
@@ -113,28 +106,22 @@ function ReferenceDataContent({
     setPage(1)
   }
 
-  const refreshTabData = () => {
-    void queryClient.invalidateQueries({
-      queryKey: referenceDataPageKeys.tab(activeTab, searchDebounced),
-    })
-  }
-
-  const refreshContainerTypeRelationships = () => {
-    void containerTypesQuery.refetch()
-  }
-
   const handleToggleContainerType = async (specimenTypeId: number, containerType: string, isAdding: boolean) => {
     // Block non-admin users from toggling
     if (!isAdmin) {
       return
     }
 
-    if (isAdding) {
-      await specimenTypesApi.addContainerType(specimenTypeId, containerType)
-    } else {
-      await specimenTypesApi.removeContainerType(specimenTypeId, containerType)
+    try {
+      if (isAdding) {
+        await specimenTypesApi.addContainerType(specimenTypeId, containerType)
+      } else {
+        await specimenTypesApi.removeContainerType(specimenTypeId, containerType)
+      }
+    } finally {
+      // Refetch on failure too, so the toggle shows what the server saved. ContainerTypeToggle shows the error.
+      void invalidateAfterReferenceDataWrite(queryClient)
     }
-    refreshContainerTypeRelationships()
   }
 
   useEffect(() => {
@@ -155,10 +142,7 @@ function ReferenceDataContent({
         }
       }
       setEditingItem(null)
-      refreshTabData()
-      if (activeTab === 'specimen-types') {
-        refreshContainerTypeRelationships()
-      }
+      void invalidateAfterReferenceDataWrite(queryClient)
     } catch (error: any) {
       throw error
     }
@@ -167,20 +151,12 @@ function ReferenceDataContent({
   const handleDelete = async (id: number) => {
     if (config.delete) {
       await config.delete(id)
-      refreshTabData()
+      void invalidateAfterReferenceDataWrite(queryClient, { type: activeTab, id })
     }
   }
 
   const getColumns = () => {
     const deps: Record<string, unknown> = {}
-    // Add storageTypes if needed (for locations)
-    if (storageTypes) {
-      deps.storageTypes = storageTypes
-    }
-    // Add all locations (without pagination) for parent name lookups
-    if ((activeTab as string) === 'locations' && allLocations.length > 0) {
-      deps.locations = allLocations
-    }
     // Add container type relationships for specimen types
     if (activeTab === 'specimen-types') {
       deps.containerTypeRelationships = containerTypeRelationships

@@ -3,6 +3,7 @@ import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/
 import { setContainerDefaults } from '../settings'
 import { createTestUnit } from '../../__tests__/helpers/factories'
 import {
+  ContainerDefaultsNotConfiguredError,
   getDefaultUnit,
   getDefaultTotalQuantity,
   getDefaultRemainingQuantity,
@@ -27,9 +28,9 @@ describe('defaults', () => {
   })
 
   describe('getDefaultUnit', () => {
-    it('throws when container defaults are not configured', async () => {
-      await expect(getDefaultUnit(testDb, 'micronix_tube')).rejects.toThrow(
-        'Container defaults are not configured'
+    it('throws ContainerDefaultsNotConfiguredError when container defaults are not configured', async () => {
+      await expect(getDefaultUnit(testDb, 'micronix_tube')).rejects.toBeInstanceOf(
+        ContainerDefaultsNotConfiguredError
       )
     })
 

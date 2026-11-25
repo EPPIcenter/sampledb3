@@ -15,7 +15,7 @@ export type BulkImportResultForMessage = {
   created?: number
   containersCreated?: number
   combinedSummary?: BulkImportCombinedSummary
-  errors?: Array<{ index: number; error: string }>
+  errors?: ReadonlyArray<unknown>
 }
 
 function plural(n: number, one: string, many: string): string {

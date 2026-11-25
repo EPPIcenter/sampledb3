@@ -1,12 +1,10 @@
 import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
 import type { Derivation } from '../lib/api/derivations'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import { getContainerTypeIcon, getContainerTypeName, getSpecimenTypeIcon } from '../lib/icons'
 import type { ContainerDetail as ContainerDetailData } from '../lib/api/containers'
 import {
-  containerKeys,
   useContainer,
   useContainerDerivationTree,
   useContainerSource,
@@ -23,7 +21,7 @@ import {
   hasContainerDisplayIdentifier,
 } from '../lib/container-display'
 import '../styles/storage.css'
-import { formatDate } from '../lib/date-utils'
+import { formatDate, parseDisplayDate } from '../lib/date-utils'
 
 function statusColor(name: string): string {
   const key = name.toLowerCase()
@@ -37,7 +35,6 @@ function statusColor(name: string): string {
 export default function ContainerDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const { canWrite } = useUser()
   const containerId = id != null ? parseInt(id, 10) : NaN
   const containerQuery = useContainer(containerId)
@@ -49,27 +46,18 @@ export default function ContainerDetail() {
   const childContainers =
     derivationsQuery.data?.childContainers ?? new Map<number, ContainerDetailData>()
   const loadingDerivations = derivationsQuery.isPending
-  const sourceDerivation = sourceQuery.data
-    ? {
-        type: 'derivation' as const,
-        derivation: sourceQuery.data.derivation,
-        parentContainer: sourceQuery.data.parentContainer,
-        parentSpecimen: sourceQuery.data.parentSpecimen,
-      }
-    : null
+  const sourceDerivation =
+    sourceQuery.data?.type === 'derivation'
+      ? {
+          type: 'derivation' as const,
+          derivation: sourceQuery.data.derivation,
+          parentContainer: sourceQuery.data.parentContainer,
+          parentSpecimen: sourceQuery.data.parentSpecimen,
+        }
+      : null
   const [showDerivationModal, setShowDerivationModal] = useState(false)
   const [derivationModalKey, setDerivationModalKey] = useState(0)
   const [showEditModal, setShowEditModal] = useState(false)
-
-  const refreshContainer = () => {
-    void queryClient.invalidateQueries({ queryKey: containerKeys.detail(containerId) })
-    void queryClient.invalidateQueries({ queryKey: containerKeys.derivations(containerId) })
-    void queryClient.invalidateQueries({ queryKey: containerKeys.source(containerId) })
-  }
-
-  const handleDerivationCreated = () => {
-    refreshContainer()
-  }
 
   if (detailStatus === 'loading') {
     return (
@@ -453,11 +441,11 @@ export default function ContainerDetail() {
             <div className="mt-3 pt-3 border-t border-app-border flex justify-end">
               <p className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 {container.created && (
-                  <span>Created {new Date(container.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  <span>Created {parseDisplayDate(container.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                 )}
                 {container.created && container.lastUpdated && ' · '}
                 {container.lastUpdated && (
-                  <span>Updated {new Date(container.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  <span>Updated {parseDisplayDate(container.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                 )}
               </p>
             </div>
@@ -468,19 +456,17 @@ export default function ContainerDetail() {
       {/* Derivation Sections */}
       <div className="mt-6 space-y-4">
         {/* Source Derivation Information (if this container is a child via derivation) */}
-        {sourceDerivation?.derivation && (
+        {sourceDerivation && (
           <div className="storage-card storage-reveal storage-reveal-3">
             <div className="storage-card-divider px-6 py-4 border-b">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold storage-section-title">Source Derivation</h3>
-                {sourceDerivation.parentContainer && (
-                  <button
-                    onClick={() => navigate(`/containers/${sourceDerivation.parentContainer.id}`)}
-                    className="dashboard-link text-sm hover:underline font-medium"
-                  >
-                    View Parent Container →
-                  </button>
-                )}
+                <button
+                  onClick={() => navigate(`/containers/${sourceDerivation.parentContainer.id}`)}
+                  className="dashboard-link text-sm hover:underline font-medium"
+                >
+                  View Parent Container →
+                </button>
               </div>
             </div>
             <div className="px-6 py-5">
@@ -688,7 +674,6 @@ export default function ContainerDetail() {
             sublabel: paperSublabel,
             specimenTypeName: specimen?.specimenType?.name,
           }}
-          onSuccess={handleDerivationCreated}
           openKey={derivationModalKey}
         />
       )}
@@ -702,21 +687,20 @@ export default function ContainerDetail() {
             id: container.id!,
             comment: container.comment,
             remainingQuantity: container.remainingQuantity ?? undefined,
+            totalQuantity: container.totalQuantity ?? undefined,
             tags: container.tags,
             unit: container.unit,
             containerType: effectiveContainerType,
-            barcode: tubeBarcode ?? paperSublabel,
+            barcode: tubeBarcode,
+            sublabel: paperSublabel,
           }}
-          onSuccess={() => {
-            refreshContainer()
-            setShowEditModal(false)
-          }}
+          onSuccess={() => setShowEditModal(false)}
         />
       )}
 
       {/* Derivation Chain View - Always show when there's derivation data */}
       {id &&
-        (sourceDerivation?.derivation ||
+        (sourceDerivation ||
           derivations.length > 0) && (
           <div className="mt-6">
             <DerivationChainView containerId={parseInt(id)} />

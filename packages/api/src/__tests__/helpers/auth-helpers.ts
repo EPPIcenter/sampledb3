@@ -1,7 +1,7 @@
 import type { Database } from '../../db/client'
 import { users, sessions, settings } from '../../db/schema'
 import bcrypt from 'bcryptjs'
-import { BCRYPT_COST } from '../../lib/auth/auth-service'
+import { BCRYPT_COST, hashSessionToken } from '../../lib/auth/auth-service'
 import { nanoid } from 'nanoid'
 import type { Hono } from 'hono'
 import { testClient } from 'hono/testing'
@@ -150,11 +150,14 @@ export async function createAuthenticatedSession(
   userId: number,
   maxAgeSeconds: number = 604800
 ) {
-  const sessionId = nanoid()
+  // sessionId is the cookie token; the row stores only its hash, under a separate public id.
+  const sessionId = nanoid(43)
+  const publicId = nanoid()
   const expiresAt = Math.floor(Date.now() / 1000) + maxAgeSeconds
 
   await db.insert(sessions).values({
-    id: sessionId,
+    id: publicId,
+    tokenHash: hashSessionToken(sessionId),
     userId,
     expiresAt,
   })
@@ -162,6 +165,7 @@ export async function createAuthenticatedSession(
   // Return session cookie in format expected by Hono test client
   return {
     sessionId,
+    publicId,
     cookie: `session_id=${sessionId}`,
     cookieHeader: `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax`,
   }

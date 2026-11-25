@@ -9,7 +9,11 @@ type BulkSpecimenContainerWriteInput = ContainerWriteInput & {
   comment?: string
 }
 
-type SpecimensListResponse = { specimens: Specimen[]; pagination?: { total: number } }
+/** One page of `GET /specimens`; the API always paginates. */
+export type SpecimensListResponse = {
+  specimens: Specimen[]
+  pagination: { page: number; limit: number; total: number; totalPages: number }
+}
 type SpecimenResponse = { specimen: Specimen }
 type SpecimensBulkResponse = {
   specimens: Specimen[]
@@ -57,7 +61,13 @@ export type SpecimenListParams = {
   subject_id?: string
   page?: number
   limit?: number
+  /** Server-side order across all pages; omitted means newest created first. */
+  sort?: SpecimenSortColumn
+  order?: 'asc' | 'desc'
 }
+
+/** Columns `GET /specimens` sorts by. */
+export type SpecimenSortColumn = 'created' | 'collection_date'
 
 export const specimensApi = {
   search: (params?: SpecimenListParams) => api.get<SpecimensListResponse>('/specimens', { params }),

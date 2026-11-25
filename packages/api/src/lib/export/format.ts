@@ -44,6 +44,17 @@ export async function formatAsCSV(
   return serializeCsv(columnKeys, rows, { ...options, neutralizeFormulas: true })
 }
 
+/**
+ * The row with every export column present: an empty value becomes null, so every row of a
+ * JSON export has the same keys, as every row of a CSV export has the same columns.
+ */
+function withEveryColumn(row: ContainerExportData, columnKeys: string[]): ContainerExportData {
+  const values = row as unknown as Record<string, unknown>
+  const complete: Record<string, unknown> = {}
+  for (const key of columnKeys) complete[key] = values[key] ?? null
+  return complete as unknown as ContainerExportData
+}
+
 export async function formatAsJSON(
   database: Database,
   data: ContainerExportData[],
@@ -62,7 +73,9 @@ export async function formatAsJSON(
   containers: ContainerExportData[]
 }> {
   const columnKeys = await resolveExportColumnKeys(database, data, columns, userId)
-  const filteredData = filterContainerExportColumns(data, columnKeys)
+  const filteredData = filterContainerExportColumns(data, columnKeys).map((row) =>
+    withEveryColumn(row, columnKeys),
+  )
 
   return {
     export_metadata: {

@@ -14,7 +14,7 @@ SampleDB API responses use a **wire DTO** layer between persistence (Drizzle/SQL
 | **Wire** (HTTP JSON) | Key **omitted** when unset |
 | **Client** (web parse / UI) | TypeScript optional / `undefined` |
 
-Persistence-shaped rows must not be spread directly into JSON responses. Route handlers return wire-shaped payloads via `c.json(...)`; **global `omitOnWireMiddleware`** applies the null-omission policy to every successful JSON response.
+Persistence-shaped rows must not be spread directly into JSON responses. Route handlers return wire-shaped payloads via `c.json(...)`; **global `omitOnWireMiddleware`** applies the null-omission policy to every successful JSON response, except a JSON Container export (see Consequences).
 
 ### Two responsibilities (do not conflate)
 
@@ -53,6 +53,7 @@ Middleware is **permanent infrastructure** for null omission — not a substitut
 - Expand `@sampledb/contract/wire` schemas incrementally where discriminated shape matters; do not wire-schema every CRUD route.
 - Web parsers import `@sampledb/contract/wire` for container responses; optional fields use `.optional()` in Zod, not `.nullish()`.
 - Inbound container writes use the unified `ContainerWriteInput` shape ([ADR 0006](./0006-unified-container-inbound-write.md)) — same placement/identity split as outbound wire, not flat legacy fields.
+- A JSON Container export keeps its nulls: the handler calls `keepNullsOnWire` from `packages/api/src/middleware/omit-on-wire.ts`, and every row carries every export column, null when empty. An export is a file, and a row missing a key reads as a missing column (#122). No other response opts out.
 - Export columns split accordingly (`barcode`, `sublabel`, `sheet_name`). Stored export configurations migrate retired keys on read (`label` → `sheet_name`; append `sublabel` when `barcode` or `sheet_name` is present).
 
 ## Related ADRs

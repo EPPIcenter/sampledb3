@@ -18,7 +18,7 @@ import {
   containerTypeUnit,
   specimenTypeContainerType,
 } from '../db/schema'
-import { sql, eq } from 'drizzle-orm'
+import { sql, eq, isNotNull } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { BCRYPT_COST } from './auth/auth-service'
 import {
@@ -33,7 +33,7 @@ import { runBulkCombinedImport } from './bulk-combined-import'
 import { createBatchWithSpecimens } from './controls/batch-with-specimens'
 import { createDerivation } from './derivations'
 import { utcNow } from './datetime'
-import { controlDefinition, box, sheet, micronixPlate, strain } from '../db/schema'
+import { controlDefinition, box, sheet, micronixPlate, specimen, strain } from '../db/schema'
 import { insertedRow } from './inserted-row'
 
 // Demo defaults (aligned with packages/web setup-defaults, inlined to avoid cross-package deps)
@@ -146,7 +146,7 @@ export async function runDemoSeed(
     name: 'Shelf A',
     storageTypeId: null,
     canContainCollections: true,
-    path: 'Freezer -80°C - Main / Shelf A',
+    path: 'Freezer -80°C - Main → Shelf A',
     created: now,
     lastUpdated: now,
   })
@@ -437,10 +437,10 @@ export async function runDemoSeed(
     })
   }
 
-  const controlSpecimenCount =
-    controlBatchResult1.specimens.reduce((s, sp) => s + sp.containerCount, 0) +
-    controlBatchResult2.specimens.reduce((s, sp) => s + sp.containerCount, 0) +
-    controlBatchResult3.specimens.reduce((s, sp) => s + sp.containerCount, 0)
+  // Counted from the database: one batch's DBS Specimen also has a derived DNA Specimen.
+  const controlSpecimenCount = (
+    await database.select({ id: specimen.id }).from(specimen).where(isNotNull(specimen.controlBatchId)).all()
+  ).length
 
   return {
     usersCreated: 1,

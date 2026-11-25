@@ -174,6 +174,36 @@ export async function computeSpecimensFullyRemovedByContainerBatch(
   return toRemove
 }
 
+/**
+ * Subjects whose every Specimen is in `removedSpecimenIds`, so they would have no Specimens left after the
+ * delete. These are the Subjects `removeEmptySubjects` deletes.
+ */
+async function countSubjectsLeftWithoutSpecimens(database: Database, removedSpecimenIds: number[]): Promise<number> {
+  if (removedSpecimenIds.length === 0) return 0
+  const removedBySubject = new Map<number, number>()
+  for (let i = 0; i < removedSpecimenIds.length; i += SQLITE_BATCH) {
+    const rows = await database
+      .select({ studySubjectId: specimen.studySubjectId })
+      .from(specimen)
+      .where(inArray(specimen.id, removedSpecimenIds.slice(i, i + SQLITE_BATCH)))
+      .all()
+    for (const { studySubjectId } of rows) {
+      if (studySubjectId == null) continue
+      removedBySubject.set(studySubjectId, (removedBySubject.get(studySubjectId) ?? 0) + 1)
+    }
+  }
+  let count = 0
+  for (const [subjectId, removed] of removedBySubject) {
+    const total = await database
+      .select({ n: sql<number>`count(*)`.mapWith(Number) })
+      .from(specimen)
+      .where(eq(specimen.studySubjectId, subjectId))
+      .get()
+    if ((total?.n ?? 0) === removed) count++
+  }
+  return count
+}
+
 function buildQpcrContainerBlockers(
   links: { wellId: number; experimentId: number; experimentName: string | null; wellPosition: string; storageId: number }[]
 ): CollectionDeleteBlocker {
@@ -324,6 +354,7 @@ export async function preflightCollectionDelete(
   const containerIdSet = new Set(containerIdList)
   const fullyRemovedSpecimenIds = await computeSpecimensFullyRemovedByContainerBatch(database, containerIdSet)
   const blockers = await runPreflight(database, containerIdSet, fullyRemovedSpecimenIds)
+  const emptySubjectCount = await countSubjectsLeftWithoutSpecimens(database, fullyRemovedSpecimenIds)
 
   return {
     canDelete: blockers.length === 0,
@@ -331,6 +362,7 @@ export async function preflightCollectionDelete(
     summary: {
       containerCount: containerIdList.length,
       specimenCount: fullyRemovedSpecimenIds.length,
+      emptySubjectCount,
     },
   }
 }

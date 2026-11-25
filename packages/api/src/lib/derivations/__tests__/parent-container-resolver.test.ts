@@ -59,6 +59,37 @@ describe('resolveParentContainerId', () => {
         "Parent container id '999999' not found",
       )
     })
+
+    it.each(['Infinity', '0', '-5', '1.5', 'abc'])(
+      'rejects non-positive-integer parent_container_id %j instead of falling through to barcode',
+      async (badId) => {
+        const location = await freezer(testDb)
+        const plate = await createTestMicronixPlate(testDb, { name: 'Plate-BadId', locationId: location.id })
+        const container = await createTestStorageContainer(testDb)
+        await testDb.insert(micronixTube).values({
+          id: container.id,
+          collectionId: plate.id,
+          barcode: 'MT-FALLBACK',
+          position: 'A01',
+        })
+
+        await expect(
+          resolveParentContainerId(testDb, row({ parent_container_id: badId, parent_container_barcode: 'MT-FALLBACK' })),
+        ).rejects.toThrow(`Invalid parent_container_id '${badId}': must be a positive integer`)
+      },
+    )
+
+    it.each(['Infinity', '0', '-1', '2.5', 'not-an-id'])(
+      'rejects non-positive-integer parent_control_batch_id %j',
+      async (badId) => {
+        await expect(
+          resolveParentContainerId(
+            testDb,
+            row({ parent_control_batch_id: badId, parent_specimen_type_name: 'Whole Blood' }),
+          ),
+        ).rejects.toThrow(`Invalid parent_control_batch_id '${badId}': must be a positive integer`)
+      },
+    )
   })
 
   describe('barcode', () => {
@@ -75,6 +106,21 @@ describe('resolveParentContainerId', () => {
 
       const id = await resolveParentContainerId(testDb, row({ parent_container_barcode: 'MT-100' }))
       expect(id).toBe(container.id)
+    })
+
+    it('refuses a barcode on several Containers and lists them, instead of picking one', async () => {
+      const location = await freezer(testDb)
+      const now = utcNow()
+      const [boxRow] = await testDb.insert(cryovialBox).values({ name: 'Box-NA', locationId: location.id, created: now, lastUpdated: now }).returning()
+      const first = await createTestStorageContainer(testDb)
+      const second = await createTestStorageContainer(testDb, { unitId: first.unitId, specimenId: first.specimenId })
+      await testDb.insert(cryovialTube).values({ id: first.id, collectionId: boxRow!.id, barcode: 'NA', position: 'A01' })
+      await testDb.insert(cryovialTube).values({ id: second.id, collectionId: boxRow!.id, barcode: 'NA', position: 'A02' })
+
+      await expect(resolveParentContainerId(testDb, row({ parent_container_barcode: ' NA ' }))).rejects.toThrow(
+        `Ambiguous barcode 'NA': it matches 2 containers (container ${first.id} (cryovial_tube in Box-NA A01), ` +
+          `container ${second.id} (cryovial_tube in Box-NA A02)). Identify the container by its id or position instead.`,
+      )
     })
 
     it('throws when the barcode is not found', async () => {
@@ -192,6 +238,38 @@ describe('resolveParentContainerId', () => {
         }),
       )
       expect(id).toBe(container.id)
+    })
+  })
+
+  describe('parent_collection_date', () => {
+    async function seedDatedPaperParent() {
+      const study = await createTestStudy(testDb, { title: 'Study', shortCode: 'STD2' })
+      const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'Subj-2' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'Whole Blood' })
+      const spec = await createTestSpecimen(testDb, specimenType.id, { studySubjectId: subject.id, collectionDate: '2024-05-07' })
+      const container = await createTestStorageContainer(testDb, { specimenId: spec.id })
+      await testDb.insert(paper).values({ id: container.id, sheetId: await createSheet(testDb), sublabel: 'Spot-B' })
+      return container.id
+    }
+
+    function datedRow(parentCollectionDate: string) {
+      return row({
+        parent_container_type: 'paper',
+        parent_study_short_code: 'STD2',
+        parent_subject_name: 'Subj-2',
+        parent_specimen_type_name: 'Whole Blood',
+        parent_collection_date: parentCollectionDate,
+      })
+    }
+
+    it.each(['2024-05-07', '5/7/2024'])('matches the stored date when written %s', async (date) => {
+      const containerId = await seedDatedPaperParent()
+      expect(await resolveParentContainerId(testDb, datedRow(date))).toBe(containerId)
+    })
+
+    it.each(['garbage', '5/7/24'])('rejects %s instead of matching nothing', async (date) => {
+      await seedDatedPaperParent()
+      await expect(resolveParentContainerId(testDb, datedRow(date))).rejects.toThrow(`Invalid parent_collection_date '${date}'`)
     })
   })
 

@@ -1,4 +1,4 @@
-import { logErrorFromException, logErrorFromMessage } from './error-logger'
+import { extractFailedRequestContext, logErrorFromException, logErrorFromMessage } from './error-logger'
 
 /**
  * Initialize global error handlers for the application
@@ -19,10 +19,12 @@ export function initializeGlobalErrorHandlers(): void {
         promise: true,
       })
     } else {
+      const httpContext = extractFailedRequestContext(reason)
       logErrorFromMessage(
         `Unhandled promise rejection: ${String(reason)}`,
         'error',
         {
+          ...httpContext,
           type: 'unhandledRejection',
           promise: true,
           reason: String(reason),

@@ -3,8 +3,11 @@ import { z } from 'zod'
 import type { Database } from '../db/client'
 import { importDerivationsFromCsv, validateDerivationsCsv, type BulkDerivationSettings } from '../lib/derivations-csv'
 import { runBulkCombinedImport, validateBulkCombinedPayload } from '../lib/bulk-combined-import'
+import { mapBulkCombinedZodRowIssues } from '../lib/bulk-validate-zod'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
+import { toSpecimenSummaryWire } from '../lib/container-wire-mapper'
+import { derivationDateSchema } from '../lib/derivation-schemas'
 import {
   bulkCombinedRequestSchema,
   bulkCombinedValidateRequestSchema,
@@ -25,13 +28,13 @@ const bulkDerivationSettingsSchema = z.object({
   // '' means the column comes from the CSV per row, like the other settings.
   containerType: z.enum(['micronix_tube', 'cryovial_tube', 'paper', '']),
   protocol: z.string(),
-  derivationDate: z.string(),
+  // '' means each row gives its own derivation_date.
+  derivationDate: z.union([z.literal(''), derivationDateSchema]),
   quantity: z.number().optional(),
   unitSymbol: z.string().optional(),
   quantityUsed: z.number().optional(),
   reduceParentQuantity: z.boolean().optional(),
   validateSourceSpecimenType: z.boolean().optional(),
-  validateParentQuantity: z.boolean().optional(),
 })
 
 // Bulk import container derivations from CSV
@@ -89,10 +92,16 @@ imports.post('/bulk-combined', memberMiddleware, async (c) => {
     return c.json({
       summary: result.summary,
       results: result.results.map((r) => ({
-        subject: r.subject,
+        subject: {
+          id: r.subject.id,
+          studyId: r.subject.studyId,
+          name: r.subject.name,
+          created: r.subject.created,
+          lastUpdated: r.subject.lastUpdated,
+        },
         subjectCreated: r.subjectCreated,
         specimens: r.specimens.map((s) => ({
-          ...s.specimen,
+          specimen: toSpecimenSummaryWire(s.specimen),
           containerCreated: s.containerCreated,
           containerId: s.containerId,
         })),
@@ -108,7 +117,15 @@ imports.post('/bulk-combined', memberMiddleware, async (c) => {
 imports.post('/bulk-combined/validate', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
-    const data = bulkCombinedValidateRequestSchema.parse(body)
+    const parsed = bulkCombinedValidateRequestSchema.safeParse(body)
+    if (!parsed.success) {
+      const rowErrors = mapBulkCombinedZodRowIssues(parsed.error, body)
+      if (rowErrors) {
+        return c.json({ valid: false, errors: rowErrors })
+      }
+      throw parsed.error
+    }
+    const data = parsed.data
     if (data.subjects.length === 0) {
       return c.json({ error: 'No subjects provided' }, 400)
     }

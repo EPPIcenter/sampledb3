@@ -2,6 +2,17 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import ReferenceData from '../ReferenceData'
+import { getReferenceDataConfig } from '../../config/reference-data-config'
+import { specimenTypeKeys, tagKeys } from '../../hooks/useReferenceData'
+import { referenceDataPageKeys } from '../../hooks/useReferenceDataPage'
+import { exportWorkflowKeys } from '../../hooks/useExportWorkflow'
+import { specimenTypesApi, storageTypesApi } from '../../lib/api/reference-data'
+import {
+  createInvalidationTestClient,
+  keysNotInvalidated,
+  observeQuery,
+  seedQueries,
+} from '../../__tests__/helpers/query-invalidation'
 
 const mockUseReferenceDataTab = vi.hoisted(() =>
   vi.fn(() => ({
@@ -22,12 +33,6 @@ vi.mock('../../hooks/useReferenceDataPage', async () => {
   return {
     ...actual,
     useReferenceDataTab: mockUseReferenceDataTab,
-    useReferenceDataAllLocations: vi.fn(() => ({
-      data: [],
-      isPending: false,
-      isError: false,
-      isSuccess: true,
-    })),
     useSpecimenTypeContainerTypes: vi.fn(() => ({
       relationships: {},
       usageInfo: {},
@@ -36,6 +41,19 @@ vi.mock('../../hooks/useReferenceDataPage', async () => {
       refetch: vi.fn(),
     })),
   }
+})
+
+vi.mock('../../lib/api/reference-data', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('reference-data', {
+    specimenTypesApi: {
+      addContainerType: vi.fn().mockResolvedValue(undefined),
+      removeContainerType: vi.fn().mockResolvedValue(undefined),
+    },
+    storageTypesApi: {
+      list: vi.fn().mockResolvedValue({ data: [] }),
+    },
+  })
 })
 
 // Mock the config module
@@ -65,24 +83,16 @@ vi.mock('../../config/reference-data-config', () => {
   const mockStatesConfig = createMockConfig('states', 'States', {
     dataKey: 'states',
   })
-  const mockLocationsConfig = createMockConfig('locations', 'Locations', {
-    dataKey: 'locations',
-    requiresPagination: true,
-    requiresSearch: true,
-    pagination: { total: 0, page: 1, limit: 50, totalPages: 0 },
-  })
 
   return {
     referenceDataConfigs: [
       mockSpecimenTypesConfig,
       mockStatesConfig,
-      mockLocationsConfig,
     ],
     getReferenceDataConfig: (key: string) => {
       const configs: any = {
         'specimen-types': mockSpecimenTypesConfig,
         'states': mockStatesConfig,
-        'locations': mockLocationsConfig,
       }
       return configs[key]
     },
@@ -94,16 +104,6 @@ vi.mock('../../lib/api/locations', async () => {
   const { referenceDataLocationsMock } = await import('../../__tests__/helpers/mock-api-templates')
   return createMockedDomainModule('locations', referenceDataLocationsMock())
 })
-
-// Mock the hooks
-vi.mock('../../hooks/useReferenceData', () => ({
-  useStorageTypes: vi.fn().mockReturnValue({
-    data: [],
-    isLoading: false,
-    isError: false,
-    error: null,
-  }),
-}))
 
 // Mock the UserContext
 const mockUser = {
@@ -174,6 +174,12 @@ describe('ReferenceData Page', () => {
       })
     })
 
+    it('does not fetch storage types when loading another tab', async () => {
+      await render(<ReferenceData />, { initialEntries: ['/reference-data?tab=specimen-types'] })
+      expect(await screen.findByText('Reference Data Management')).toBeInTheDocument()
+      expect(storageTypesApi.list).not.toHaveBeenCalled()
+    })
+
     it('shows PageError with retry when tab load fails', async () => {
       mockUseReferenceDataTab.mockReturnValue({
         data: undefined,
@@ -230,13 +236,92 @@ describe('ReferenceData Page', () => {
     })
   })
 
-  describe('Locations Tab', () => {
-    it('renders locations tab when clicked', async () => {
+  describe('Refreshing other pages', () => {
+    /** Pages outside Reference Data that list Reference data: the export Tag filter and the Specimen form's specimen types. */
+    const otherPages = [
+      [...exportWorkflowKeys.referenceData(), 'tags'],
+      specimenTypeKeys.list(),
+      tagKeys.list(),
+    ]
+
+    it('invalidates the export Tag filter and Specimen form after saving a new item', async () => {
       const user = userEvent.setup()
-      await render(<ReferenceData />)
-      const locationsTab = screen.getByText('Locations')
-      await user.click(locationsTab)
-      expect(locationsTab).toBeInTheDocument()
+      const queryClient = createInvalidationTestClient()
+      seedQueries(queryClient, otherPages)
+      await render(<ReferenceData />, { queryClient, initialEntries: ['/reference-data?tab=specimen-types'] })
+
+      await user.click(screen.getByRole('button', { name: 'Add New' }))
+      await user.click(await screen.findByRole('button', { name: 'Add' }))
+
+      await waitFor(() => expect(getReferenceDataConfig('specimen-types')?.create).toHaveBeenCalled())
+      await waitFor(() => expect(keysNotInvalidated(queryClient, otherPages)).toEqual([]))
+    })
+
+    it("invalidates other pages after a delete without refetching the deleted item's queries", async () => {
+      const user = userEvent.setup()
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      mockUseReferenceDataTab.mockReturnValue({
+        data: [{ id: 3, name: 'Plasma' }],
+        isPending: false,
+        isLoading: false,
+        isError: false,
+        isSuccess: true,
+        error: null,
+        refetch: vi.fn(),
+      } as unknown as ReturnType<typeof mockUseReferenceDataTab>)
+      const queryClient = createInvalidationTestClient()
+      const tags = await observeQuery(queryClient, tagKeys.list())
+      const deletedDetail = await observeQuery(queryClient, specimenTypeKeys.detail(3))
+      const deletedContainerTypes = await observeQuery(queryClient, referenceDataPageKeys.containerTypes(3))
+      await render(<ReferenceData />, { queryClient, initialEntries: ['/reference-data?tab=specimen-types'] })
+
+      await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+      await waitFor(() => expect(getReferenceDataConfig('specimen-types')?.delete).toHaveBeenCalledWith(3))
+      await waitFor(() => expect(tags.queryFn).toHaveBeenCalledTimes(2))
+      expect(deletedDetail.queryFn).toHaveBeenCalledTimes(1)
+      expect(deletedContainerTypes.queryFn).toHaveBeenCalledTimes(1)
+      expect(queryClient.getQueryState(specimenTypeKeys.detail(3))?.isInvalidated).toBe(true)
+      for (const observed of [tags, deletedDetail, deletedContainerTypes]) observed.unsubscribe()
+    })
+  })
+
+  describe('Container type toggles', () => {
+    /** The toggle handler the page passes to the specimen types table. */
+    function toggleHandler() {
+      const { calls } = vi.mocked(getReferenceDataConfig('specimen-types')!.getColumns).mock
+      return calls[calls.length - 1]?.[0]?.onToggleContainerType
+    }
+
+    it('refetches the saved container types when a toggle fails', async () => {
+      vi.mocked(specimenTypesApi.addContainerType).mockRejectedValueOnce(new Error('Database is locked'))
+      mockUseReferenceDataTab.mockReturnValue({
+        data: [{ id: 3, name: 'Plasma' }],
+        isPending: false,
+        isLoading: false,
+        isError: false,
+        isSuccess: true,
+        error: null,
+        refetch: vi.fn(),
+      } as unknown as ReturnType<typeof mockUseReferenceDataTab>)
+      const queryClient = createInvalidationTestClient()
+      const containerTypes = await observeQuery(queryClient, referenceDataPageKeys.containerTypes(3))
+      await render(<ReferenceData />, { queryClient, initialEntries: ['/reference-data?tab=specimen-types'] })
+
+      const onToggle = toggleHandler()
+      expect(onToggle).toBeDefined()
+      await expect(onToggle!(3, 'micronix_tube', true)).rejects.toThrow('Database is locked')
+
+      await waitFor(() => expect(containerTypes.queryFn).toHaveBeenCalledTimes(2))
+      containerTypes.unsubscribe()
+    })
+  })
+
+  describe('Invalid tab', () => {
+    it('shows Invalid tab when tab=locations is requested', async () => {
+      await render(<ReferenceData />, { initialEntries: ['/reference-data?tab=locations'] })
+      expect(screen.getByText('Invalid tab')).toBeInTheDocument()
+      expect(mockUseReferenceDataTab).not.toHaveBeenCalled()
     })
   })
 })

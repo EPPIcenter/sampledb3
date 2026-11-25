@@ -43,6 +43,14 @@ Load the template on the instrument. That step is not in SampleDB.
 
 Disabled. When it returns: upload Bio-Rad CSV or Quant Studio XLS, matching the instrument type. Amplification data is stored when present.
 
+### Amplification data from empty wells
+
+A Quant Studio export has an amplification curve for all 96 wells, but a results row only for wells that were set up with a sample. The import stores a curve only when its well and target have a results row, so curves from empty wells are skipped. After the upload, the page reports how many amplification rows were skipped and from which wells.
+
+For example, the Quant Studio file for run varATS-IM-25-048 has 5,760 amplification rows (96 wells × 60 cycles). The import stores the 2,760 rows for the 46 wells with a result and skips 3,000 rows from 50 wells (A7–F12, G6–H12). Those wells have no sample name on the Sample Setup sheet, no row on the Results sheet, and no target name on the Amplification Data sheet, and their Delta Rn is 0 at every cycle. They hold no sample, standard, or control, so their curves carry no information.
+
+Bio-Rad CSV exports have no amplification data, so nothing is skipped.
+
 ## Experiment list
 
 Columns: **Name**, **Status** (Setup, In progress, Results imported), **Template**, **Plate**, **Target(s)**, **Assay** (fluorophore/reporter, or Multiple for multiplex), **Wells**, **Runs**, **Last run**, **Created**, **Updated**. Filter by status. Default sort is most recently updated. Click a row to open it.

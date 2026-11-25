@@ -28,6 +28,7 @@ import {
   micronixTube,
   box,
   paper,
+  errorLogs,
 } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { failInsertsWithUniqueViolation } from '../../__tests__/helpers/constraint-race'
@@ -43,6 +44,7 @@ describe('Specimens API', () => {
         password: 'password123',
         role: 'member',
       },
+      settings: { pagination: true },
       mount: (app, { db }) => {
         app.route('/api/specimens', createSpecimensRoutes(db))
       },
@@ -65,6 +67,120 @@ describe('Specimens API', () => {
     it('returns 401 when not authenticated', async () => {
       const res = await authenticatedRequest(ctx.createRequestApp(), '/api/specimens', { method: 'GET' })
       expect(res.status).toBe(401)
+    })
+
+    it('filters by collection date as a calendar date', async () => {
+      const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })
+      const early = await createTestSpecimen(ctx.db, type.id, { collectionDate: '1999-12-31' })
+      await createTestSpecimen(ctx.db, type.id, { collectionDate: '2024-05-07' })
+
+      const res = await ctx.request('/api/specimens?collection_date_to=2000-01-01')
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { specimens: Array<{ id: number }> }
+      expect(data.specimens.map((s) => s.id)).toEqual([early.id])
+    })
+
+    it.each([
+      ['collection_date_from', 'garbage'],
+      ['collection_date_to', '5/7/2024'],
+      ['collection_date_from', '2024'],
+      ['collection_date_to', '2024-02-30'],
+      ['created_from', 'yesterday'],
+      ['created_to', '2024-13-01'],
+    ])('returns 400 for %s=%s', async (param, value) => {
+      const res = await ctx.request(`/api/specimens?${param}=${encodeURIComponent(value)}`)
+
+      expect(res.status).toBe(400)
+      const data = (await res.json()) as { error: string }
+      expect(data.error).toContain(param)
+    })
+  })
+
+  describe('GET /api/specimens oversized page (#120)', () => {
+    it.each([
+      ['/api/specimens?page=99999999999999999999&limit=10', 'page'],
+    ])('returns 400 for %s', async (url, param) => {
+      const res = await ctx.request(url)
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain(param)
+    })
+  })
+
+  describe('GET /api/specimens non-numeric id filters (#120)', () => {
+    it.each([
+      ['subject_id', 'abc'],
+      ['control_batch_id', '1.5'],
+      ['specimen_type_id', 'x1'],
+    ])('returns 400 for %s=%s', async (param, value) => {
+      const res = await ctx.request(`/api/specimens?${param}=${value}`)
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain(param)
+    })
+
+    it('filters by a numeric subject_id', async () => {
+      const study = await createTestStudy(ctx.db, { title: 'S', shortCode: 'S1' })
+      const subject = await createTestStudySubject(ctx.db, { studyId: study.id, name: 'Subj' })
+      const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })
+      const mine = await createTestSpecimen(ctx.db, type.id, { studySubjectId: subject.id })
+      await createTestSpecimen(ctx.db, type.id)
+      const res = await ctx.request(`/api/specimens?subject_id=${subject.id}`)
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { specimens: Array<{ id: number }> }
+      expect(data.specimens.map((s) => s.id)).toEqual([mine.id])
+    })
+  })
+
+  describe('GET /api/specimens pagination and sort', () => {
+    it('returns the first page and a total when no page or limit is given', async () => {
+      const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })
+      for (let day = 1; day <= 60; day++) {
+        const date = new Date(Date.UTC(2024, 0, day)).toISOString().slice(0, 10)
+        await createTestSpecimen(ctx.db, type.id, { collectionDate: date })
+      }
+
+      const res = await ctx.request('/api/specimens')
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        specimens: unknown[]
+        pagination: { page: number; limit: number; total: number; totalPages: number }
+      }
+      expect(data.pagination.page).toBe(1)
+      expect(data.pagination.total).toBe(60)
+      expect(data.pagination.limit).toBeLessThan(60)
+      expect(data.specimens).toHaveLength(data.pagination.limit)
+      expect(data.pagination.totalPages).toBe(Math.ceil(60 / data.pagination.limit))
+    })
+
+    it('sorts the whole filtered set before paging', async () => {
+      const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })
+      for (const date of ['2024-03-01', '2021-01-01', '2024-12-31', '2023-06-15']) {
+        await createTestSpecimen(ctx.db, type.id, { collectionDate: date })
+      }
+
+      const res = await ctx.request(
+        `/api/specimens?specimen_type_id=${type.id}&sort=collection_date&order=asc&page=2&limit=2`,
+      )
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        specimens: Array<{ collectionDate: string }>
+        pagination: { total: number }
+      }
+      expect(data.specimens.map((s) => s.collectionDate)).toEqual(['2024-03-01', '2024-12-31'])
+      expect(data.pagination.total).toBe(4)
+    })
+
+    it.each([
+      ['sort=study', 'sort'],
+      ['sort=created&order=up', 'order'],
+    ])('returns 400 for %s', async (query, param) => {
+      const res = await ctx.request(`/api/specimens?${query}`)
+
+      expect(res.status).toBe(400)
+      const data = (await res.json()) as { error: string }
+      expect(data.error).toContain(`Invalid ${param}`)
     })
   })
 
@@ -229,6 +345,44 @@ describe('Specimens API', () => {
       expect(after.length).toBe(before.length)
     })
 
+    it('POST /api/specimens stores an M/D/YYYY collection date as YYYY-MM-DD', async () => {
+      const res = await ctx.request('/api/specimens', {
+        method: 'POST',
+        json: {
+          sourceType: 'subject',
+          studyShortCode: 'BLK01',
+          subjectName: 'BULK-SUBJ',
+          specimenTypeName: 'Whole Blood',
+          collectionDate: '5/7/2024',
+          container: { containerType: 'cryovial_tube', collection: { type: 'cryovial_box', name: 'BULK-BOX', position: 'A01' } },
+        },
+      })
+
+      expect(res.status).toBe(201)
+      const rows = await ctx.db.select().from(specimen).where(eq(specimen.studySubjectId, testSubject.id))
+      expect(rows.map((r) => r.collectionDate)).toEqual(['2024-05-07'])
+    })
+
+    it.each(['5/7/24', 'garbage', '2024-02-30'])(
+      'POST /api/specimens rejects collection date %s and stores nothing',
+      async (collectionDate) => {
+        const res = await ctx.request('/api/specimens', {
+          method: 'POST',
+          json: {
+            sourceType: 'subject',
+            studyShortCode: 'BLK01',
+            subjectName: 'BULK-SUBJ',
+            specimenTypeName: 'Whole Blood',
+            collectionDate,
+            container: { containerType: 'cryovial_tube', collection: { type: 'cryovial_box', name: 'BULK-BOX', position: 'A02' } },
+          },
+        })
+
+        expect(res.status).toBe(400)
+        expect(await ctx.db.select().from(specimen).where(eq(specimen.studySubjectId, testSubject.id))).toEqual([])
+      },
+    )
+
     it('rolls back single specimen creation when container creation fails', async () => {
       const beforeSpecimens = await ctx.db.select({ id: specimen.id }).from(specimen)
 
@@ -274,6 +428,63 @@ describe('Specimens API', () => {
 
       expect(res.status).toBe(409)
       expect(await ctx.db.select().from(specimen).where(eq(specimen.collectionDate, '2024-06-03'))).toEqual([])
+    })
+
+    it('POST /api/specimens returns 409 for an occupied position or duplicate barcode and rolls back the specimen', async () => {
+      const first = await ctx.request('/api/specimens', {
+        method: 'POST',
+        json: {
+          sourceType: 'subject',
+          studyShortCode: 'BLK01',
+          subjectName: 'BULK-SUBJ',
+          specimenTypeName: 'Whole Blood',
+          collectionDate: '2024-06-05',
+          container: {
+            containerType: 'micronix_tube',
+            barcode: 'CLASH-001',
+            collection: { type: 'micronix_plate', name: 'BULK-PLATE', position: 'D01' },
+          },
+        },
+      })
+      expect(first.status).toBe(201)
+
+      const posClash = await ctx.request('/api/specimens', {
+        method: 'POST',
+        json: {
+          sourceType: 'subject',
+          studyShortCode: 'BLK01',
+          subjectName: 'BULK-SUBJ',
+          specimenTypeName: 'Whole Blood',
+          collectionDate: '2024-06-06',
+          container: {
+            containerType: 'micronix_tube',
+            barcode: 'CLASH-002',
+            collection: { type: 'micronix_plate', name: 'BULK-PLATE', position: 'D01' },
+          },
+        },
+      })
+      expect(posClash.status).toBe(409)
+      expect(await posClash.json()).toMatchObject({ errorCode: 'CONFLICT' })
+      expect(await ctx.db.select().from(specimen).where(eq(specimen.collectionDate, '2024-06-06'))).toEqual([])
+
+      const barcodeClash = await ctx.request('/api/specimens', {
+        method: 'POST',
+        json: {
+          sourceType: 'subject',
+          studyShortCode: 'BLK01',
+          subjectName: 'BULK-SUBJ',
+          specimenTypeName: 'Whole Blood',
+          collectionDate: '2024-06-07',
+          container: {
+            containerType: 'micronix_tube',
+            barcode: 'CLASH-001',
+            collection: { type: 'micronix_plate', name: 'BULK-PLATE', position: 'D02' },
+          },
+        },
+      })
+      expect(barcodeClash.status).toBe(409)
+      expect(await barcodeClash.json()).toMatchObject({ errorCode: 'CONFLICT' })
+      expect(await ctx.db.select().from(specimen).where(eq(specimen.collectionDate, '2024-06-07'))).toEqual([])
     })
 
     it('POST /api/specimens/bulk returns 409 when the container write hits a constraint', async () => {
@@ -393,6 +604,41 @@ describe('Specimens API', () => {
       expect(data.valid).toBe(false)
       expect(data.errors.length).toBeGreaterThan(0)
     })
+
+    it('maps row-level Zod schema failures to { valid: false, errors: [{ index, message }] } (#93)', async () => {
+      const res = await ctx.request('/api/specimens/bulk/validate', {
+        method: 'POST',
+        json: {
+          specimens: [
+            {
+              sourceType: 'subject',
+              studyShortCode: 'VBLK',
+              subjectName: 'V-SUBJ',
+              specimenTypeName: 'Serum',
+              container: {
+                containerType: 'micronix_tube',
+                barcode: '',
+                collection: { type: 'micronix_plate', name: 'P1', position: 'A01' },
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { valid: boolean; errors: Array<{ index: number; message: string }> }
+      expect(data.valid).toBe(false)
+      expect(data.errors).toContainEqual(
+        expect.objectContaining({ index: 0, message: expect.stringContaining('container.barcode') }),
+      )
+    })
+
+    it('keeps a 400 when the request body fails outside row paths', async () => {
+      const res = await ctx.request('/api/specimens/bulk/validate', {
+        method: 'POST',
+        json: { notSpecimens: [] },
+      })
+      expect(res.status).toBe(400)
+    })
   })
 
   describe('POST /api/specimens/:id/containers', () => {
@@ -487,6 +733,40 @@ describe('Specimens API', () => {
 
       expect(res.status).toBe(409)
       expect(await ctx.db.select().from(storageContainer).where(eq(storageContainer.specimenId, testSpecimen.id))).toEqual([])
+    })
+
+    it('returns 409 for an occupied position or duplicate barcode', async () => {
+      const first = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {
+        method: 'POST',
+        json: {
+          containerType: 'micronix_tube',
+          barcode: 'ADD-CLASH-001',
+          collection: { type: 'micronix_plate', name: 'ADD-PLATE', position: 'B02' },
+        },
+      })
+      expect(first.status).toBe(201)
+
+      const posClash = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {
+        method: 'POST',
+        json: {
+          containerType: 'micronix_tube',
+          barcode: 'ADD-CLASH-002',
+          collection: { type: 'micronix_plate', name: 'ADD-PLATE', position: 'B02' },
+        },
+      })
+      expect(posClash.status).toBe(409)
+      expect(await posClash.json()).toMatchObject({ errorCode: 'CONFLICT' })
+
+      const barcodeClash = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {
+        method: 'POST',
+        json: {
+          containerType: 'micronix_tube',
+          barcode: 'ADD-CLASH-001',
+          collection: { type: 'micronix_plate', name: 'ADD-PLATE', position: 'B03' },
+        },
+      })
+      expect(barcodeClash.status).toBe(409)
+      expect(await barcodeClash.json()).toMatchObject({ errorCode: 'CONFLICT' })
     })
 
     it('returns 400 when a micronix tube barcode is only whitespace', async () => {
@@ -638,6 +918,67 @@ describe('Specimens API', () => {
         },
       })
       expect(res.status).toBe(400)
+    })
+  })
+
+  describe('POST /api/specimens internal error handling', () => {
+    it('returns 500 and hides the raw message in production when container creation hits an internal error', async () => {
+      const study = await createTestStudy(ctx.db, { title: 'Err Study', shortCode: 'ERR1' })
+      const subject = await createTestStudySubject(ctx.db, { studyId: study.id, name: 'S1' })
+      const specType = await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const loc = await createTestLocation(ctx.db, {
+        name: 'Loc',
+        parentId: null,
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+      const unitRow = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await ctx.db.insert(specimenTypeContainerType).values({ specimenTypeId: specType.id, containerType: 'micronix_tube' })
+      await ctx.db.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unitRow.id })
+      clearSettingsCache(ctx.db, 'container_defaults')
+      clearDefaultsCache(ctx.db)
+      await setContainerDefaults(ctx.db, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      const now = utcNow()
+      const [plate] = await ctx.db
+        .insert(micronixPlate)
+        .values({ name: 'ERR-PLATE', locationId: loc.id, barcode: null, created: now, lastUpdated: now })
+        .returning()
+
+      // Cause an unexpected DB failure inside container creation.
+      ctx.sqlite.exec('DROP TABLE micronix_tube')
+
+      const previousNodeEnv = process.env.NODE_ENV
+      process.env.NODE_ENV = 'production'
+      try {
+        const res = await ctx.request('/api/specimens', {
+          method: 'POST',
+          json: {
+            sourceType: 'subject',
+            sourceId: subject.id,
+            specimenTypeId: specType.id,
+            container: {
+              containerType: 'micronix_tube',
+              barcode: 'BC-500',
+              collection: { type: 'micronix_plate', id: plate.id, position: 'A01' },
+            },
+          },
+        })
+
+        expect(res.status).toBe(500)
+        const text = await res.text()
+        expect(JSON.parse(text)).toEqual({ error: 'Internal server error', errorCode: 'INTERNAL_ERROR' })
+        expect(text).not.toContain('micronix_tube')
+        expect(await ctx.db.select().from(specimen)).toHaveLength(0)
+
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        const logged = await ctx.db.select().from(errorLogs)
+        expect(logged.some((row) => row.level === 'error' && row.message.includes('micronix_tube'))).toBe(true)
+      } finally {
+        process.env.NODE_ENV = previousNodeEnv
+      }
     })
   })
 })

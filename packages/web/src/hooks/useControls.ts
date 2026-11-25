@@ -1,10 +1,12 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { controlsApi, type ControlBatch, type ControlDefinition } from '../lib/api/controls'
 import { strainsApi } from '../lib/api/reference-data'
 import type { Strain } from '../lib/api/reference-data'
 import { getCompositionKey } from '../lib/composition-key'
 import { localToday } from '../lib/date-utils'
 import { getHttpStatus } from '../ui/async'
+import { invalidateAfterBulkWrite } from '../lib/query-client'
+import { specimenKeys } from './useSpecimens'
 
 export const controlKeys = {
   all: ['blood-controls'] as const,
@@ -145,5 +147,23 @@ export function useCompositionDefinitionsByKey(compositionKey: string | null | u
       return defs
     },
     enabled: !!compositionKey,
+  })
+}
+
+/**
+ * Delete a Specimen and its Containers from a Control batch. The delete empties Collection grid
+ * positions and changes the batch, the Controls overview, Specimen lists and the dashboard, so every
+ * query is invalidated; the deleted Specimen's own queries are not refetched.
+ * Shows no toast; the caller reports the error.
+ */
+export function useDeleteControlBatchSpecimen() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ batchId, specimenId }: { batchId: number; specimenId: number }) =>
+      controlsApi.deleteSpecimenFromBatch(batchId, specimenId),
+    onSuccess: (_result, { specimenId }) =>
+      invalidateAfterBulkWrite(queryClient, {
+        deleted: [specimenKeys.detail(specimenId), specimenKeys.containers(specimenId)],
+      }),
   })
 }

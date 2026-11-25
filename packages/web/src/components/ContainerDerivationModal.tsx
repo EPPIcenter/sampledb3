@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { derivationsApi } from '../lib/api/derivations';
 import type { CreateDerivationPayload } from '../lib/api/derivations';
+import { useCreateDerivation } from '../hooks/useContainers'
 import {
   flatDerivationFormToWriteInput,
   type FlatDerivationContainerForm,
@@ -28,7 +28,8 @@ interface ContainerDerivationModalProps {
     sublabel?: string
     specimenTypeName?: string
   }
-  onSuccess: () => void
+  /** Called after the Derivation is saved; `useCreateDerivation` has already refreshed the queries. */
+  onSuccess?: () => void
   /** Pass a key that increments when opening to reset inner state; parent should increment in the open handler. */
   openKey?: number
 }
@@ -44,7 +45,7 @@ type ContainerDerivationModalContentProps = {
   parentContainerId: number
   parentContainer?: ContainerDerivationModalProps['parentContainer']
   onClose: () => void
-  onSuccess: () => void
+  onSuccess?: () => void
 }
 
 function ContainerDerivationModalContent({
@@ -59,6 +60,7 @@ function ContainerDerivationModalContent({
   const [specimenTypes, setSpecimenTypes] = useState<SpecimenType[]>([])
   const [allowedContainerTypes, setAllowedContainerTypes] = useState<string[]>([])
   const [collectionOptions, setCollectionOptions] = useState<CollectionOption[]>([])
+  const createDerivation = useCreateDerivation()
 
   const [formData, setFormData] = useState({
     derivationType: 'dna_extraction',
@@ -231,17 +233,17 @@ function ContainerDerivationModalContent({
         properties: formData.properties,
       }
 
-      const response = await derivationsApi.createFromContainer(parentContainerId, payload)
+      const response = await createDerivation.mutateAsync({ parentContainerId, payload })
       
       if (response.warnings.length > 0) {
         setWarnings(response.warnings)
         // Still show success but with warnings
         setTimeout(() => {
-          onSuccess()
+          onSuccess?.()
           onClose()
         }, 2000)
       } else {
-        onSuccess()
+        onSuccess?.()
         onClose()
       }
     } catch (err: unknown) {

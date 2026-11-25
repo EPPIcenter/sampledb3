@@ -6,6 +6,7 @@ import { api } from '../client'
 vi.mock('../client', () => ({
   api: {
     get: vi.fn(),
+    patch: vi.fn(),
   },
 }))
 
@@ -158,6 +159,30 @@ describe('containersApi', () => {
         id: 143,
         name: '2058121',
       })
+    })
+  })
+
+  describe('update', () => {
+    it('PATCHes the edit and resolves to the updated container', async () => {
+      const container = {
+        id: 93926,
+        specimenId: 1,
+        containerType: 'paper' as const,
+        sublabel: '2067376-B',
+        collection: { type: 'sheet' as const, id: 3, name: 'Sheet 1' },
+      }
+      vi.mocked(api.patch).mockResolvedValue({ container })
+
+      const result = await containersApi.update(93926, { sublabel: '2067376-B' })
+
+      expect(api.patch).toHaveBeenCalledWith('/containers/93926', { sublabel: '2067376-B' })
+      expect(result).toEqual(container)
+    })
+
+    it('throws ApiContractError when the body has no container', async () => {
+      vi.mocked(api.patch).mockResolvedValue({ ok: true })
+
+      await expect(containersApi.update(1, { comment: 'x' })).rejects.toBeInstanceOf(ApiContractError)
     })
   })
 })

@@ -1,13 +1,14 @@
 import { Database } from 'bun:sqlite'
 import { applyInitialSchema } from './apply-initial-schema'
 import { applyLegacyBaselineMigration } from './legacy-baseline'
+import { backupDatabaseBeforeMigrating } from './migration-backup'
 import { ensureLegacyPaperTableForMigration003 } from './migration-preflight'
 import { listNumberedMigrations, runSqlMigration } from './migration-runner'
 
 const PAPER_SUBLABEL_MIGRATION_VERSION = 3
 
 /** Canonical schema level; bump when adding numbered deltas under migrations/. */
-export const CURRENT_SCHEMA_VERSION = 7
+export const CURRENT_SCHEMA_VERSION = 12
 
 const SCHEMA_VERSION_TABLE = 'schema_version'
 const LEGACY_BASELINE_VERSION = 1
@@ -42,22 +43,24 @@ export function isEmptyOperationalDatabase(sqlite: Database): boolean {
   return row.count === 0
 }
 
-function applyPendingMigrations(sqlite: Database, fromVersion: number): void {
+function listPendingMigrations(fromVersion: number): Array<{ version: number; path: string; basename: string }> {
   if (fromVersion >= CURRENT_SCHEMA_VERSION) {
-    return
+    return []
   }
+  return listNumberedMigrations().filter(
+    (migration) =>
+      migration.version > fromVersion &&
+      migration.version <= CURRENT_SCHEMA_VERSION &&
+      // 001 runs only via applyLegacyBaselineMigration for unversioned databases.
+      migration.version !== LEGACY_BASELINE_VERSION,
+  )
+}
 
-  for (const migration of listNumberedMigrations()) {
-    if (migration.version <= fromVersion) {
-      continue
-    }
-    if (migration.version > CURRENT_SCHEMA_VERSION) {
-      continue
-    }
-    // 001 runs only via applyLegacyBaselineMigration for unversioned databases.
-    if (migration.version === LEGACY_BASELINE_VERSION) {
-      continue
-    }
+function applyPendingMigrations(
+  sqlite: Database,
+  pending: Array<{ version: number; path: string; basename: string }>,
+): void {
+  for (const migration of pending) {
     if (migration.version === PAPER_SUBLABEL_MIGRATION_VERSION) {
       ensureLegacyPaperTableForMigration003(sqlite)
     }
@@ -68,10 +71,24 @@ function applyPendingMigrations(sqlite: Database, fromVersion: number): void {
   }
 }
 
+export interface EvolveOperationalSchemaOptions {
+  /**
+   * Copy the database file next to itself (`VACUUM INTO`) before the first migration changes
+   * an existing database. Skipped when nothing is pending, for an empty database, and for an
+   * in-memory one. If the copy fails, nothing is migrated.
+   */
+  backupBeforeMigrating?: boolean
+}
+
 /**
  * Bring an operational SQLite file to CURRENT_SCHEMA_VERSION.
  */
-export function evolveOperationalSchema(sqlite: Database): void {
+export function evolveOperationalSchema(sqlite: Database, options: EvolveOperationalSchemaOptions = {}): void {
+  const backupIfRequested = (): void => {
+    if (options.backupBeforeMigrating) {
+      backupDatabaseBeforeMigrating(sqlite, CURRENT_SCHEMA_VERSION)
+    }
+  }
   const recorded = getRecordedSchemaVersion(sqlite)
 
   if (recorded != null) {
@@ -80,7 +97,11 @@ export function evolveOperationalSchema(sqlite: Database): void {
         `Database schema version ${recorded} is newer than this application supports (${CURRENT_SCHEMA_VERSION}).`,
       )
     }
-    applyPendingMigrations(sqlite, recorded)
+    const pending = listPendingMigrations(recorded)
+    if (pending.length > 0) {
+      backupIfRequested()
+    }
+    applyPendingMigrations(sqlite, pending)
     return
   }
 
@@ -91,7 +112,8 @@ export function evolveOperationalSchema(sqlite: Database): void {
     applyInitialSchema(sqlite)
     const version = getRecordedSchemaVersion(sqlite)
     if (version == null || version < CURRENT_SCHEMA_VERSION) {
-      applyPendingMigrations(sqlite, version ?? 0)
+      // A database that was empty a moment ago has nothing to back up.
+      applyPendingMigrations(sqlite, listPendingMigrations(version ?? 0))
     }
     const after = getRecordedSchemaVersion(sqlite)
     if (after !== CURRENT_SCHEMA_VERSION) {
@@ -105,10 +127,11 @@ export function evolveOperationalSchema(sqlite: Database): void {
     return
   }
 
+  backupIfRequested()
   applyLegacyBaselineMigration(sqlite)
   const afterLegacy = getRecordedSchemaVersion(sqlite)
   if (afterLegacy == null) {
     throw new Error('Legacy baseline migration did not set schema_version')
   }
-  applyPendingMigrations(sqlite, afterLegacy)
+  applyPendingMigrations(sqlite, listPendingMigrations(afterLegacy))
 }

@@ -1,7 +1,8 @@
 import type { Database } from '../db/client'
 import { errorLogs } from '../db/schema'
-import { lt, sql } from 'drizzle-orm'
-import { utcNow } from './datetime'
+import { sql } from 'drizzle-orm'
+import { daysBefore, utcNow } from './datetime'
+import { timestampBefore } from './sql-helpers'
 import { logError as logObservabilityError } from './observability'
 
 function logPersistFailure(
@@ -208,21 +209,18 @@ function getRetentionDays(): number {
  */
 export async function cleanupOldErrorLogs(
   db: Database,
-  retentionDays?: number
+  retentionDays?: number,
+  now: Date = new Date(),
 ): Promise<{ deleted: number; retentionDays: number }> {
   const days = retentionDays ?? getRetentionDays()
-  
-  // Calculate cutoff date
-  const cutoffDate = new Date()
-  cutoffDate.setDate(cutoffDate.getDate() - days)
-  const cutoffTimestamp = cutoffDate.toISOString()
+  const olderThanCutoff = timestampBefore(errorLogs.timestamp, daysBefore(now, days))
   
   try {
     // Count how many logs will be deleted
     const countResult = await db
       .select({ count: sql<number>`count(*)` })
       .from(errorLogs)
-      .where(lt(errorLogs.timestamp, cutoffTimestamp))
+      .where(olderThanCutoff)
     
     const countToDelete = countResult[0]?.count || 0
     
@@ -230,7 +228,7 @@ export async function cleanupOldErrorLogs(
     if (countToDelete > 0) {
       await db
         .delete(errorLogs)
-        .where(lt(errorLogs.timestamp, cutoffTimestamp))
+        .where(olderThanCutoff)
     }
     
     return {

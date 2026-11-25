@@ -13,6 +13,7 @@ import {
 import { sql, eq } from 'drizzle-orm'
 import { createAuthMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
+import { parseStoredTimestamp } from '../lib/datetime'
 import { resolveSpecimenSources } from '../lib/specimens/provenance'
 
 /** Upper bound for GET /activity/recent?limit=. */
@@ -193,8 +194,8 @@ export function createActivityRoutes(database: Database): Hono {
     ]
       .filter(item => item.timestamp) // Filter out items without timestamps
       .sort((a, b) => {
-        const timeA = new Date(a.timestamp).getTime()
-        const timeB = new Date(b.timestamp).getTime()
+        const timeA = parseStoredTimestamp(a.timestamp)?.getTime() ?? 0
+        const timeB = parseStoredTimestamp(b.timestamp)?.getTime() ?? 0
         return timeB - timeA
       })
       .slice(0, limit)

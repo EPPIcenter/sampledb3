@@ -107,6 +107,17 @@ describe('qpcr-result-parse', () => {
       expect(row.cq).toBe(20.5)
       expect(row.quantity).toBe(3.2)
     })
+
+    it('treats Infinity and -Infinity cells as non-numeric (null) rather than finite numbers', () => {
+      const csv = [
+        'Well,Content,Sample,Cq,Starting Quantity (SQ)',
+        'A1,Unkn,S1,Infinity,-Infinity',
+      ].join('\n')
+      const result = parseBioradCsv(csv, 'test.csv')
+      expect(result.wellResults).toHaveLength(1)
+      expect(result.wellResults[0].cq).toBeNull()
+      expect(result.wellResults[0].quantity).toBeNull()
+    })
   })
 
   describe('parseQuantStudioXls', () => {

@@ -4,6 +4,14 @@ import { eq } from 'drizzle-orm'
 import { getContainerDefaults, clearSettingsCache } from './settings'
 import type { ContainerType } from './container-creation'
 
+/** Container defaults are missing or incomplete in settings (or reference a unit not in the database). */
+export class ContainerDefaultsNotConfiguredError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ContainerDefaultsNotConfiguredError'
+  }
+}
+
 // Cache for defaults to avoid repeated queries (per container type, per database)
 // Cache key format: "dbId:containerType"
 const defaultUnitCache = new Map<string, { id: number; symbol: string }>()
@@ -30,19 +38,19 @@ export async function getDefaultUnit(db: Database, containerType: ContainerType)
 
   const defaults = await getContainerDefaults(db)
   if (!defaults) {
-    throw new Error('Container defaults are not configured. Please run database initialization.')
+    throw new ContainerDefaultsNotConfiguredError('Container defaults are not configured. Please run database initialization.')
   }
 
   const containerDefaults = (defaults as Partial<Record<ContainerType, { defaultUnitSymbol: string }>>)[containerType]
   if (!containerDefaults) {
-    throw new Error(
+    throw new ContainerDefaultsNotConfiguredError(
       `Container defaults for '${containerType}' are not configured. Ensure settings include this container type.`
     )
   }
   const unitSymbol = containerDefaults.defaultUnitSymbol
 
   if (!unitSymbol || !String(unitSymbol).trim()) {
-    throw new Error(`Default unit symbol not configured for container type '${containerType}'`)
+    throw new ContainerDefaultsNotConfiguredError(`Default unit symbol not configured for container type '${containerType}'`)
   }
 
   const unitRecord = await db
@@ -52,7 +60,7 @@ export async function getDefaultUnit(db: Database, containerType: ContainerType)
     .get()
   
   if (!unitRecord) {
-    throw new Error(`Unit symbol '${unitSymbol}' not found for container type '${containerType}'. Please update settings or create the unit.`)
+    throw new ContainerDefaultsNotConfiguredError(`Unit symbol '${unitSymbol}' not found for container type '${containerType}'. Please update settings or create the unit.`)
   }
 
   const unitId = unitRecord.id as number
@@ -63,27 +71,39 @@ export async function getDefaultUnit(db: Database, containerType: ContainerType)
 /**
  * Get default total quantity for a container type
  * @param db - Database instance
- * @throws Error if container defaults are not configured
+ * @throws ContainerDefaultsNotConfiguredError if container defaults are not configured
  */
 export async function getDefaultTotalQuantity(db: Database, containerType: ContainerType): Promise<number> {
   const defaults = await getContainerDefaults(db)
   if (!defaults) {
-    throw new Error('Container defaults are not configured. Please run database initialization.')
+    throw new ContainerDefaultsNotConfiguredError('Container defaults are not configured. Please run database initialization.')
   }
-  return defaults[containerType].totalQuantity
+  const containerDefaults = (defaults as Partial<Record<ContainerType, { totalQuantity: number }>>)[containerType]
+  if (!containerDefaults) {
+    throw new ContainerDefaultsNotConfiguredError(
+      `Container defaults for '${containerType}' are not configured. Ensure settings include this container type.`
+    )
+  }
+  return containerDefaults.totalQuantity
 }
 
 /**
  * Get default remaining quantity for a container type
  * @param db - Database instance
- * @throws Error if container defaults are not configured
+ * @throws ContainerDefaultsNotConfiguredError if container defaults are not configured
  */
 export async function getDefaultRemainingQuantity(db: Database, containerType: ContainerType): Promise<number> {
   const defaults = await getContainerDefaults(db)
   if (!defaults) {
-    throw new Error('Container defaults are not configured. Please run database initialization.')
+    throw new ContainerDefaultsNotConfiguredError('Container defaults are not configured. Please run database initialization.')
   }
-  return defaults[containerType].remainingQuantity
+  const containerDefaults = (defaults as Partial<Record<ContainerType, { remainingQuantity: number }>>)[containerType]
+  if (!containerDefaults) {
+    throw new ContainerDefaultsNotConfiguredError(
+      `Container defaults for '${containerType}' are not configured. Ensure settings include this container type.`
+    )
+  }
+  return containerDefaults.remainingQuantity
 }
 
 /**

@@ -1,16 +1,27 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Database } from 'bun:sqlite'
-import { existsSync, unlinkSync } from 'fs'
-import { join } from 'path'
+import { existsSync, readFileSync, unlinkSync } from 'fs'
+import { dirname, join } from 'path'
 import { tmpdir } from 'os'
+import { fileURLToPath } from 'url'
 import {
   CURRENT_SCHEMA_VERSION,
   evolveOperationalSchema,
   getRecordedSchemaVersion,
+  hasSchemaVersionTable,
   isEmptyOperationalDatabase,
 } from '../schema-evolution'
 import { openOperationalDatabase } from '../open'
-import { SchemaMigrationError, runSqlMigrationStatements } from '../migration-runner'
+import {
+  SchemaMigrationError,
+  listNumberedMigrations,
+  runSqlMigration,
+  runSqlMigrationStatements,
+  splitSqlStatements,
+} from '../migration-runner'
+import { drizzle } from 'drizzle-orm/bun-sqlite'
+import * as schema from '../schema'
+import { listContainersWithInvalidGridPosition, listSpecimensWithNonIsoCollectionDate } from '../../lib/data-audit'
 
 /** Tables that migrations 004+ alter, so older-version fixtures can migrate to current. */
 function createTablesForLaterMigrations(sqlite: Database): void {
@@ -42,6 +53,46 @@ function createTablesForLaterMigrations(sqlite: Database): void {
     box_id INTEGER,
     bag_id INTEGER
   )`)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS specimen (
+    id INTEGER PRIMARY KEY,
+    study_subject_id INTEGER,
+    specimen_type_id INTEGER NOT NULL,
+    collection_date DATE
+  )`)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT NOT NULL, created TEXT, approved_at TEXT)`)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    expires_at INTEGER NOT NULL
+  )`)
+  // Migration 011 indexes these columns. Some tests create a bare `study (id)` first.
+  ensureColumns(sqlite, 'study', ['title TEXT', 'short_code TEXT'])
+  ensureColumns(sqlite, 'specimen', ['control_batch_id INTEGER'])
+  ensureColumns(sqlite, 'storage_container', ['specimen_id INTEGER'])
+  ensureColumns(sqlite, 'storage_container_tag', ['storage_container_id INTEGER', 'tag_id INTEGER'])
+  ensureColumns(sqlite, 'control_batch', ['control_definition_id INTEGER', 'properties TEXT'])
+  ensureColumns(sqlite, 'location', ['parent_id INTEGER', 'path TEXT'])
+  ensureColumns(sqlite, 'micronix_plate', ['location_id INTEGER'])
+  ensureColumns(sqlite, 'cryovial_box', ['location_id INTEGER'])
+  ensureColumns(sqlite, 'bag', ['location_id INTEGER'])
+  // Before version 3, migration 003 renames barcode to sublabel (and its preflight creates the
+  // table if missing), so only a database already past 003 gets paper in its later shape.
+  const version = hasSchemaVersionTable(sqlite) ? getRecordedSchemaVersion(sqlite) : null
+  if (version != null && version >= 3) ensureColumns(sqlite, 'paper', ['sheet_id INTEGER', 'sublabel TEXT'])
+}
+
+/** Create `table` with `columns`, or add the ones an existing `table` lacks. */
+function ensureColumns(sqlite: Database, table: string, columns: string[]): void {
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS ${table} (id INTEGER PRIMARY KEY)`)
+  const existing = new Set(
+    sqlite
+      .query<{ name: string }, []>(`SELECT name FROM pragma_table_info('${table}')`)
+      .all()
+      .map((row) => row.name),
+  )
+  for (const column of columns) {
+    if (!existing.has(column.split(' ')[0])) sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column}`)
+  }
 }
 
 describe('schema evolution', () => {
@@ -293,6 +344,189 @@ describe('schema evolution', () => {
     sqlite.close()
   })
 
+  it('migration 008 rewrites M/D/YY and M/D/YYYY collection dates as YYYY-MM-DD', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (7)')
+    createTablesForLaterMigrations(sqlite)
+    const values: Array<[number, string | null]> = [
+      [1, '5/7/26'],
+      [2, '9/14/20'],
+      [3, '12/24/2024'],
+      [4, '07/04/2024'],
+      [5, '2023-08-21'],
+      [6, null],
+      [7, '   '],
+      [8, ' 3/17/22 '],
+      [9, '1970-01-01'],
+    ]
+    const insert = sqlite.prepare('INSERT INTO specimen (id, specimen_type_id, collection_date) VALUES (?, 1, ?)')
+    for (const [id, date] of values) insert.run(id, date)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    const rows = sqlite.prepare('SELECT collection_date AS date FROM specimen ORDER BY id').all() as Array<{ date: string | null }>
+    expect(rows.map((r) => r.date)).toEqual([
+      '2026-05-07',
+      '2020-09-14',
+      '2024-12-24',
+      '2024-07-04',
+      '2023-08-21',
+      null,
+      null,
+      '2022-03-17',
+      '1970-01-01',
+    ])
+    sqlite.close()
+  })
+
+  it('migration 008 leaves a collection date it cannot read as it is, converts the rest, and the integrity report lists it', async () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (7)')
+    createTablesForLaterMigrations(sqlite)
+    const unreadable = ['13/2/2024', '2/30/2024', '2024-02-30', '5/7', '7 Apr 2024', '2024/05/07', '5/7/124', ' 2/30/24 ']
+    const insert = sqlite.prepare('INSERT INTO specimen (id, specimen_type_id, collection_date) VALUES (?, 1, ?)')
+    insert.run(1, '5/7/26')
+    unreadable.forEach((value, i) => insert.run(i + 2, value))
+    insert.run(100, ' 12/24/2024 ')
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    const rows = sqlite.prepare('SELECT collection_date AS date FROM specimen ORDER BY id').all() as Array<{ date: string }>
+    expect(rows.map((r) => r.date)).toEqual(['2026-05-07', ...unreadable, '2024-12-24'])
+    const temp = sqlite.prepare(`SELECT name FROM sqlite_temp_master WHERE name LIKE '__migration_008%'`).all()
+    expect(temp).toEqual([])
+    const leftovers = await listSpecimensWithNonIsoCollectionDate(drizzle(sqlite, { schema }))
+    expect(leftovers).toEqual(unreadable.map((collectionDate, i) => ({ id: i + 2, collectionDate })))
+    sqlite.close()
+  })
+
+  const SUBJECT_DATE_INDEX = 'idx_specimen_study_subject_type_date'
+  const CONTROL_BATCH_DATE_INDEX = 'idx_specimen_control_batch_type_date'
+
+  /**
+   * A database created from the version 1 snapshot, which has both unique collection-date
+   * indexes, without the ones in `withoutIndexes`. Holds Subjects 1 and 2, control batches 1
+   * and 2, and Specimen types 1 to 3.
+   */
+  function version1Install(withoutIndexes: string[] = []): Database {
+    const sqlite = new Database(testDbPath)
+    const snapshot = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'initial_schema_v1.sql')
+    for (const statement of splitSqlStatements(readFileSync(snapshot, 'utf-8'))) sqlite.exec(statement)
+    for (const index of withoutIndexes) sqlite.exec(`DROP INDEX ${index}`)
+    const now = '2024-01-01 00:00:00'
+    sqlite.exec(`INSERT INTO study (id, title, short_code, is_longitudinal, lead_person, created, last_updated) VALUES (1, 'Study', 'ST', 0, 'Lab', '${now}', '${now}')`)
+    sqlite.exec(`INSERT INTO study_subject (id, study_id, name, created, last_updated) VALUES (1, 1, 'S1', '${now}', '${now}'), (2, 1, 'S2', '${now}', '${now}')`)
+    sqlite.exec(`INSERT INTO control_definition (id, name, control_type) VALUES (1, 'Control', 'blood')`)
+    sqlite.exec(`INSERT INTO control_batch (id, control_definition_id, name) VALUES (1, 1, 'Batch 1'), (2, 1, 'Batch 2')`)
+    sqlite.exec(`INSERT INTO specimen_type (id, name, created, last_updated) VALUES (1, 'DBS', '${now}', '${now}'), (2, 'WB', '${now}', '${now}'), (3, 'Plasma', '${now}', '${now}')`)
+    return sqlite
+  }
+
+  type DatedSpecimen = [id: number, ownerId: number, specimenTypeId: number, collectionDate: string | null]
+
+  function insertSpecimens(sqlite: Database, ownerColumn: string, specimens: DatedSpecimen[]): void {
+    const insert = sqlite.prepare(`INSERT INTO specimen (id, ${ownerColumn}, specimen_type_id, collection_date) VALUES (?, ?, ?, ?)`)
+    for (const specimen of specimens) insert.run(...specimen)
+  }
+
+  function collectionDates(sqlite: Database): Array<[number, string | null]> {
+    const rows = sqlite.prepare('SELECT id, collection_date AS date FROM specimen ORDER BY id').all() as Array<{ id: number; date: string | null }>
+    return rows.map((r) => [r.id, r.date])
+  }
+
+  /** Specimens 5 to 9 collide with nothing: another owner, another Specimen type, another date, and blanks. */
+  const NOT_COLLIDING: DatedSpecimen[] = [
+    [5, 2, 1, '1/2/24'],
+    [6, 1, 3, '1/2/24'],
+    [7, 1, 1, ' 3/4/2024 '],
+    [8, 1, 1, ''],
+    [9, 1, 1, '  '],
+  ]
+  const NOT_COLLIDING_MIGRATED: Array<[number, string | null]> = [
+    [5, '2024-01-02'],
+    [6, '2024-01-02'],
+    [7, '2024-03-04'],
+    [8, null],
+    [9, null],
+  ]
+
+  for (const [owner, ownerColumn] of [
+    ['Subject', 'study_subject_id'],
+    ['control batch', 'control_batch_id'],
+  ] as const) {
+    it(`migration 008 leaves a date as it is when another Specimen of the ${owner} and type already stores its rewrite`, async () => {
+      const sqlite = version1Install()
+      insertSpecimens(sqlite, ownerColumn, [[1, 1, 1, '2024-01-02'], [2, 1, 1, '1/2/24'], ...NOT_COLLIDING])
+
+      evolveOperationalSchema(sqlite)
+
+      expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+      expect(collectionDates(sqlite)).toEqual([[1, '2024-01-02'], [2, '1/2/24'], ...NOT_COLLIDING_MIGRATED])
+      const leftovers = await listSpecimensWithNonIsoCollectionDate(drizzle(sqlite, { schema }))
+      expect(leftovers).toEqual([{ id: 2, collectionDate: '1/2/24' }])
+      const temp = sqlite.prepare(`SELECT name FROM sqlite_temp_master WHERE name LIKE '__migration_008%'`).all()
+      expect(temp).toEqual([])
+      sqlite.close()
+    })
+
+    it(`migration 008 leaves every date as it is when two Specimens of the ${owner} and type would be rewritten to one date`, async () => {
+      const sqlite = version1Install()
+      insertSpecimens(sqlite, ownerColumn, [[1, 1, 1, ' 2024-01-02 '], [2, 1, 1, '01/02/2024'], [3, 1, 1, '1/2/24'], ...NOT_COLLIDING])
+
+      evolveOperationalSchema(sqlite)
+
+      expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+      expect(collectionDates(sqlite)).toEqual([[1, ' 2024-01-02 '], [2, '01/02/2024'], [3, '1/2/24'], ...NOT_COLLIDING_MIGRATED])
+      const leftovers = await listSpecimensWithNonIsoCollectionDate(drizzle(sqlite, { schema }))
+      expect(leftovers).toEqual([
+        { id: 1, collectionDate: ' 2024-01-02 ' },
+        { id: 2, collectionDate: '01/02/2024' },
+        { id: 3, collectionDate: '1/2/24' },
+      ])
+      sqlite.close()
+    })
+  }
+
+  /** Spellings of one date on the Specimens of one Subject and type, and of one control batch and type. */
+  function insertCollidingSubjectAndControlBatchSpecimens(sqlite: Database): void {
+    insertSpecimens(sqlite, 'study_subject_id', [[1, 1, 1, '2024-01-02'], [2, 1, 1, '1/2/24'], [3, 1, 2, ' 2024-01-02 '], [4, 1, 2, '01/02/2024']])
+    insertSpecimens(sqlite, 'control_batch_id', [[11, 1, 1, '2024-01-02'], [12, 1, 1, '1/2/24'], [13, 1, 2, ' 2024-01-02 '], [14, 1, 2, '01/02/2024']])
+  }
+
+  it('migration 008 rewrites every readable date on a database without the unique collection-date indexes', () => {
+    const sqlite = version1Install([SUBJECT_DATE_INDEX, CONTROL_BATCH_DATE_INDEX])
+    insertCollidingSubjectAndControlBatchSpecimens(sqlite)
+    insertSpecimens(sqlite, 'study_subject_id', NOT_COLLIDING)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(collectionDates(sqlite)).toEqual([
+      [1, '2024-01-02'], [2, '2024-01-02'], [3, '2024-01-02'], [4, '2024-01-02'],
+      ...NOT_COLLIDING_MIGRATED,
+      [11, '2024-01-02'], [12, '2024-01-02'], [13, '2024-01-02'], [14, '2024-01-02'],
+    ])
+    sqlite.close()
+  })
+
+  it('migration 008 skips a rewrite only for the owner whose unique collection-date index exists', () => {
+    const sqlite = version1Install([CONTROL_BATCH_DATE_INDEX])
+    insertCollidingSubjectAndControlBatchSpecimens(sqlite)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(collectionDates(sqlite)).toEqual([
+      [1, '2024-01-02'], [2, '1/2/24'], [3, ' 2024-01-02 '], [4, '01/02/2024'],
+      [11, '2024-01-02'], [12, '2024-01-02'], [13, '2024-01-02'], [14, '2024-01-02'],
+    ])
+    sqlite.close()
+  })
+
   /** The CREATE TABLE text SQLite stored for qpcr_well_result. */
   function qpcrWellResultDdl(sqlite: Database): string {
     const row = sqlite.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='qpcr_well_result'").get() as
@@ -311,6 +545,7 @@ describe('schema evolution', () => {
     const migrated = new Database(testDbPath)
     migrated.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
     migrated.exec('INSERT INTO schema_version (version) VALUES (6)')
+    createTablesForLaterMigrations(migrated)
     evolveOperationalSchema(migrated)
     expect(getRecordedSchemaVersion(migrated)).toBe(CURRENT_SCHEMA_VERSION)
     expect(qpcrWellResultDdl(migrated)).toContain('CONSTRAINT qpcr_well_result_run_well_target_unique UNIQUE')
@@ -329,6 +564,7 @@ describe('schema evolution', () => {
       UNIQUE (qpcr_run_id, well_position, target_name)
     )`
     sqlite.exec(existing)
+    createTablesForLaterMigrations(sqlite)
 
     evolveOperationalSchema(sqlite)
 
@@ -337,6 +573,197 @@ describe('schema evolution', () => {
     expect(() =>
       sqlite.exec(`INSERT INTO qpcr_well_result (qpcr_run_id, well_position, target_name) VALUES (1, 'A01', 'T')`),
     ).toThrow(/UNIQUE/)
+    sqlite.close()
+  })
+
+  it('migration 009 drops sessions stored by cookie value and stores sessions by token hash', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (7)')
+    createTablesForLaterMigrations(sqlite)
+    sqlite.exec(`INSERT INTO users (id, email) VALUES (1, 'a@test.com')`)
+    sqlite.exec(`INSERT INTO sessions (id, user_id, expires_at) VALUES ('raw-cookie-value', 1, 9999999999)`)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(sqlite.prepare('SELECT COUNT(*) AS n FROM sessions').get()).toEqual({ n: 0 })
+    const columns = (sqlite.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string; notnull: number }>)
+      .map((column) => `${column.name}${column.notnull ? ' NOT NULL' : ''}`)
+    expect(columns).toEqual(['id', 'token_hash NOT NULL', 'user_id NOT NULL', 'expires_at NOT NULL'])
+    sqlite.exec(`INSERT INTO sessions (id, token_hash, user_id, expires_at) VALUES ('p1', 'h1', 1, 1)`)
+    expect(() =>
+      sqlite.exec(`INSERT INTO sessions (id, token_hash, user_id, expires_at) VALUES ('p2', 'h1', 1, 1)`),
+    ).toThrow(/UNIQUE/)
+    const plan = sqlite
+      .prepare(`EXPLAIN QUERY PLAN SELECT id FROM sessions WHERE token_hash = 'h1'`)
+      .all() as Array<{ detail: string }>
+    expect(plan.map((row) => row.detail).join(' ')).toContain('sessions_token_hash_idx')
+    sqlite.close()
+  })
+
+  /** A database at version 9 with grid tables, ready for migration 010. */
+  function databaseBeforeMigration010(): Database {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (9)')
+    createTablesForLaterMigrations(sqlite)
+    return sqlite
+  }
+
+  function positions(sqlite: Database, table: string): Array<[number, string | null]> {
+    const rows = sqlite.prepare(`SELECT id, position FROM ${table} ORDER BY id`).all() as Array<{ id: number; position: string | null }>
+    return rows.map((r) => [r.id, r.position])
+  }
+
+  it('migration 010 strips dashes, clears barcode-shaped and NA positions, and leaves valid ones', () => {
+    const sqlite = databaseBeforeMigration010()
+    sqlite.exec(`INSERT INTO cryovial_tube (id, collection_id, barcode, position) VALUES
+      (1, 790, 'C1', '--A01'), (2, 790, 'C2', '-F02'), (3, 790, 'C3', 'G01'), (4, 84, 'C4', 'NA01'),
+      (5, 84, 'C5', 'na05'), (6, 84, NULL, NULL), (7, 84, 'C7', 'b3'), (8, 84, 'C8', ' J10 ')`)
+    sqlite.exec(`INSERT INTO micronix_tube (id, collection_id, barcode, position) VALUES
+      (11, 254, '1145854300', 'A1145854300'), (12, 254, '1106665111', 'A1106665111'), (13, 254, 'MX3', NULL), (14, 1, 'MX4', 'H12')`)
+    sqlite.exec(`INSERT INTO static_well (id, collection_id, position) VALUES (21, 1, '-a1')`)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(positions(sqlite, 'cryovial_tube')).toEqual([
+      [1, 'A01'], [2, 'F02'], [3, 'G01'], [4, null], [5, null], [6, null], [7, 'B03'], [8, 'J10'],
+    ])
+    expect(positions(sqlite, 'micronix_tube')).toEqual([[11, null], [12, null], [13, null], [14, 'H12']])
+    expect(positions(sqlite, 'static_well')).toEqual([[21, 'A01']])
+    const temp = sqlite.prepare(`SELECT name FROM sqlite_temp_master WHERE name LIKE '__migration_010%'`).all()
+    expect(temp).toEqual([])
+    sqlite.close()
+  })
+
+  it('migration 010 leaves a repair that would collide with a stored position as it is, and repairs the rest', () => {
+    const sqlite = databaseBeforeMigration010()
+    sqlite.exec(`INSERT INTO cryovial_tube (id, collection_id, barcode, position) VALUES (1, 790, 'C1', '--A01'), (2, 790, 'C2', 'A01'), (3, 790, 'C3', '-B01')`)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(positions(sqlite, 'cryovial_tube')).toEqual([[1, '--A01'], [2, 'A01'], [3, 'B01']])
+    sqlite.close()
+  })
+
+  it('migration 010 leaves every repair that lands in one position as it is, and repairs the rest', () => {
+    const sqlite = databaseBeforeMigration010()
+    sqlite.exec(`INSERT INTO micronix_tube (id, collection_id, barcode, position) VALUES (1, 5, 'M1', '--C04'), (3, 5, 'M3', '-d5')`)
+    sqlite.exec(`INSERT INTO static_well (id, collection_id, position) VALUES (2, 5, 'c4')`)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(positions(sqlite, 'micronix_tube')).toEqual([[1, '--C04'], [3, 'D05']])
+    expect(positions(sqlite, 'static_well')).toEqual([[2, 'c4']])
+    sqlite.close()
+  })
+
+  it('migration 010 allows a collision of the same position in different Collections', () => {
+    const sqlite = databaseBeforeMigration010()
+    sqlite.exec(`INSERT INTO cryovial_tube (id, collection_id, barcode, position) VALUES (1, 790, 'C1', '--A01'), (2, 794, 'C2', 'A01')`)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(positions(sqlite, 'cryovial_tube')).toEqual([[1, 'A01'], [2, 'A01']])
+    sqlite.close()
+  })
+
+  it('migration 010 leaves a position it cannot repair as it is, repairs the rest, and the integrity report lists what is left', async () => {
+    const sqlite = databaseBeforeMigration010()
+    sqlite.exec(`INSERT INTO cryovial_tube (id, collection_id, barcode, position) VALUES
+      (1, 1, 'X1', '--A02'), (2, 1, 'X2', 'K01'), (3, 1, 'X3', '--A11'), (4, 1, 'X4', ' NA01 '), (5, 1, 'X5', '--A03'), (6, 1, 'X6', 'A03')`)
+    sqlite.exec(`INSERT INTO micronix_tube (id, collection_id, barcode, position) VALUES
+      (11, 2, 'M1', 'I01'), (12, 2, 'M2', 'A001'), (13, 2, 'M3', 'hello'), (14, 2, 'M4', 'b7')`)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(positions(sqlite, 'cryovial_tube')).toEqual([[1, 'A02'], [2, 'K01'], [3, '--A11'], [4, null], [5, '--A03'], [6, 'A03']])
+    expect(positions(sqlite, 'micronix_tube')).toEqual([[11, 'I01'], [12, 'A001'], [13, 'hello'], [14, 'B07']])
+    const temp = sqlite.prepare(`SELECT name FROM sqlite_temp_master WHERE name LIKE '__migration_010%'`).all()
+    expect(temp).toEqual([])
+    const leftovers = await listContainersWithInvalidGridPosition(drizzle(sqlite, { schema }))
+    expect(leftovers).toEqual([
+      { id: 11, containerType: 'micronix_tube', collectionId: 2, position: 'I01' },
+      { id: 12, containerType: 'micronix_tube', collectionId: 2, position: 'A001' },
+      { id: 13, containerType: 'micronix_tube', collectionId: 2, position: 'hello' },
+      { id: 2, containerType: 'cryovial_tube', collectionId: 1, position: 'K01' },
+      { id: 3, containerType: 'cryovial_tube', collectionId: 1, position: '--A11' },
+      { id: 5, containerType: 'cryovial_tube', collectionId: 1, position: '--A03' },
+    ])
+    sqlite.close()
+  })
+
+  /** A database at version 11 with control batches, ready for migration 012. */
+  function databaseBeforeMigration012(): Database {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (11)')
+    createTablesForLaterMigrations(sqlite)
+    const insert = sqlite.prepare('INSERT INTO control_batch (id, control_definition_id, properties) VALUES (?, 1, ?)')
+    const object = { legacy_study_id: 94, lead_person: 'Ann', nested: { strains: [1, 2] } }
+    insert.run(1, JSON.stringify(object))
+    insert.run(2, JSON.stringify(JSON.stringify(object)))
+    insert.run(3, null)
+    insert.run(4, JSON.stringify(JSON.stringify({})))
+    insert.run(5, '{}')
+    return sqlite
+  }
+
+  function storedProperties(sqlite: Database): Array<[number, string | null, string | null]> {
+    const rows = sqlite
+      .prepare(`SELECT id, properties, json_type(properties) AS type FROM control_batch ORDER BY id`)
+      .all() as Array<{ id: number; properties: string | null; type: string | null }>
+    return rows.map((r) => [r.id, r.properties, r.type])
+  }
+
+  const MIGRATED_PROPERTIES: Array<[number, string | null, string | null]> = [
+    [1, '{"legacy_study_id":94,"lead_person":"Ann","nested":{"strains":[1,2]}}', 'object'],
+    [2, '{"legacy_study_id":94,"lead_person":"Ann","nested":{"strains":[1,2]}}', 'object'],
+    [3, null, null],
+    [4, '{}', 'object'],
+    [5, '{}', 'object'],
+  ]
+
+  it('migration 012 stores double-encoded control batch properties once and leaves single-encoded ones alone', () => {
+    const sqlite = databaseBeforeMigration012()
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    expect(storedProperties(sqlite)).toEqual(MIGRATED_PROPERTIES)
+    sqlite.close()
+  })
+
+  it('migration 012 changes nothing when run again', () => {
+    const sqlite = databaseBeforeMigration012()
+    evolveOperationalSchema(sqlite)
+    const migration = listNumberedMigrations().find((m) => m.version === 12)
+    expect(migration).toBeDefined()
+
+    runSqlMigration(sqlite, 12, migration!.path)
+
+    expect(storedProperties(sqlite)).toEqual(MIGRATED_PROPERTIES)
+    sqlite.close()
+  })
+
+  it('migration 012 leaves a JSON string property that does not hold an object as it is', () => {
+    const sqlite = databaseBeforeMigration012()
+    sqlite.prepare('INSERT INTO control_batch (id, control_definition_id, properties) VALUES (6, 1, ?)').run(JSON.stringify('not json {'))
+    sqlite.prepare('INSERT INTO control_batch (id, control_definition_id, properties) VALUES (7, 1, ?)').run(JSON.stringify('[1,2]'))
+
+    evolveOperationalSchema(sqlite)
+
+    const rows = storedProperties(sqlite)
+    expect(rows.slice(0, 5)).toEqual(MIGRATED_PROPERTIES)
+    expect(rows.slice(5)).toEqual([
+      [6, '"not json {"', 'text'],
+      [7, '"[1,2]"', 'text'],
+    ])
     sqlite.close()
   })
 

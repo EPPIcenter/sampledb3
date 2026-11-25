@@ -3,7 +3,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { z } from 'zod'
 import { logBackendError, logError, type ErrorLogContext } from './error-logger'
 import { getRequestDatabase } from './db-context'
-import { logError as logObservabilityError } from './observability'
+import { logError as logObservabilityError, logWarn } from './observability'
 import { getRequestId } from '../middleware/request-context'
 
 function logPersistFailure(logErr: unknown): void {
@@ -29,6 +29,13 @@ function isZodError(error: unknown): error is z.ZodError {
   return 'issues' in obj && Array.isArray(obj.issues)
 }
 
+/** True when `c.req.json()` rejected a malformed JSON request body. */
+export function isMalformedJsonError(error: unknown): boolean {
+  if (error instanceof SyntaxError) return true
+  if (error instanceof Error && error.cause instanceof SyntaxError) return true
+  return false
+}
+
 /** Readable message for a SQLite UNIQUE / FOREIGN KEY violation, or null for other errors. */
 export function sqliteConstraintConflict(error: Error): string | null {
   const code = (error as { code?: unknown }).code
@@ -46,6 +53,18 @@ export function sqliteConstraintConflict(error: Error): string | null {
     return 'This record is still referenced by other data, or refers to a record that does not exist.'
   }
   return null
+}
+
+/** The `error` a client gets for a 500 in production. */
+export const INTERNAL_ERROR_MESSAGE = 'Internal server error'
+
+function logInternalError(error: unknown, c: Context): void {
+  const err = error instanceof Error ? error : new Error(String(error))
+  logObservabilityError('Unhandled error in request', err, {
+    requestId: getRequestId(c),
+    method: c.req.method,
+    path: new URL(c.req.url).pathname,
+  })
 }
 
 export function handleRouteError(error: unknown, c: Context): Response {
@@ -69,8 +88,29 @@ export function handleRouteError(error: unknown, c: Context): Response {
   
   // Preserve route-specific JSON bodies (search, containers read paths, etc.)
   if (error instanceof RouteError) {
-    logBackendError(database, error, errorContext).catch(logPersistFailure)
+    if (error.status < 500) {
+      // 4xx outcomes (e.g. rejected move, invalid export format) are client errors, not server faults.
+      logError(database, 'backend', 'warning', error.message, error.cause ?? error, errorContext).catch(logPersistFailure)
+    } else if (error.cause !== undefined) {
+      // The body leaves the cause out in production, so log it in full: stdout, and error_logs
+      // under the route's message with the cause's name and stack.
+      const cause = error.cause instanceof Error ? error.cause : new Error(String(error.cause))
+      logInternalError(cause, c)
+      logError(database, 'backend', 'error', error.message, cause, errorContext).catch(logPersistFailure)
+    } else {
+      logInternalError(error, c)
+      logBackendError(database, error, errorContext).catch(logPersistFailure)
+    }
     return c.json(error.body, error.status as ContentfulStatusCode)
+  }
+
+  // Handle malformed JSON request bodies (e.g. c.req.json() SyntaxError)
+  if (isMalformedJsonError(error)) {
+    logError(database, 'backend', 'warning', 'Invalid JSON in request body', error, errorContext).catch(logPersistFailure)
+    return c.json({
+      error: 'Invalid JSON in request body',
+      errorCode: 'VALIDATION_ERROR',
+    }, 400)
   }
 
   // Handle Zod validation errors
@@ -104,6 +144,17 @@ export function handleRouteError(error: unknown, c: Context): Response {
       }, 401)
     }
     
+    // Not persisted to error_logs: an oversized body is rejected so it cannot fill the table.
+    // hono's bodyLimit raises BodyLimitError (not exported) when it finds the excess while the
+    // route reads a body sent without Content-Length.
+    if (error instanceof PayloadTooLargeError || error.name === 'BodyLimitError') {
+      logWarn('Request body too large', { requestId: getRequestId(c), method: c.req.method, path: new URL(url).pathname })
+      return c.json({
+        error: error instanceof PayloadTooLargeError ? error.message : 'Request body too large',
+        errorCode: 'PAYLOAD_TOO_LARGE',
+      }, 413)
+    }
+
     if (error instanceof ExpectedNotFoundError) {
       return c.json({
         error: error.message,
@@ -120,8 +171,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
     }
     
     if (error instanceof ConflictError) {
-      // Log error asynchronously (non-blocking)
-      logBackendError(database, error, errorContext).catch(logPersistFailure)
+      logError(database, 'backend', 'warning', error.message, error, errorContext).catch(logPersistFailure)
       return c.json({
         ...error.fields,
         error: error.message,
@@ -143,8 +193,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
     }
     
     if (error instanceof ValidationError) {
-      // Log error asynchronously (non-blocking)
-      logBackendError(database, error, errorContext).catch(logPersistFailure)
+      logError(database, 'backend', 'warning', error.message, error, errorContext).catch(logPersistFailure)
       return c.json({
         error: error.message,
         details: error.details,
@@ -164,24 +213,27 @@ export function handleRouteError(error: unknown, c: Context): Response {
       }, 409)
     }
 
-    // Log error asynchronously (non-blocking)
+    // Log the full error (stdout and error_logs); in production the client gets only a generic
+    // message, since error.message can carry SQL or other internals.
+    logInternalError(error, c)
     logBackendError(database, error, errorContext).catch(logPersistFailure)
+    if (!isDevelopment) {
+      return c.json({ error: INTERNAL_ERROR_MESSAGE, errorCode: 'INTERNAL_ERROR' }, 500)
+    }
     return c.json({
       error: error.message,
       errorCode: error.name || 'APPLICATION_ERROR',
-      ...(isDevelopment && { 
-        stack: error.stack,
-        details: error.cause 
-      })
+      stack: error.stack,
+      details: error.cause,
     }, 500)
   }
 
   // Handle unknown errors
-  // Log error asynchronously (non-blocking)
+  logInternalError(error, c)
   logBackendError(database, error, errorContext).catch(logPersistFailure)
   const isDevelopment = process.env.NODE_ENV !== 'production'
   return c.json({
-    error: 'Internal server error',
+    error: INTERNAL_ERROR_MESSAGE,
     errorCode: 'INTERNAL_ERROR',
     ...(isDevelopment && { 
       details: String(error)
@@ -247,6 +299,14 @@ export type CollectionDeleteBlockerCode =
   | 'qpcr_wells_link_specimens'
   | 'container_derivation_spans_outside_collection'
 
+/** 413: the request body is over a route's size cap. */
+export class PayloadTooLargeError extends Error {
+  constructor(message: string = 'Request body too large') {
+    super(message)
+    this.name = 'PayloadTooLargeError'
+  }
+}
+
 export class ValidationError extends Error {
   constructor(message: string, public details?: any) {
     super(message)
@@ -261,14 +321,20 @@ export class UnauthorizedError extends Error {
   }
 }
 
-/** Fixed JSON error body for routes that must keep legacy client-visible shapes */
+/**
+ * Fixed JSON error body for routes that must keep legacy client-visible shapes. Pass the caught
+ * error as `cause` when the body stands in for an unexpected failure: `handleRouteError` logs
+ * it, and the body can then leave its message out.
+ */
 export class RouteError extends Error {
   constructor(
     public readonly status: number,
     public readonly body: ErrorResponse & Record<string, unknown>,
+    cause?: unknown,
   ) {
     super(typeof body.error === 'string' ? body.error : 'Route error')
     this.name = 'RouteError'
+    if (cause !== undefined) this.cause = cause
   }
 }
 
@@ -292,6 +358,8 @@ function containersFetchFailedBody(
   message: string,
   cause: unknown,
 ): ErrorResponse & Record<string, unknown> {
+  // The cause's message stays out of production responses, as in handleRouteError's 500s.
+  if (process.env.NODE_ENV === 'production') return { error: message }
   const errorMessage = cause instanceof Error ? cause.message : 'Unknown error'
   return { error: message, details: errorMessage }
 }

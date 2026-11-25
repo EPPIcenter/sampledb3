@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { calendarDaysBetween, shiftCalendarDate } from '../datetime'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { daysBefore, parseStoredTimestamp, shiftCalendarDate, toStoredTimestamp, utcMonthOf } from '../datetime'
 
 describe('shiftCalendarDate', () => {
   it('rolls over months and years', () => {
@@ -17,16 +17,36 @@ describe('shiftCalendarDate', () => {
   })
 })
 
-describe('calendarDaysBetween', () => {
-  it('counts whole calendar days across months, a leap day, and DST changes', () => {
-    expect(calendarDaysBetween('2024-01-15', '2024-01-15')).toBe(0)
-    expect(calendarDaysBetween('2024-02-28', '2024-03-01')).toBe(2)
-    expect(calendarDaysBetween('2024-11-03', '2024-11-04')).toBe(1)
-    expect(calendarDaysBetween('2024-03-10', '2024-03-11')).toBe(1)
+describe('stored timestamp helpers in a non-UTC process time zone', () => {
+  const originalTz = process.env.TZ
+  beforeAll(() => {
+    process.env.TZ = 'America/Los_Angeles'
+  })
+  afterAll(() => {
+    if (originalTz === undefined) delete process.env.TZ
+    else process.env.TZ = originalTz
   })
 
-  it('counts by the date part of a timestamp, whatever the time of day', () => {
-    expect(calendarDaysBetween('2024-11-03T09:00:00', '2024-11-04T10:00:00')).toBe(1)
-    expect(calendarDaysBetween('2024-11-03', '2024-11-04 18:00:00')).toBe(1)
+  it('formats an instant as stored UTC text', () => {
+    expect(toStoredTimestamp(new Date('2024-01-15T23:59:59.999Z'))).toBe('2024-01-15 23:59:59')
+  })
+
+  it('reads zoneless stored text as UTC', () => {
+    expect(parseStoredTimestamp('2024-01-15 10:00:00')?.toISOString()).toBe('2024-01-15T10:00:00.000Z')
+    expect(parseStoredTimestamp('2024-01-15T10:00:00')?.toISOString()).toBe('2024-01-15T10:00:00.000Z')
+    expect(parseStoredTimestamp('2024-01-15')?.toISOString()).toBe('2024-01-15T00:00:00.000Z')
+    expect(parseStoredTimestamp('2024-01-15T10:00:00+02:00')?.toISOString()).toBe('2024-01-15T08:00:00.000Z')
+    expect(parseStoredTimestamp('not a date')).toBeNull()
+  })
+
+  it('gives the UTC month at either side of a month boundary', () => {
+    expect(utcMonthOf('2024-01-31 23:59:59')).toBe('2024-01')
+    expect(utcMonthOf('2024-02-01 00:00:00')).toBe('2024-02')
+    expect(utcMonthOf('2024-02-01')).toBe('2024-02')
+    expect(utcMonthOf('garbage')).toBeNull()
+  })
+
+  it('steps back whole 24-hour days across a DST change', () => {
+    expect(daysBefore(new Date('2024-03-15T12:00:00Z'), 7).toISOString()).toBe('2024-03-08T12:00:00.000Z')
   })
 })

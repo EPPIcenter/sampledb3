@@ -12,12 +12,36 @@ import {
 } from '../../db/schema'
 import type { DatabaseOrTransaction } from '../db-types'
 import { resolveContainerByBarcode } from '../identifier-resolution'
+import { parseCollectionDate } from '../validation'
+import { ValidationError } from '../error-handler'
 import type { DerivationCsvRow } from '../derivations-csv'
 
-function parseNumber(value?: string): number | undefined {
-  if (value == null || value.trim() === '') return undefined
-  const n = Number(value)
-  return Number.isNaN(n) ? undefined : n
+function parsePositiveIntegerId(
+  column: 'parent_container_id' | 'parent_control_batch_id',
+  value?: string,
+): number | undefined {
+  const raw = (value ?? '').trim()
+  if (raw === '') return undefined
+  if (!/^\d+$/.test(raw)) {
+    throw new ValidationError(`Invalid ${column} '${raw}': must be a positive integer`)
+  }
+  const n = Number(raw)
+  if (!Number.isSafeInteger(n) || n <= 0) {
+    throw new ValidationError(`Invalid ${column} '${raw}': must be a positive integer`)
+  }
+  return n
+}
+
+/**
+ * `parent_collection_date` as stored (YYYY-MM-DD), so a date typed M/D/YYYY still matches.
+ * Blank means no date filter; a value that isn't a date is an error rather than no match.
+ */
+function parentCollectionDate(row: DerivationCsvRow): string | undefined {
+  const raw = (row.parent_collection_date ?? '').trim()
+  if (raw === '') return undefined
+  const date = parseCollectionDate(raw)
+  if (!date) throw new ValidationError(`Invalid parent_collection_date '${raw}'. Use YYYY-MM-DD (or M/D/YYYY).`)
+  return date
 }
 
 /**
@@ -25,7 +49,7 @@ function parseNumber(value?: string): number | undefined {
  *
  * Parents may be identified four ways, tried in order:
  * 1. explicit `parent_container_id`
- * 2. `parent_container_barcode` (any container subtype)
+ * 2. `parent_container_barcode` (any container subtype; a barcode on several Containers is an error)
  * 3. control-batch provenance (`parent_control_batch_name` / `_id` + specimen type)
  * 4. study-subject provenance (`parent_study_short_code` + `parent_subject_name` + specimen type)
  *
@@ -36,15 +60,15 @@ export async function resolveParentContainerId(
   row: DerivationCsvRow,
 ): Promise<number> {
   // 1. Explicit ID
-  const explicitId = parseNumber(row.parent_container_id)
-  if (explicitId) {
+  const explicitId = parsePositiveIntegerId('parent_container_id', row.parent_container_id)
+  if (explicitId !== undefined) {
     const existing = await database
       .select({ id: storageContainer.id })
       .from(storageContainer)
       .where(eq(storageContainer.id, explicitId))
       .get()
     if (!existing) {
-      throw new Error(`Parent container id '${explicitId}' not found`)
+      throw new ValidationError(`Parent container id '${explicitId}' not found`)
     }
     return explicitId
   }
@@ -52,32 +76,33 @@ export async function resolveParentContainerId(
   // 2. Barcode across known subtypes
   if (row.parent_container_barcode) {
     const barcode = row.parent_container_barcode.trim()
-    const containerId = await resolveContainerByBarcode(database, barcode)
-    if (containerId != null) return containerId
-    throw new Error(`Parent container barcode '${barcode}' not found`)
+    // Throws AmbiguousBarcodeError rather than draw quantity from whichever match comes first.
+    const match = await resolveContainerByBarcode(database, barcode)
+    if (match) return match.containerId
+    throw new ValidationError(`Parent container barcode '${barcode}' not found`)
   }
+
+  const parentDate = parentCollectionDate(row)
 
   // 3. Control batch identification
   if (row.parent_control_batch_name || row.parent_control_batch_id) {
     if (!row.parent_specimen_type_name) {
-      throw new Error('Control batch parents require parent_specimen_type_name')
+      throw new ValidationError('Control batch parents require parent_specimen_type_name')
     }
 
     // Resolve control batch
     let batchId: number | undefined
-    if (row.parent_control_batch_id) {
-      const batchIdNum = parseNumber(row.parent_control_batch_id)
-      if (batchIdNum) {
-        const batch = await database
-          .select({ id: controlBatch.id })
-          .from(controlBatch)
-          .where(eq(controlBatch.id, batchIdNum))
-          .get()
-        if (!batch) {
-          throw new Error(`Control batch id '${batchIdNum}' not found`)
-        }
-        batchId = batch.id
+    const batchIdNum = parsePositiveIntegerId('parent_control_batch_id', row.parent_control_batch_id)
+    if (batchIdNum !== undefined) {
+      const batch = await database
+        .select({ id: controlBatch.id })
+        .from(controlBatch)
+        .where(eq(controlBatch.id, batchIdNum))
+        .get()
+      if (!batch) {
+        throw new ValidationError(`Control batch id '${batchIdNum}' not found`)
       }
+      batchId = batch.id
     } else if (row.parent_control_batch_name) {
       const batch = await database
         .select({ id: controlBatch.id })
@@ -85,13 +110,13 @@ export async function resolveParentContainerId(
         .where(eq(controlBatch.name, row.parent_control_batch_name.trim()))
         .get()
       if (!batch) {
-        throw new Error(`Control batch '${row.parent_control_batch_name}' not found`)
+        throw new ValidationError(`Control batch '${row.parent_control_batch_name}' not found`)
       }
       batchId = batch.id
     }
 
     if (!batchId) {
-      throw new Error('Unable to resolve control batch')
+      throw new ValidationError('Unable to resolve control batch')
     }
 
     // Find specimen type
@@ -101,7 +126,7 @@ export async function resolveParentContainerId(
       .where(eq(specimenType.name, row.parent_specimen_type_name.trim()))
       .get()
     if (!typeRec) {
-      throw new Error(`Specimen type '${row.parent_specimen_type_name}' not found`)
+      throw new ValidationError(`Specimen type '${row.parent_specimen_type_name}' not found`)
     }
 
     // Find specimen in batch
@@ -114,16 +139,13 @@ export async function resolveParentContainerId(
     const candidates = await database
       .select({ id: specimen.id })
       .from(specimen)
-      .where(row.parent_collection_date
-        ? and(where, eq(specimen.collectionDate, row.parent_collection_date.trim())) as any
-        : where,
-      )
+      .where(parentDate ? and(where, eq(specimen.collectionDate, parentDate)) as any : where)
 
     if (candidates.length === 0) {
-      throw new Error(`No ${row.parent_specimen_type_name} specimen found in control batch '${row.parent_control_batch_name || row.parent_control_batch_id}'`)
+      throw new ValidationError(`No ${row.parent_specimen_type_name} specimen found in control batch '${row.parent_control_batch_name || row.parent_control_batch_id}'`)
     }
-    if (candidates.length > 1 && !row.parent_collection_date) {
-      throw new Error(`Multiple ${row.parent_specimen_type_name} specimens found in batch; add parent_collection_date to disambiguate`)
+    if (candidates.length > 1 && !parentDate) {
+      throw new ValidationError(`Multiple ${row.parent_specimen_type_name} specimens found in batch; add parent_collection_date to disambiguate`)
     }
 
     const specId = candidates[0].id
@@ -140,7 +162,7 @@ export async function resolveParentContainerId(
         .get()
 
       if (!parentContainer) {
-        throw new Error(`No paper container found for ${row.parent_specimen_type_name} specimen in control batch`)
+        throw new ValidationError(`No paper container found for ${row.parent_specimen_type_name} specimen in control batch`)
       }
 
       return parentContainer.id
@@ -148,7 +170,7 @@ export async function resolveParentContainerId(
 
     if (containerType === 'cryovial_tube') {
       if (!row.parent_box_barcode || !row.parent_position) {
-        throw new Error('Cryovial control parents require parent_box_barcode and parent_position')
+        throw new ValidationError('Cryovial control parents require parent_box_barcode and parent_position')
       }
       const box = await database
         .select({ id: cryovialBox.id })
@@ -156,7 +178,7 @@ export async function resolveParentContainerId(
         .where(eq(cryovialBox.barcode, row.parent_box_barcode.trim()))
         .get()
       if (!box) {
-        throw new Error(`Cryovial box barcode '${row.parent_box_barcode}' not found`)
+        throw new ValidationError(`Cryovial box barcode '${row.parent_box_barcode}' not found`)
       }
       const tube = await database
         .select({ id: cryovialTube.id })
@@ -167,7 +189,7 @@ export async function resolveParentContainerId(
         ) as any)
         .get()
       if (!tube) {
-        throw new Error(`Cryovial tube not found at position '${row.parent_position}' in box '${row.parent_box_barcode}'`)
+        throw new ValidationError(`Cryovial tube not found at position '${row.parent_position}' in box '${row.parent_box_barcode}'`)
       }
       // Verify tube belongs to the specimen
       const container = await database
@@ -176,7 +198,7 @@ export async function resolveParentContainerId(
         .where(eq(storageContainer.id, tube.id))
         .get()
       if (!container || container.specimenId !== specId) {
-        throw new Error(`Cryovial tube at position '${row.parent_position}' does not belong to the specified control batch specimen`)
+        throw new ValidationError(`Cryovial tube at position '${row.parent_position}' does not belong to the specified control batch specimen`)
       }
       return tube.id
     }
@@ -185,12 +207,12 @@ export async function resolveParentContainerId(
   const type = row.parent_container_type
 
   if (type === 'micronix_tube') {
-    throw new Error('Micronix parent containers require parent_container_barcode or parent_container_id')
+    throw new ValidationError('Micronix parent containers require parent_container_barcode or parent_container_id')
   }
 
   if (type === 'cryovial_tube') {
     if (!row.parent_box_barcode || !row.parent_position) {
-      throw new Error('Cryovial parents require parent_box_barcode and parent_position')
+      throw new ValidationError('Cryovial parents require parent_box_barcode and parent_position')
     }
     const box = await database
       .select({ id: cryovialBox.id })
@@ -198,7 +220,7 @@ export async function resolveParentContainerId(
       .where(eq(cryovialBox.barcode, row.parent_box_barcode.trim()))
       .get()
     if (!box) {
-      throw new Error(`Cryovial box barcode '${row.parent_box_barcode}' not found`)
+      throw new ValidationError(`Cryovial box barcode '${row.parent_box_barcode}' not found`)
     }
     const tube = await database
       .select({ id: cryovialTube.id })
@@ -209,7 +231,7 @@ export async function resolveParentContainerId(
       ) as any)
       .get()
     if (!tube) {
-      throw new Error(`Cryovial tube not found at position '${row.parent_position}' in box '${row.parent_box_barcode}'`)
+      throw new ValidationError(`Cryovial tube not found at position '${row.parent_position}' in box '${row.parent_box_barcode}'`)
     }
     return tube.id
   }
@@ -218,11 +240,11 @@ export async function resolveParentContainerId(
     // Check if it's a control batch or study subject
     if (row.parent_control_batch_name || row.parent_control_batch_id) {
       // Already handled above
-      throw new Error('Control batch paper parents should be resolved via control batch logic')
+      throw new ValidationError('Control batch paper parents should be resolved via control batch logic')
     }
 
     if (!row.parent_study_short_code || !row.parent_subject_name || !row.parent_specimen_type_name) {
-      throw new Error('Paper parents require either control batch identification (parent_control_batch_name + parent_specimen_type_name) or study subject identification (parent_study_short_code + parent_subject_name + parent_specimen_type_name)')
+      throw new ValidationError('Paper parents require either control batch identification (parent_control_batch_name + parent_specimen_type_name) or study subject identification (parent_study_short_code + parent_subject_name + parent_specimen_type_name)')
     }
 
     const studyRec = await database
@@ -231,7 +253,7 @@ export async function resolveParentContainerId(
       .where(eq(study.shortCode, row.parent_study_short_code.trim()))
       .get()
     if (!studyRec) {
-      throw new Error(`Study short code '${row.parent_study_short_code}' not found`)
+      throw new ValidationError(`Study short code '${row.parent_study_short_code}' not found`)
     }
 
     const subjectRec = await database
@@ -243,7 +265,7 @@ export async function resolveParentContainerId(
       ) as any)
       .get()
     if (!subjectRec) {
-      throw new Error(`Subject '${row.parent_subject_name}' not found in study '${row.parent_study_short_code}'`)
+      throw new ValidationError(`Subject '${row.parent_subject_name}' not found in study '${row.parent_study_short_code}'`)
     }
 
     const typeRec = await database
@@ -252,7 +274,7 @@ export async function resolveParentContainerId(
       .where(eq(specimenType.name, row.parent_specimen_type_name.trim()))
       .get()
     if (!typeRec) {
-      throw new Error(`Specimen type '${row.parent_specimen_type_name}' not found`)
+      throw new ValidationError(`Specimen type '${row.parent_specimen_type_name}' not found`)
     }
 
     const where = and(
@@ -263,16 +285,13 @@ export async function resolveParentContainerId(
     const candidates = await database
       .select({ id: specimen.id })
       .from(specimen)
-      .where(row.parent_collection_date
-        ? and(where, eq(specimen.collectionDate, row.parent_collection_date.trim())) as any
-        : where,
-      )
+      .where(parentDate ? and(where, eq(specimen.collectionDate, parentDate)) as any : where)
 
     if (candidates.length === 0) {
-      throw new Error('No matching parent specimen/paper container found for subject/specimen criteria')
+      throw new ValidationError('No matching parent specimen/paper container found for subject/specimen criteria')
     }
     if (candidates.length > 1) {
-      throw new Error('Multiple candidate parent specimens found; add parent_collection_date or use a more specific identifier')
+      throw new ValidationError('Multiple candidate parent specimens found; add parent_collection_date or use a more specific identifier')
     }
 
     const specId = candidates[0].id
@@ -285,11 +304,11 @@ export async function resolveParentContainerId(
       .get()
 
     if (!parentContainer) {
-      throw new Error('No paper container found for resolved parent specimen')
+      throw new ValidationError('No paper container found for resolved parent specimen')
     }
 
     return parentContainer.id
   }
 
-  throw new Error('Unable to resolve parent container; provide parent_container_id, parent_container_barcode, or type-specific parent columns')
+  throw new ValidationError('Unable to resolve parent container; provide parent_container_id, parent_container_barcode, or type-specific parent columns')
 }

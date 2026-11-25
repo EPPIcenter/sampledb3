@@ -16,7 +16,7 @@ import {
 } from '../lib/control-name-generation'
 import { ConflictError, handleRouteError, ValidationError } from '../lib/error-handler'
 import type { BloodControlProperties } from '../types/properties'
-import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { deleteBloodControlBatch, deleteSpecimenFromBatch } from '../lib/controls/batch-delete'
@@ -45,6 +45,7 @@ import {
 } from '../lib/controls/control-read'
 import {
   strainCompositionEntrySchema,
+  normalizeStoredStrains,
   resolveStrainComposition,
   findBloodControlDefinitionByComposition,
   DuplicateControlCompositionError,
@@ -62,6 +63,7 @@ export function createControlsRoutes(database: Database): Hono {
   const controls = new Hono()
   const authMiddleware = createAuthMiddleware(database)
   const memberMiddleware = createMemberMiddleware(database)
+  const adminMiddleware = createAdminMiddleware(database)
 
   // --- Control Batches ---
 
@@ -116,7 +118,14 @@ controls.patch('/batches/:id', memberMiddleware, async (c) => {
     if (data.name) {
       const validation = await validateControlBatchName(dbInstance, data.name, id)
       if (!validation.valid) {
-        return c.json({ error: validation.error, suggestion: validation.suggestion }, 400)
+        if (validation.conflict) {
+          throw new ConflictError(
+            validation.error || 'Batch name must be unique',
+            undefined,
+            validation.suggestion !== undefined ? { suggestion: validation.suggestion } : {},
+          )
+        }
+        throw new ValidationError(validation.error || 'Invalid batch name')
       }
     }
 
@@ -141,8 +150,8 @@ controls.patch('/batches/:id', memberMiddleware, async (c) => {
   }
 })
 
-// Delete batch and all associated data
-controls.delete('/batches/:id', memberMiddleware, async (c) => {
+// Delete batch and all associated data (admin-only: CONTEXT.md, Roles)
+controls.delete('/batches/:id', adminMiddleware, async (c) => {
   const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
@@ -403,7 +412,7 @@ controls.post('/definitions/bulk', memberMiddleware, async (c) => {
       const customName = providedNames[i]?.trim()
       if (customName) {
         if (await isControlDefinitionNameTaken(dbInstance, customName)) {
-          return c.json({ error: `Control definition name "${customName}" is already in use` }, 400)
+          throw new ConflictError(`Control definition name "${customName}" is already in use`)
         }
         finalName = customName
       } else {
@@ -540,13 +549,25 @@ controls.patch('/:id', memberMiddleware, async (c) => {
     }
 
     const body = await c.req.json()
+    const storedStrainEntrySchema = z.object({
+      id: z.number().int(),
+      name: z.string().optional(),
+      percentage: z.number().min(0).max(100),
+    })
+    const propertiesSchema = z
+      .object({
+        strains: z.array(storedStrainEntrySchema).optional(),
+        targetDensity: z.number().optional(),
+        targetDensityUnitId: z.number().int().nullable().optional(),
+      })
+      .passthrough()
     const schema = z.object({
       name: z.string().min(1).optional(),
       controlType: z.string().optional(),
       targetDensity: z.number().optional(),
-      targetDensityUnitId: z.number().int().optional(),
+      targetDensityUnitId: z.number().int().nullable().optional(),
       strains: z.array(strainCompositionEntrySchema).optional(),
-      properties: z.record(z.string(), z.any()).optional(),
+      properties: propertiesSchema.optional(),
     })
 
     const data = schema.parse(body)
@@ -575,10 +596,15 @@ controls.patch('/:id', memberMiddleware, async (c) => {
       newProps.targetDensity = targetDensity
     }
     if (targetDensityUnitId !== undefined) {
-      newProps.targetDensityUnitId = targetDensityUnitId
-      const unitRecord = await dbInstance.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
-      if (unitRecord) {
-        newProps.targetDensityUnitSymbol = unitRecord.symbol
+      if (targetDensityUnitId === null) {
+        delete newProps.targetDensityUnitId
+        delete newProps.targetDensityUnitSymbol
+      } else {
+        newProps.targetDensityUnitId = targetDensityUnitId
+        const unitRecord = await dbInstance.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
+        if (unitRecord) {
+          newProps.targetDensityUnitSymbol = unitRecord.symbol
+        }
       }
     }
 
@@ -597,15 +623,16 @@ controls.patch('/:id', memberMiddleware, async (c) => {
       targetDensityUnitId !== undefined ||
       (properties !== undefined && compositionKeys.some((key) => key in properties))
     if (setsComposition) {
-      const storedStrains = Array.isArray(newProps.strains)
-        ? (newProps.strains as Array<{ id: number; percentage: number }>)
-        : []
+      const storedStrains = normalizeStoredStrains(newProps.strains).filter(
+        (strain): strain is { id: number; percentage: number } =>
+          typeof strain.id === 'number' && typeof strain.percentage === 'number',
+      )
       const duplicate = await findBloodControlDefinitionByComposition(
         dbInstance,
         {
           strains: storedStrains.map((strain) => ({ strainId: strain.id, percentage: strain.percentage })),
-          targetDensity: newProps.targetDensity as number | undefined,
-          targetDensityUnitId: newProps.targetDensityUnitId as number | undefined,
+          targetDensity: newProps.targetDensity as number | null | undefined,
+          targetDensityUnitId: newProps.targetDensityUnitId as number | null | undefined,
         },
         { excludeId: id },
       )

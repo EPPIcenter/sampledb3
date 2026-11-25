@@ -87,6 +87,12 @@ export default function CollectionSelectOrCreate({
   const [modalLocationId, setModalLocationId] = useState<number | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // The blur delay must not outlive the component: its callback sets state.
+  useEffect(() => () => {
+    if (blurTimerRef.current !== null) clearTimeout(blurTimerRef.current)
+  }, [])
 
   const query = inputText.trim().toLowerCase()
   const filtered = useMemo(
@@ -111,7 +117,11 @@ export default function CollectionSelectOrCreate({
   const resetHighlight = () => setHighlightIndex(0)
 
   const handleBlur = () => {
-    setTimeout(() => setDropdownOpen(false), 150)
+    if (blurTimerRef.current !== null) clearTimeout(blurTimerRef.current)
+    blurTimerRef.current = setTimeout(() => {
+      blurTimerRef.current = null
+      setDropdownOpen(false)
+    }, 150)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

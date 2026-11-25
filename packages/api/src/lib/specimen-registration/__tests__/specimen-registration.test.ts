@@ -14,9 +14,12 @@ import {
   createTestUnit,
   createTestSpecimenTypeContainerType,
   createTestContainerTypeUnit,
+  createTestStorageContainer,
+  createTestMicronixTube,
 } from '../../../__tests__/helpers/factories'
 import type { Database } from '../../../db/client'
 import {
+  cryovialTube,
   micronixPlate,
   micronixTube,
   paper,
@@ -25,8 +28,10 @@ import {
   storageContainer,
 } from '../../../db/schema'
 import { setContainerDefaults } from '../../settings'
+import { clearDefaultsCache } from '../../defaults'
 import {
   checkSpecimenRegistration,
+  isStoredDataClash,
   registerSpecimens,
   SpecimenRegistrationError,
   type RegistrationContainer,
@@ -266,6 +271,8 @@ describe('Specimen registration', () => {
         },
         expect.objectContaining({ entryIndex: 1, containerIndex: 0, field: 'collection' }),
       ])
+      expect(isStoredDataClash(error.errors[0])).toBe(true)
+      expect(isStoredDataClash(error.errors[1])).toBe(false)
       expect(await count(micronixPlate)).toBe(2)
     })
 
@@ -285,6 +292,7 @@ describe('Specimen registration', () => {
             "A new micronix plate with barcode 'NEW' and no name would be named 'NEW', but this request already creates a micronix plate with that name. Give the new micronix plate a name.",
         },
       ])
+      expect(isStoredDataClash(error.errors[0])).toBe(false)
     })
 
     it('creates a plate from a barcode alone, named after the barcode', async () => {
@@ -294,6 +302,54 @@ describe('Specimen registration', () => {
       ])
 
       expect(result.collectionsCreated).toEqual([{ type: 'micronix_plate', id: expect.any(Number), name: 'ONLY-BC' }])
+    })
+
+    it('treats a whitespace-only name as omitted, naming the new plate after its trimmed barcode and refusing if that name is taken', async () => {
+      const created = await registerSpecimens(db, [
+        entry([tube('T1', { name: '   ', barcode: ' BC-1 ', locationId, position: 'A01' })]),
+      ])
+
+      expect(created.collectionsCreated).toEqual([{ type: 'micronix_plate', id: expect.any(Number), name: 'BC-1' }])
+      const plate = db.select().from(micronixPlate).where(eq(micronixPlate.id, created.collectionsCreated[0].id)).get()
+      expect(plate).toMatchObject({ name: 'BC-1', barcode: 'BC-1' })
+
+      // When a plate named 'BC-TAKEN' exists (without barcode), a blank name must trigger the barcode-as-name check.
+      await createTestMicronixPlate(db, { name: 'BC-TAKEN', locationId })
+      const error = await rejection([
+        entry([tube('T2', { name: '   ', barcode: 'BC-TAKEN', locationId, position: 'A02' })], '2024-02-01'),
+      ])
+      expect(error.status).toBe(400)
+      expect(error.errors[0].message).toContain("would be named 'BC-TAKEN', but a micronix plate with that name already exists")
+      expect(isStoredDataClash(error.errors[0])).toBe(true)
+    })
+
+    it('treats a whitespace-only barcode as omitted instead of storing a blank barcode', async () => {
+      const result = await registerSpecimens(db, [
+        entry([tube('T1', { name: ' NEW ', barcode: '   ', locationId, position: 'A01' })]),
+      ])
+
+      expect(result.collectionsCreated).toEqual([{ type: 'micronix_plate', id: expect.any(Number), name: 'NEW' }])
+      const plate = db.select().from(micronixPlate).where(eq(micronixPlate.id, result.collectionsCreated[0].id)).get()
+      expect(plate).toMatchObject({ name: 'NEW', barcode: null })
+    })
+
+    it('trims surrounding whitespace on Collection names and barcodes before lookup and storage', async () => {
+      const result = await registerSpecimens(db, [
+        entry([tube('T1', { name: ' P1 ', position: 'A02' })]),
+        entry([paperOn(' Sheet-Trim ', 's1')], '2024-02-01'),
+        entry(
+          [{ containerType: 'paper', sublabel: 's2', collection: { type: 'sheet', name: 'Sheet-Trim', parent: { type: 'box', name: ' PaperBox ' } } }],
+          '2024-02-02',
+        ),
+      ])
+
+      // Reused existing P1 and created one PaperBox + one Sheet-Trim (trimmed).
+      expect(result.collectionsCreated.map((c) => [c.type, c.name])).toEqual([
+        ['box', 'PaperBox'],
+        ['sheet', 'Sheet-Trim'],
+      ])
+      const sheets = await db.select().from(sheet)
+      expect(sheets.map((s) => s.name)).toEqual(['Sheet-Trim'])
     })
 
     it('refuses to create a plate without a location', async () => {
@@ -369,6 +425,8 @@ describe('Specimen registration', () => {
         [0, "Sublabel 's1' is already used on this sheet."],
         [2, "Sublabel 's2' is used more than once on this sheet in this request."],
       ])
+      expect(isStoredDataClash(error.errors[0])).toBe(true)
+      expect(isStoredDataClash(error.errors[1])).toBe(false)
     })
 
     it('does not create the box named beside a sheet id the sheet is not in', async () => {
@@ -408,12 +466,96 @@ describe('Specimen registration', () => {
     )
   })
 
+  describe('tube barcodes across types', () => {
+    const cryovial = (barcode: string, position: string): RegistrationContainer => ({
+      containerType: 'cryovial_tube',
+      barcode,
+      collection: { type: 'cryovial_box', name: 'CB1', locationId, position },
+    })
+
+    it('rejects a micronix barcode a cryovial tube already has, ignoring case', async () => {
+      await registerSpecimens(db, [entry([cryovial('CV-9', 'A01')])])
+
+      const error = await rejection([entry([tube('cv-9', { name: 'P1', position: 'A01' })])])
+
+      expect(error.errors).toEqual([
+        { entryIndex: 0, containerIndex: 0, field: 'barcode', message: "Barcode 'cv-9' already exists as 'CV-9'. Use a different barcode." },
+      ])
+      expect(await count(storageContainer)).toBe(1)
+    })
+
+    it('rejects a cryovial barcode a micronix tube already has', async () => {
+      await registerSpecimens(db, [entry([tube('MX-9', { name: 'P1', position: 'A01' })])])
+
+      const error = await rejection([entry([cryovial('MX-9', 'A01')])])
+
+      expect(error.errors).toEqual([
+        { entryIndex: 0, containerIndex: 0, field: 'barcode', message: "Barcode 'MX-9' already exists. Use a different barcode." },
+      ])
+    })
+
+    it('rejects one barcode on two tube types in the same request', async () => {
+      const error = await rejection([entry([tube('X1', { name: 'P1', position: 'A01' }), cryovial('x1', 'A01')])])
+
+      expect(error.errors).toEqual([
+        {
+          entryIndex: 0,
+          containerIndex: 1,
+          field: 'barcode',
+          message: "Barcode 'x1' is used more than once in this request. Each barcode must be unique.",
+        },
+      ])
+    })
+  })
+
   it('keys a missing position to the position field', async () => {
     const error = await rejection([entry([tube('T1', { name: 'P1' })])])
 
     expect(error.errors).toEqual([
       { entryIndex: 0, containerIndex: 0, field: 'position', message: 'Position is required for micronix tubes (e.g. A01).' },
     ])
+  })
+
+  describe('Grid position rule', () => {
+    it.each([
+      { position: 'Z99', message: 'Position "Z99" is outside a micronix plate (A01–H12)' },
+      { position: 'A13', message: 'Position "A13" is outside a micronix plate (A01–H12)' },
+      { position: 'I01', message: 'Position "I01" is outside a micronix plate (A01–H12)' },
+      { position: 'hello world', message: expect.stringContaining('Position "hello world" is not a grid position') },
+      { position: 'NA01', message: expect.stringContaining('Position "NA01" is not a grid position') },
+    ])('rejects $position on a plate and writes nothing', async ({ position, message }) => {
+      const error = await rejection([entry([tube('T1', { name: 'P1', position })])])
+
+      expect(error.errors).toEqual([{ entryIndex: 0, containerIndex: 0, field: 'position', message }])
+      expect(await count(specimen)).toBe(0)
+      expect(await count(storageContainer)).toBe(0)
+    })
+
+    it('accepts J10 in a cryovial box and rejects K01', async () => {
+      const box = (barcode: string, position: string): RegistrationContainer => ({
+        containerType: 'cryovial_tube',
+        barcode,
+        collection: { type: 'cryovial_box', name: 'BOX', locationId, position },
+      })
+      const error = await rejection([entry([box('C1', 'j10'), box('C2', 'K01')])])
+      expect(error.errors).toEqual([
+        { entryIndex: 0, containerIndex: 1, field: 'position', message: 'Position "K01" is outside a cryovial box (A01–J10)' },
+      ])
+
+      await registerSpecimens(db, [entry([box('C1', 'j10')])])
+      const [row] = await db.select().from(cryovialTube)
+      expect(row?.position).toBe('J10')
+    })
+
+    it('registers into a plate that holds a legacy malformed position', async () => {
+      const container = await createTestStorageContainer(db, { unitId })
+      await createTestMicronixTube(db, { containerId: container.id, collectionId: plate.id, barcode: 'LEGACY', position: '--A01' })
+
+      await registerSpecimens(db, [entry([tube('T1', { name: 'P1', position: 'A1' })])])
+
+      const rows = await db.select().from(micronixTube)
+      expect(Object.fromEntries(rows.map((r) => [r.barcode, r.position]))).toEqual({ LEGACY: '--A01', T1: 'A01' })
+    })
   })
 
   it('reports a blank Micronix tube barcode as a validation error', async () => {
@@ -439,6 +581,45 @@ describe('Specimen registration', () => {
     const error = await rejection([entry([{ ...tube('T1', { name: 'P1', position: 'A01' }), unitId: other.id }])])
 
     expect(error.errors[0]).toMatchObject({ field: 'unitId', message: expect.stringContaining("Unit 'mg' is not allowed") })
+  })
+
+  it('reports missing container defaults as a unitId validation problem', async () => {
+    sqlite.exec('DELETE FROM settings')
+    clearDefaultsCache(db)
+
+    const error = await rejection([entry([tube('T1', { name: 'P1', position: 'A01' })])])
+
+    expect(error.errors).toEqual([
+      expect.objectContaining({ field: 'unitId', message: expect.stringContaining('Container defaults are not configured') }),
+    ])
+  })
+
+  it('propagates a database error during unit/default lookup instead of turning it into a unitId validation problem', async () => {
+    clearDefaultsCache(db)
+    sqlite.exec('DROP TABLE container_type_unit')
+
+    const caught = await registerSpecimens(db, [entry([tube('T1', { name: 'P1', position: 'A01' })])]).then(
+      () => null,
+      (e: unknown) => e,
+    )
+
+    expect(caught).toBeInstanceOf(Error)
+    expect(caught).not.toBeInstanceOf(SpecimenRegistrationError)
+  })
+
+  it('rejects a quantity that is not finite and keys it to its own field', async () => {
+    const error = await rejection([
+      entry([
+        { ...tube('T1', { name: 'P1', position: 'A01' }), totalQuantity: Infinity },
+        { ...tube('T2', { name: 'P1', position: 'A02' }), totalQuantity: 5, remainingQuantity: Infinity },
+      ]),
+    ])
+
+    expect(error.errors).toEqual([
+      { entryIndex: 0, containerIndex: 0, field: 'totalQuantity', message: 'Total quantity must be a finite number (got Infinity).' },
+      { entryIndex: 0, containerIndex: 1, field: 'remainingQuantity', message: 'Remaining quantity must be a finite number (got Infinity).' },
+    ])
+    expect(await count(storageContainer)).toBe(0)
   })
 
   describe('checkSpecimenRegistration', () => {

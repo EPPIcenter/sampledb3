@@ -262,19 +262,19 @@ export default function ContainerRegistration({
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {}
 
-    if (!formData.collectionName && !formData.collectionBarcode) {
+    if (!formData.collectionName?.trim() && !formData.collectionBarcode?.trim()) {
       errors.collection = 'Collection name or barcode is required'
     }
 
-    if (containerType === 'micronix_tube' && !formData.barcode) {
+    if (containerType === 'micronix_tube' && !formData.barcode?.trim()) {
       errors.barcode = 'Barcode is required for micronix tubes'
     }
 
-    if ((containerType === 'micronix_tube' || containerType === 'cryovial_tube') && !formData.position) {
+    if ((containerType === 'micronix_tube' || containerType === 'cryovial_tube') && !formData.position?.trim()) {
       errors.position = 'Position is required for ' + (containerType === 'micronix_tube' ? 'micronix tubes' : 'cryovial tubes')
     }
 
-    if (containerType === 'paper' && !formData.sheetName) {
+    if (containerType === 'paper' && !formData.sheetName?.trim()) {
       errors.sheetName = 'Sheet name is required for papers'
     }
 

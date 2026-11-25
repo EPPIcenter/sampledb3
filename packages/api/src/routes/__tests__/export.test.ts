@@ -6,7 +6,7 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createExportRoutes } from '../export'
-import { errorLogs, specimen as specimenTable, study as studyTable, unit as unitTable } from '../../db/schema'
+import { errorLogs, micronixPlate as micronixPlateTable, specimen as specimenTable, study as studyTable, unit as unitTable } from '../../db/schema'
 import { SQL_IN_CHUNK_SIZE } from '../../lib/sql-helpers'
 import * as specimensCsv from '../../lib/export/specimens-csv'
 import {
@@ -123,6 +123,54 @@ describe('Export API', () => {
       await new Promise((resolve) => setTimeout(resolve, 50))
       const rowsAfter = await ctx.db.select().from(errorLogs)
       expect(rowsAfter.length).toBe(rowsBefore.length)
+    })
+
+    it.each(['not json', '{"a":1}', '"barcode"'])('returns 400 for columns=%s', async (columns) => {
+      await seedTypedContainers('GCOL', { cryovial: false })
+
+      const res = await ctx.request(`/api/export/containers?study=GCOL&format=csv&columns=${encodeURIComponent(columns)}`)
+
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain('Invalid columns')
+    })
+
+    it('exports the columns a JSON array names', async () => {
+      await seedTypedContainers('GCOK', { cryovial: false })
+
+      const res = await ctx.request(
+        `/api/export/containers?study=GCOK&format=csv&csv_bom=false&csv_line_ending=LF&columns=${encodeURIComponent('["barcode"]')}`,
+      )
+
+      expect(res.status).toBe(200)
+    })
+
+    it.each([
+      ['subject_ids', 'abc'],
+      ['specimen_type_ids', '1x'],
+      ['tag_ids', 'red'],
+    ])('returns 400 for a non-numeric %s=%s', async (param, value) => {
+      await seedTypedContainers('GIDS', { cryovial: false })
+
+      const res = await ctx.request(`/api/export/containers?study=GIDS&count_only=true&${param}=${value}`)
+
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain(param)
+    })
+
+    it.each([
+      ['date_from', 'garbage'],
+      ['date_to', '5/7/2024'],
+      ['date_from', '2024'],
+      ['created_from', 'yesterday'],
+    ])('returns 400 for %s=%s', async (param, value) => {
+      await seedTypedContainers('GDATE', { cryovial: false })
+
+      const res = await ctx.request(`/api/export/containers?study=GDATE&count_only=true&${param}=${encodeURIComponent(value)}`, {
+        method: 'GET',
+      })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ errorCode: 'VALIDATION_ERROR' })
     })
 
     it('returns 401 when not authenticated', async () => {
@@ -442,6 +490,8 @@ describe('Export API', () => {
       ['an empty entry', { Subj1: {} }],
       ['a non-object map', 'Subj1'],
       ['a non-string date', { Subj1: { exact: 20240115 } }],
+      ['an exact date that is not YYYY-MM-DD', { Subj1: { exact: '1/15/2024' } }],
+      ['a range bound that is not a date', { Subj1: [{ from: 'garbage' }] }],
     ])('rejects %s with 400', async (_label, subjectDates) => {
       await seedSubjectWithSpecimen()
 
@@ -512,6 +562,27 @@ describe('Export API', () => {
       expect(typeof data.data).toBe('string')
       expect(data.summary).toBeDefined()
     })
+
+    it.each([
+      ['an entry collection_date', { collection_date: '1/15/2024' }, {}],
+      ['an entry date_to', { date_to: 'garbage' }, {}],
+      ['the global date_from', {}, { date_from: '2024' }],
+    ])('returns 400 for a malformed date in %s', async (_label, entryDates, globalDates) => {
+      const study = await createTestStudy(ctx.db, { title: 'Multi', shortCode: 'MULTI2' })
+      await createTestStudySubject(ctx.db, { studyId: study.id, name: 'Alice' })
+
+      const res = await ctx.request('/api/export/containers/multi-study', {
+        method: 'POST',
+        json: {
+          entries: [{ study_short_code: 'MULTI2', subject_name: 'Alice', ...entryDates }],
+          ...globalDates,
+          count_only: true,
+        },
+      })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ errorCode: 'VALIDATION_ERROR' })
+    })
   })
 
   describe('POST /api/export/containers/by-barcodes', () => {
@@ -535,6 +606,84 @@ describe('Export API', () => {
       expect(data.filename).toMatch(/barcode_export.*\.json$/)
       expect(Array.isArray(data.data)).toBe(true)
       expect(data.summary?.barcodes_not_found).toContain('UNKNOWN-BARCODE')
+    })
+  })
+
+  describe('JSON export keeps every column', () => {
+    /** One Subject with a placed micronix tube and an unplaced Container, which has no position. */
+    async function seedPlacedAndUnplaced(shortCode: string) {
+      const { micronixId } = await seedTypedContainers(shortCode, { cryovial: false })
+      const [spec] = await ctx.db.select().from(specimenTable).limit(1)
+      const [unit] = await ctx.db.select().from(unitTable).limit(1)
+      const unplaced = await createTestStorageContainer(ctx.db, { specimenId: spec.id, unitId: unit.id })
+      return { micronixId, unplacedId: unplaced.id }
+    }
+
+    /** Every row has the same keys, including columns that are empty on some or all rows. */
+    function expectSameKeys(rows: Array<Record<string, unknown>>) {
+      expect(rows.length).toBe(2)
+      const keys = Object.keys(rows[0]).sort()
+      expect(keys).toEqual(expect.arrayContaining(['position', 'comment', 'sheet_name']))
+      for (const row of rows) expect(Object.keys(row).sort()).toEqual(keys)
+    }
+
+    it('gives every row of a GET JSON export the same keys, with null for an empty value', async () => {
+      const { unplacedId } = await seedPlacedAndUnplaced('JKEYS')
+
+      const res = await ctx.request('/api/export/containers?study=JKEYS&format=json')
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { containers: Array<Record<string, unknown>> }
+
+      expectSameKeys(body.containers)
+      const unplaced = body.containers.find((row) => row.container_id === unplacedId)
+      expect(unplaced?.position).toBeNull()
+    })
+
+    it('gives every row of a POST JSON export the same keys', async () => {
+      await seedPlacedAndUnplaced('PKEYS')
+
+      const res = await ctx.request('/api/export/containers', {
+        method: 'POST',
+        json: { study: 'PKEYS', subject_names: ['Subj1'], format: 'json' },
+      })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { data: Array<Record<string, unknown>> }
+
+      expectSameKeys(body.data)
+    })
+
+    it('gives every row of a multi-study JSON export the same keys', async () => {
+      await seedPlacedAndUnplaced('MKEYS')
+
+      const res = await ctx.request('/api/export/containers/multi-study', {
+        method: 'POST',
+        json: { entries: [{ study_short_code: 'MKEYS', subject_name: 'Subj1' }], format: 'json' },
+      })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { data: Array<Record<string, unknown>> }
+
+      expectSameKeys(body.data)
+    })
+
+    it('gives every row of a barcode JSON export the same keys', async () => {
+      await seedPlacedAndUnplaced('BKEYS')
+      const otherStudy = await createTestStudy(ctx.db, { title: 'Other', shortCode: 'BKEYS2' })
+      const subject = await createTestStudySubject(ctx.db, { studyId: otherStudy.id, name: 'Subj2' })
+      const [firstSpecimen] = await ctx.db.select().from(specimenTable).limit(1)
+      const spec = await createTestSpecimen(ctx.db, firstSpecimen.specimenTypeId, { studySubjectId: subject.id })
+      const [unit] = await ctx.db.select().from(unitTable).limit(1)
+      const container = await createTestStorageContainer(ctx.db, { specimenId: spec.id, unitId: unit.id })
+      const [plate] = await ctx.db.select().from(micronixPlateTable).limit(1)
+      await createTestMicronixTube(ctx.db, { containerId: container.id, collectionId: plate.id, barcode: 'BKEYS-B' })
+
+      const res = await ctx.request('/api/export/containers/by-barcodes', {
+        method: 'POST',
+        json: { barcodes: ['BKEYS-MX', 'BKEYS-B'], format: 'json' },
+      })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { data: Array<Record<string, unknown>> }
+
+      expectSameKeys(body.data)
     })
   })
 
@@ -620,6 +769,91 @@ describe('Export API', () => {
       expect(rows.length).toBeGreaterThanOrEqual(1)
 
       spy.mockRestore()
+    })
+
+    it('returns 400 instead of 500 when a POST export body is malformed JSON', async () => {
+      const res = await ctx.request('/api/export/containers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{not valid json',
+      })
+
+      expect(res.status).toBe(400)
+      const data = (await res.json()) as { errorCode?: string }
+      expect(data.errorCode).toBe('VALIDATION_ERROR')
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(await ctx.db.select().from(errorLogs)).toHaveLength(0)
+    })
+
+    describe('with NODE_ENV=production', () => {
+      let previousNodeEnv: string | undefined
+      let previousLogFormat: string | undefined
+      let originalConsoleError: typeof console.error
+      let stderrLines: string[]
+
+      beforeEach(() => {
+        previousNodeEnv = process.env.NODE_ENV
+        previousLogFormat = process.env.LOG_FORMAT
+        process.env.NODE_ENV = 'production'
+        process.env.LOG_FORMAT = 'json'
+        stderrLines = []
+        originalConsoleError = console.error
+        console.error = (...args: unknown[]) => {
+          stderrLines.push(args.map(String).join(' '))
+        }
+      })
+
+      afterEach(() => {
+        console.error = originalConsoleError
+        process.env.NODE_ENV = previousNodeEnv
+        if (previousLogFormat === undefined) delete process.env.LOG_FORMAT
+        else process.env.LOG_FORMAT = previousLogFormat
+      })
+
+      /** The error_logs rows for `message`, once the handler's unawaited insert has run. */
+      async function loggedFailures(message: string) {
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        return ctx.db.select().from(errorLogs).where(eq(errorLogs.message, message))
+      }
+
+      it('keeps the cause of a 500 out of the response and logs it', async () => {
+        const sqlMessage = 'SQLITE_ERROR: no such column: specimen.secret_col in SELECT * FROM specimen'
+        const spy = vi.spyOn(specimensCsv, 'exportSpecimensCsv').mockRejectedValueOnce(new Error(sqlMessage))
+
+        const res = await ctx.request('/api/export/specimens.csv', { method: 'GET' })
+
+        expect(res.status).toBe(500)
+        const text = await res.text()
+        expect(JSON.parse(text)).toEqual({ error: 'Failed to export specimens' })
+        expect(text).not.toContain('SQLITE')
+        expect(stderrLines.some((line) => line.includes(sqlMessage))).toBe(true)
+        const rows = await loggedFailures('Failed to export specimens')
+        expect(rows).toHaveLength(1)
+        expect(rows[0].level).toBe('error')
+        expect(rows[0].stack).toContain(sqlMessage)
+
+        spy.mockRestore()
+      })
+
+      it('keeps a SQLite error out of a POST export 500 and logs it', async () => {
+        const study = await createTestStudy(ctx.db, { title: 'Broken Study', shortCode: 'BRK' })
+        await createTestStudySubject(ctx.db, { studyId: study.id, name: 'Subj1' })
+        ctx.sqlite.exec('ALTER TABLE storage_container_tag RENAME TO storage_container_tag_gone')
+
+        const res = await ctx.request('/api/export/containers', {
+          method: 'POST',
+          json: { study: 'BRK', subject_names: ['Subj1'], tag_ids: [1] },
+        })
+
+        expect(res.status).toBe(500)
+        const text = await res.text()
+        expect(JSON.parse(text)).toEqual({ error: 'Failed to export containers' })
+        expect(text).not.toContain('storage_container_tag')
+        expect(stderrLines.some((line) => line.includes('storage_container_tag'))).toBe(true)
+        const rows = await loggedFailures('Failed to export containers')
+        expect(rows).toHaveLength(1)
+        expect(rows[0].stack).toContain('storage_container_tag')
+      })
     })
   })
 })

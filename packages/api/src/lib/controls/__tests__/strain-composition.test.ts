@@ -37,6 +37,17 @@ describe('strain-composition', () => {
       expect(targetDensityMatches(stored, {}, 'optional')).toBe(false)
     })
 
+    it('targetDensityMatches treats null and absent targetDensityUnitId as the same on both sides', () => {
+      expect(targetDensityMatches({ targetDensity: 100 }, { targetDensity: 100, targetDensityUnitId: null })).toBe(true)
+      expect(targetDensityMatches({ targetDensity: 100, targetDensityUnitId: null }, { targetDensity: 100 })).toBe(true)
+      expect(
+        targetDensityMatches({ targetDensity: 100, targetDensityUnitId: null }, { targetDensity: 100, targetDensityUnitId: null })
+      ).toBe(true)
+      expect(
+        targetDensityMatches({ targetDensity: 100, targetDensityUnitId: 3 }, { targetDensity: 100, targetDensityUnitId: null })
+      ).toBe(false)
+    })
+
     it('definitionCompositionMatches combines density and strains', () => {
       const props = { targetDensity: 100, targetDensityUnitId: 1, strains: [{ id: 5, percentage: 100 }] }
       expect(

@@ -16,45 +16,21 @@ const mockCreateDefinitionsBulk = vi.hoisted(() =>
 vi.mock('../../../lib/api/reference-data', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   return createMockedDomainModule('reference-data', {
-  controlsApi: {
-    getDefinitionSummary: vi.fn(),
-    create: mockCreate,
-    createDefinitionsBulk: mockCreateDefinitionsBulk,
-    update: vi.fn().mockResolvedValue({}),
-    suggestName: vi.fn().mockResolvedValue({ suggestedName: 'Suggested', exists: false }),
-  },
-  unitsApi: { listAll: vi.fn().mockResolvedValue([{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }]) },
-  strainsApi: { list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Strain A' }] }) },
-})
+    unitsApi: { listAll: vi.fn().mockResolvedValue([{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }]) },
+    strainsApi: { list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Strain A' }] }) },
+  })
 })
 
 vi.mock('../../../lib/api/controls', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   return createMockedDomainModule('controls', {
-  controlsApi: {
-    getDefinitionSummary: vi.fn(),
-    create: mockCreate,
-    createDefinitionsBulk: mockCreateDefinitionsBulk,
-    update: vi.fn().mockResolvedValue({}),
-    suggestName: vi.fn().mockResolvedValue({ suggestedName: 'Suggested', exists: false }),
-  },
-  unitsApi: { listAll: vi.fn().mockResolvedValue([{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }]) },
-  strainsApi: { list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Strain A' }] }) },
-})
-})
-
-vi.mock('../../../lib/api/settings', async () => {
-  const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
-  return createMockedDomainModule('settings', {
-  controlsApi: {
-    getDefinitionSummary: vi.fn(),
-    create: mockCreate,
-    createDefinitionsBulk: mockCreateDefinitionsBulk,
-    update: vi.fn().mockResolvedValue({}),
-    suggestName: vi.fn().mockResolvedValue({ suggestedName: 'Suggested', exists: false }),
-  },
-  unitsApi: { listAll: vi.fn().mockResolvedValue([{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }]) },
-  strainsApi: { list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Strain A' }] }) },
+    controlsApi: {
+      getDefinitionSummary: vi.fn(),
+      create: mockCreate,
+      createDefinitionsBulk: mockCreateDefinitionsBulk,
+      update: vi.fn().mockResolvedValue({}),
+      suggestName: vi.fn().mockResolvedValue({ suggestedName: 'Suggested', exists: false }),
+    },
   })
 })
 

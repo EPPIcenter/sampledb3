@@ -5,7 +5,7 @@ import { eq, and, lte } from 'drizzle-orm'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
-import { utcNow } from '../lib/datetime'
+import { shiftCalendarDate, utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { handleRouteError } from '../lib/error-handler'
 import { insertedRow } from '../lib/inserted-row'
@@ -35,9 +35,8 @@ export function createReagentsRoutes(database: Database): Hono {
   if (expiringWithinDays) {
     const days = parseInt(expiringWithinDays)
     if (!isNaN(days)) {
-      const futureDate = new Date()
-      futureDate.setDate(futureDate.getDate() + days)
-      const dateStr = futureDate.toISOString().split('T')[0]
+      // expiration_date is a calendar date; count days from today's UTC date.
+      const dateStr = shiftCalendarDate(utcNow(), days)
       conditions.push(
         sql`${reagent.expirationDate} IS NOT NULL AND ${reagent.expirationDate} <= ${dateStr}`
       )

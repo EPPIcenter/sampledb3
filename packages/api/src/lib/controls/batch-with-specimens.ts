@@ -26,13 +26,14 @@ import {
 import type { BatchContainerInput } from './batch-schemas'
 import { withWriteTransaction } from '../../db/write-transaction'
 import { validateCollectionDate } from '../validation'
-import { ConflictError, ValidationError, sqliteConstraintConflict } from '../error-handler'
+import { ConflictError, NotFoundError, ValidationError, sqliteConstraintConflict } from '../error-handler'
 import { insertedRow } from '../inserted-row'
 
 export interface CreateBatchWithSpecimensRequest {
   batch: {
     controlDefinitionId: number
-    name: string
+    /** Omit to have the server generate a unique name from the definition and production date. */
+    name?: string
     productionDate?: string
     properties?: Record<string, unknown>
   }
@@ -174,8 +175,10 @@ async function prepareSpecimensForBatch(
           await prepareBatchContainer(database, specType.id, containerInput)
         )
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error)
-        throw new ValidationError(`Failed to prepare container: ${message}`)
+        if (error instanceof ValidationError) {
+          throw new ValidationError(`Failed to prepare container: ${error.message}`, error.details)
+        }
+        throw error
       }
     }
 
@@ -201,7 +204,7 @@ export async function createBatchWithSpecimens(
     controlDefinitionId: number
     name: string
     productionDate: string | null
-    properties: string | null
+    properties: Record<string, unknown> | null
     created: string
     lastUpdated: string
   }
@@ -239,7 +242,7 @@ export async function createBatchWithSpecimens(
         controlDefinitionId: data.batch.controlDefinitionId,
         name: batchName,
         productionDate: data.batch.productionDate || null,
-        properties: data.batch.properties ? JSON.stringify(data.batch.properties) : null,
+        properties: data.batch.properties ?? null,
       })
       .returning()
 
@@ -286,7 +289,7 @@ export async function createBatchWithSpecimens(
         controlDefinitionId: batchRecord.controlDefinitionId,
         name: batchRecord.name,
         productionDate: batchRecord.productionDate,
-        properties: (batchRecord.properties as string | null) ?? null,
+        properties: (batchRecord.properties as Record<string, unknown> | null) ?? null,
         created: batchRecord.created,
         lastUpdated: batchRecord.lastUpdated,
       },
@@ -314,7 +317,7 @@ export async function addSpecimensToBatch(
     .get()
 
   if (!existingBatch) {
-    throw new Error(`Batch not found: ${batchId}`)
+    throw new NotFoundError('Control batch', batchId)
   }
 
   const preparedSpecimens = await prepareSpecimensForBatch(database, data.specimens)
@@ -387,11 +390,16 @@ export async function createBatchesWithSpecimens(
       try {
         results.push(await createBatchWithSpecimens(tx, data))
       } catch (error: unknown) {
-        // Keep a conflict a 409 (ConflictError or a UNIQUE/FK violation); the rest are bad input.
-        const conflict = error instanceof Error ? sqliteConstraintConflict(error) : null
-        const reason = conflict ?? (error instanceof Error ? error.message : String(error))
+        // Keep conflicts 409 and validation errors 400; let unexpected failures propagate as 500.
+        if (!(error instanceof Error)) throw error
+        const conflict = sqliteConstraintConflict(error)
+        if (!conflict && !(error instanceof ConflictError) && !(error instanceof ValidationError)) {
+          throw error
+        }
+        const reason = conflict ?? error.message
         const sentence = /[.!?]$/.test(reason) ? reason : `${reason}.`
-        const message = `Control batch ${index + 1} ('${data.batch.name}'): ${sentence} No control batches were created.`
+        const label = data.batch.name ? ` ('${data.batch.name}')` : ''
+        const message = `Control batch ${index + 1}${label}: ${sentence} No control batches were created.`
         if (conflict || error instanceof ConflictError) throw new ConflictError(message)
         throw new ValidationError(message)
       }

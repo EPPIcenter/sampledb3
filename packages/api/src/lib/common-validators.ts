@@ -119,3 +119,11 @@ export function validateId(id: number | null | undefined): { valid: boolean; err
   }
   return { valid: true }
 }
+
+/**
+ * True when a parsed PATCH or PUT body sets no field. Drizzle throws "No values to set" on an
+ * empty `.set({})`, so a route rejects such a body with a 400 before it updates.
+ */
+export function setsNoField(data: Record<string, unknown>): boolean {
+  return Object.values(data).every((value) => value === undefined)
+}

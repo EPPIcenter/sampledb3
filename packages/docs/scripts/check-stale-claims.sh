@@ -8,10 +8,15 @@ fail=0
 check() {
   local pattern="$1"
   local why="$2"
-  if rg -n --glob '!**/design-tokens.md' -e "$pattern" "$content" "$docs/astro.config.mjs" "$docs/README.md" >/dev/null; then
+  local matches status=0
+  matches="$(grep -rnE --exclude='design-tokens.md' -e "$pattern" "$content" "$docs/astro.config.mjs" "$docs/README.md")" || status=$?
+  if [ "$status" -eq 0 ]; then
     echo "STALE: $why"
-    rg -n --glob '!**/design-tokens.md' -e "$pattern" "$content" "$docs/astro.config.mjs" "$docs/README.md" || true
+    printf '%s\n' "$matches"
     fail=1
+  elif [ "$status" -ne 1 ]; then
+    echo "ERROR: grep failed (exit $status) while checking: $why" >&2
+    exit "$status"
   fi
 }
 

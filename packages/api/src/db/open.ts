@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'fs'
 import { dirname, isAbsolute, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import * as schema from './schema'
-import { evolveOperationalSchema } from './schema-evolution'
+import { evolveOperationalSchema, type EvolveOperationalSchemaOptions } from './schema-evolution'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -91,8 +91,15 @@ export type OperationalDatabase = ReturnType<typeof drizzle<typeof schema>>
 
 /**
  * Open the operational SQLite database, evolve schema, return Drizzle + raw handles.
+ *
+ * Before migrating an existing file it writes a backup copy next to it, except under
+ * NODE_ENV=test, where every test database is disposable. Pass `backupBeforeMigrating` to
+ * override that default.
  */
-export function openOperationalDatabase(dbPath?: string): {
+export function openOperationalDatabase(
+  dbPath?: string,
+  options: EvolveOperationalSchemaOptions = {},
+): {
   db: OperationalDatabase
   sqlite: SQLiteDatabase
 } {
@@ -111,7 +118,9 @@ export function openOperationalDatabase(dbPath?: string): {
   sqlite.exec('PRAGMA foreign_keys = ON')
 
   try {
-    evolveOperationalSchema(sqlite)
+    evolveOperationalSchema(sqlite, {
+      backupBeforeMigrating: options.backupBeforeMigrating ?? process.env.NODE_ENV !== 'test',
+    })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     console.error(`❌ Error preparing database: ${message}`)

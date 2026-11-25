@@ -7,15 +7,17 @@ import {
 import { createImportsRoutes } from '../imports'
 import {
   createTestStudy,
+  createTestStudySubject,
   createTestSpecimenType,
   createTestLocation,
   createTestStorageType,
   createTestUnit,
 } from '../../__tests__/helpers/factories'
-import { studySubject, specimen, specimenTypeContainerType, containerTypeUnit, micronixPlate, cryovialBox, settings, storageContainer } from '../../db/schema'
+import { studySubject, specimen, specimenTypeContainerType, containerTypeUnit, micronixPlate, micronixTube, cryovialBox, settings, storageContainer } from '../../db/schema'
 import { setContainerDefaults } from '../../lib/settings'
 import { eq } from 'drizzle-orm'
 import { failInsertsWithUniqueViolation } from '../../__tests__/helpers/constraint-race'
+import { specimenSummaryWireSchema } from '@sampledb/contract/wire'
 
 describe('Imports API', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -154,6 +156,52 @@ describe('Imports API', () => {
       const afterSpecimens = await ctx.db.select().from(specimen)
       expect(afterSubjects.length).toBe(beforeSubjects.length)
       expect(afterSpecimens.length).toBe(beforeSpecimens.length)
+    })
+
+    it('refuses a Subject name that differs from one the study has only by case, and imports nothing', async () => {
+      const studyRecord = await createTestStudy(ctx.db, { title: 'Case Import', shortCode: 'CASEIMP' })
+      await createTestStudySubject(ctx.db, { studyId: studyRecord.id, name: 'ABC-1' })
+      await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+
+      const res = await ctx.request('/api/imports/bulk-combined', {
+        method: 'POST',
+        json: {
+          studyShortCode: 'CASEIMP',
+          atomicMode: 'full_file',
+          subjects: [
+            { subjectName: 'NEW-1', specimens: [{ specimenTypeName: 'Whole Blood', collectionDate: '2025-01-01' }] },
+            { subjectName: 'abc-1', specimens: [{ specimenTypeName: 'Whole Blood', collectionDate: '2025-01-02' }] },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(400)
+      expect(JSON.stringify(await res.json())).toContain(
+        "Subject name 'abc-1' differs only by case from Subject 'ABC-1' in this study. Subject names in a study ignore case.",
+      )
+      expect((await ctx.db.select().from(studySubject)).map((s) => s.name)).toEqual(['ABC-1'])
+      expect(await ctx.db.select().from(specimen)).toHaveLength(0)
+    })
+
+    it('refuses two Subjects in one file whose names differ only by case', async () => {
+      await createTestStudy(ctx.db, { title: 'Case Import', shortCode: 'CASEIMP' })
+      await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+
+      const res = await ctx.request('/api/imports/bulk-combined', {
+        method: 'POST',
+        json: {
+          studyShortCode: 'CASEIMP',
+          atomicMode: 'full_file',
+          subjects: [
+            { subjectName: 'Pair-1', specimens: [{ specimenTypeName: 'Whole Blood', collectionDate: '2025-01-01' }] },
+            { subjectName: 'PAIR-1', specimens: [{ specimenTypeName: 'Whole Blood', collectionDate: '2025-01-02' }] },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(400)
+      expect(JSON.stringify(await res.json())).toContain("Subject name 'PAIR-1' differs only by case from Subject 'Pair-1'")
+      expect(await ctx.db.select().from(studySubject)).toHaveLength(0)
     })
 
     it('per_subject mode allows partial success and returns indexed errors', async () => {
@@ -385,6 +433,44 @@ describe('Imports API', () => {
       const body = (await res.json()) as { details?: { errors?: unknown[] } }
       expect(body.details?.errors).toEqual([expect.objectContaining({ subjectIndex: 0, specimenIndex: 0 })])
     })
+
+    it('returns wire DTOs without audit columns (createdBy, updatedBy)', async () => {
+      await createTestStudy(ctx.db, { title: 'Wire Study', shortCode: 'WIRE' })
+      await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+
+      const res = await ctx.request('/api/imports/bulk-combined', {
+        method: 'POST',
+        json: {
+          studyShortCode: 'WIRE',
+          atomicMode: 'full_file',
+          subjects: [
+            {
+              subjectName: 'WIRE-SUBJ',
+              specimens: [{ specimenTypeName: 'Whole Blood', collectionDate: '2025-01-01' }],
+            },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(201)
+      const body = (await res.json()) as {
+        results: Array<{
+          subject: Record<string, unknown>
+          specimens: Array<{ specimen?: Record<string, unknown>; containerCreated: boolean; createdBy?: unknown; updatedBy?: unknown }>
+        }>
+      }
+      const subjectResult = body.results[0]
+      expect(subjectResult.subject).not.toHaveProperty('createdBy')
+      expect(subjectResult.subject).not.toHaveProperty('updatedBy')
+
+      const specimenEntry = subjectResult.specimens[0]
+      expect(specimenEntry).not.toHaveProperty('createdBy')
+      expect(specimenEntry).not.toHaveProperty('updatedBy')
+      expect(specimenEntry.specimen).toBeDefined()
+      expect(specimenEntry.specimen).not.toHaveProperty('createdBy')
+      expect(specimenEntry.specimen).not.toHaveProperty('updatedBy')
+      expect(specimenSummaryWireSchema.safeParse(specimenEntry.specimen).success).toBe(true)
+    })
   })
 
   describe('POST /api/imports/bulk-combined/validate', () => {
@@ -495,6 +581,75 @@ describe('Imports API', () => {
       expect(data.errors.some((e) => e.message.includes('cannot contain collections'))).toBe(true)
     })
 
+    describe('Grid position rule', () => {
+      async function setupPlateImport() {
+        await createTestStudy(ctx.db, { title: 'Grid Study', shortCode: 'GRID' })
+        const specimenType = await createTestSpecimenType(ctx.db, { name: 'Blood' })
+        const storageType = await createTestStorageType(ctx.db, { name: 'Freezer', description: 'Test' })
+        const loc = await createTestLocation(ctx.db, {
+          name: 'Shelf',
+          parentId: null,
+          storageTypeId: String(storageType.id),
+          canContainCollections: true,
+        })
+        const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+        await ctx.db.insert(specimenTypeContainerType).values({ specimenTypeId: specimenType.id, containerType: 'micronix_tube' })
+        await ctx.db.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+        await setContainerDefaults(ctx.db, { micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' } })
+        const row = (rowIndex: number, barcode: string, position: string) => ({
+          subjectName: `S${rowIndex}`,
+          specimens: [
+            {
+              rowIndex,
+              specimenTypeName: 'Blood',
+              collectionDate: '2025-01-01',
+              container: {
+                containerType: 'micronix_tube',
+                barcode,
+                collection: { type: 'micronix_plate', name: 'GRID-P1', locationId: loc.id, position },
+              },
+            },
+          ],
+        })
+        return { row }
+      }
+
+      it.each([
+        { position: 'Z99', message: 'Position "Z99" is outside a micronix plate (A01–H12)' },
+        { position: 'A13', message: 'Position "A13" is outside a micronix plate (A01–H12)' },
+        { position: 'hello world', message: expect.stringContaining('Position "hello world" is not a grid position') },
+      ])('fails validation of $position with a row-numbered error', async ({ position, message }) => {
+        const { row } = await setupPlateImport()
+        const res = await ctx.request('/api/imports/bulk-combined/validate', {
+          method: 'POST',
+          json: { studyShortCode: 'GRID', atomicMode: 'full_file', subjects: [row(1, 'BC-1', 'a1'), row(2, 'BC-2', position)] },
+        })
+
+        expect(res.status).toBe(200)
+        const data = (await res.json()) as { valid: boolean; errors: Array<{ rowIndex?: number; message: string }> }
+        expect(data.valid).toBe(false)
+        expect(data.errors).toEqual([expect.objectContaining({ rowIndex: 2, message })])
+      })
+
+      it('rejects an out-of-range position on import with 400 and stores a1 as A01 otherwise', async () => {
+        const { row } = await setupPlateImport()
+        const bad = await ctx.request('/api/imports/bulk-combined', {
+          method: 'POST',
+          json: { studyShortCode: 'GRID', atomicMode: 'full_file', subjects: [row(1, 'BC-1', 'a1'), row(2, 'BC-2', 'Z99')] },
+        })
+        expect(bad.status).toBe(400)
+        expect(await ctx.db.select().from(micronixTube)).toHaveLength(0)
+
+        const good = await ctx.request('/api/imports/bulk-combined', {
+          method: 'POST',
+          json: { studyShortCode: 'GRID', atomicMode: 'full_file', subjects: [row(1, 'BC-1', 'a1'), row(2, 'BC-2', 'A2')] },
+        })
+        expect(good.status).toBe(201)
+        const tubes = await ctx.db.select().from(micronixTube)
+        expect(Object.fromEntries(tubes.map((t) => [t.barcode, t.position]))).toEqual({ 'BC-1': 'A01', 'BC-2': 'A02' })
+      })
+    })
+
     it('returns valid: false when collection date is invalid (future)', async () => {
       await createTestStudy(ctx.db, { title: 'Date Study', shortCode: 'DATED' })
       await createTestSpecimenType(ctx.db, { name: 'Blood' })
@@ -512,6 +667,54 @@ describe('Imports API', () => {
       const data = (await res.json()) as { valid: boolean; errors: Array<{ message: string }> }
       expect(data.valid).toBe(false)
       expect(data.errors.some((e) => e.message.toLowerCase().includes('date') || e.message.toLowerCase().includes('future'))).toBe(true)
+    })
+
+    it('maps row-level Zod schema failures to bulk-combined row errors with rowIndex (#93)', async () => {
+      const res = await ctx.request('/api/imports/bulk-combined/validate', {
+        method: 'POST',
+        json: {
+          studyShortCode: 'VAL',
+          atomicMode: 'full_file',
+          subjects: [
+            {
+              subjectName: 'S1',
+              specimens: [
+                {
+                  rowIndex: 4,
+                  specimenTypeName: 'Blood',
+                  container: {
+                    containerType: 'micronix_tube',
+                    barcode: '',
+                    collection: { type: 'micronix_plate', name: 'P1', position: 'A01' },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        valid: boolean
+        errors: Array<{ subjectIndex: number; specimenIndex?: number; rowIndex?: number; message: string }>
+      }
+      expect(data.valid).toBe(false)
+      expect(data.errors).toContainEqual(
+        expect.objectContaining({
+          subjectIndex: 0,
+          specimenIndex: 0,
+          rowIndex: 4,
+          message: expect.stringContaining('container.barcode'),
+        }),
+      )
+    })
+
+    it('keeps a 400 when bulk-combined/validate fails outside row paths', async () => {
+      const res = await ctx.request('/api/imports/bulk-combined/validate', {
+        method: 'POST',
+        json: { atomicMode: 'invalid_mode', subjects: [] },
+      })
+      expect(res.status).toBe(400)
     })
   })
 })

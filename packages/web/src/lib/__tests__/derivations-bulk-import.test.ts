@@ -20,8 +20,20 @@ const emptySettings: BulkDerivationSettings = {
 
 describe('parseFullCsv', () => {
   it('returns empty for header-only or empty text', () => {
-    expect(parseFullCsv('')).toEqual({ headers: [], rows: [] })
-    expect(parseFullCsv('a,b')).toEqual({ headers: [], rows: [] })
+    expect(parseFullCsv('')).toEqual({ headers: [], rows: [], fileRows: [] })
+    expect(parseFullCsv('a,b')).toEqual({ headers: [], rows: [], fileRows: [] })
+    expect(parseFullCsv('a,b\n,\n\n')).toEqual({ headers: [], rows: [], fileRows: [] })
+  })
+
+  it('drops rows whose cells are all blank and keeps the file row of the rest', () => {
+    const parsed = parseFullCsv('\na,b\n1,2\n\n , \n"x\ny",4\n5,6\n')
+    expect(parsed.rows).toEqual([
+      { a: '1', b: '2' },
+      { a: 'x\ny', b: '4' },
+      { a: '5', b: '6' },
+    ])
+    // Rows as a spreadsheet numbers them: a quoted line break stays inside one row.
+    expect(parsed.fileRows).toEqual([3, 6, 7])
   })
 
   it('parses headers and rows, trimming values', () => {
@@ -78,7 +90,7 @@ describe('deriveMissingCollections', () => {
     expect(deriveMissingCollections(null)).toEqual([])
   })
 
-  it('keeps only will_be_created tube collections, as pending with no location', () => {
+  it('keeps only will_be_created tube collections, with no location assigned', () => {
     const result = deriveMissingCollections(
       validation([
         { name: 'P1', status: 'will_be_created', containerType: 'micronix_tube' },
@@ -88,8 +100,8 @@ describe('deriveMissingCollections', () => {
       ])
     )
     expect(result).toEqual([
-      { name: 'P1', barcode: undefined, containerType: 'micronix_tube', locationId: null, status: 'pending' },
-      { name: 'B1', barcode: undefined, containerType: 'cryovial_tube', locationId: null, status: 'pending' },
+      { name: 'P1', barcode: undefined, containerType: 'micronix_tube', locationId: null },
+      { name: 'B1', barcode: undefined, containerType: 'cryovial_tube', locationId: null },
     ])
   })
 })

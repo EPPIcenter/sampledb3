@@ -4,6 +4,7 @@ import {
   setupAuthenticatedRouteTest,
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
+import { createTestContainerTypeUnit, createTestUnit } from '../../__tests__/helpers/factories'
 import { createSettingsRoutes } from '../settings'
 
 describe('Settings API', () => {
@@ -17,6 +18,7 @@ describe('Settings API', () => {
         password: 'password123',
         role: 'admin',
       },
+      additionalUsers: [{ key: 'viewer', email: 'viewer@test.com', password: 'password123', role: 'viewer' }],
       mount: (app, { db }) => {
         app.route('/api/settings', createSettingsRoutes(db))
       },
@@ -43,6 +45,30 @@ describe('Settings API', () => {
     it('returns 401 when not authenticated', async () => {
       const res = await authenticatedRequest(ctx.createRequestApp(), '/api/settings', { method: 'GET' })
       expect(res.status).toBe(401)
+    })
+  })
+
+  describe('GET /api/settings/container-types/:containerType/units', () => {
+    it('returns 401 when not authenticated', async () => {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/settings/container-types/paper/units', {
+        method: 'GET',
+      })
+      expect(res.status).toBe(401)
+    })
+
+    it("returns the container type's units to a viewer", async () => {
+      const microliter = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await createTestContainerTypeUnit(ctx.db, { containerType: 'cryovial_tube', unitId: microliter.id })
+
+      const res = await ctx.request('/api/settings/container-types/cryovial_tube/units', {
+        method: 'GET',
+        cookie: ctx.cookies.viewer,
+      })
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({
+        units: [{ id: microliter.id, symbol: 'uL', name: 'microliter', category: 'volume' }],
+      })
     })
   })
 

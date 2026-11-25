@@ -48,7 +48,7 @@ You should have three subjects in TUT01 (TUT-SUBJ-001, TUT-SUBJ-002, TUT-SUBJ-00
 2. Set **Container Type** to **Micronix Tubes**.
 3. Download [3-specimens-micronix.csv](/docs/workshop/3-specimens-micronix.csv). Add `plate_name`, `barcode`, and `position` (letter plus two digits, such as A01). Missing or invalid position fails validation.
 4. Select the file, then click **Validate & Continue**.
-5. If the CSV names collections that do not exist, the **Create Collections** step asks you to assign each collection to a location. Continue to run the import.
+5. If the CSV names collections that do not exist yet, the **Collection Locations** step asks you to choose a location for each collection so the import can create them. Continue to run the import.
 6. Read the result summary.
 
 ## Step 4: Export data

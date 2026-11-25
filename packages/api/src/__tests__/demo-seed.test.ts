@@ -4,7 +4,8 @@ import type { Database } from '../db/client'
 import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { runDemoSeed } from '../lib/demo-seed'
 import { users, study, studySubject, micronixTube, micronixPlate, cryovialTube, cryovialBox, paper, containerDerivation, specimen, specimenType, strain, controlDefinition } from '../db/schema'
-import { sql, eq } from 'drizzle-orm'
+import { sql, eq, isNotNull } from 'drizzle-orm'
+import { listLocationPathInconsistencies } from '../lib/data-audit'
 
 describe('runDemoSeed', () => {
   let testDb: Database
@@ -31,6 +32,19 @@ describe('runDemoSeed', () => {
     expect(result.controlDefinitionsCreated).toBeGreaterThanOrEqual(1)
     expect(result.controlBatchesCreated).toBeGreaterThanOrEqual(1)
     expect(result.controlSpecimensCreated).toBeGreaterThanOrEqual(1)
+  })
+
+  it('stores each Location path the way the integrity report expects it', async () => {
+    await runDemoSeed(testDb, { adminPassword: 'DemoAdmin1!' })
+
+    expect(await listLocationPathInconsistencies(testDb)).toEqual([])
+  })
+
+  it('reports the number of control Specimens it created', async () => {
+    const result = await runDemoSeed(testDb, { adminPassword: 'DemoAdmin1!' })
+
+    const controlSpecimens = await testDb.select().from(specimen).where(isNotNull(specimen.controlBatchId)).all()
+    expect(result.controlSpecimensCreated).toBe(controlSpecimens.length)
   })
 
   it('creates admin user that can log in', async () => {

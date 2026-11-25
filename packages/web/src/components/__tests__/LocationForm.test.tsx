@@ -8,30 +8,21 @@ import { storageTypesApi } from '../../lib/api/reference-data'
 vi.mock('../../lib/api/reference-data', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('reference-data', {
-  locationsApi: {},
-  storageTypesApi: {
-    list: vi.fn().mockResolvedValue({
-      data: [
-        { id: 1, name: 'Freezer', description: '-80°C' },
-        { id: 2, name: 'Fridge', description: '4°C' },
-      ],
-    }),
-  },
-})
+    storageTypesApi: {
+      list: vi.fn().mockResolvedValue({
+        data: [
+          { id: 1, name: 'Freezer', description: '-80°C' },
+          { id: 2, name: 'Fridge', description: '4°C' },
+        ],
+      }),
+    },
+  })
 })
 
 vi.mock('../../lib/api/locations', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('locations', {
-  locationsApi: {},
-  storageTypesApi: {
-    list: vi.fn().mockResolvedValue({
-      data: [
-        { id: 1, name: 'Freezer', description: '-80°C' },
-        { id: 2, name: 'Fridge', description: '4°C' },
-      ],
-    }),
-  }
+    locationsApi: {},
   })
 })
 

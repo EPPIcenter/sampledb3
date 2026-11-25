@@ -140,7 +140,7 @@ export default function BloodControls() {
     {
       key: 'name',
       label: 'Name',
-      sortable: true,
+      sortType: 'text',
       render: (value, row) => (
         <Link to={`/blood-controls/${row.id}`} className="dashboard-link font-medium hover:underline">
           {value}
@@ -200,7 +200,7 @@ export default function BloodControls() {
     {
       key: 'inventoryTotal',
       label: 'Inventory',
-      sortable: true,
+      sortType: 'number',
       render: (_, row) => {
         const hasSpots = (row.spotCount ?? 0) > 0
         const hasMicronix = (row.micronixCount ?? 0) > 0
@@ -235,7 +235,7 @@ export default function BloodControls() {
     {
       key: 'targetDensity',
       label: 'Target Density',
-      sortable: true,
+      sortType: 'number',
       render: (value, row) => (
         value ? (
           <div className="text-sm">
@@ -345,7 +345,7 @@ export default function BloodControls() {
     {
       key: 'name',
       label: 'Batch Name',
-      sortable: true,
+      sortType: 'text',
       render: (value, row) => (
         <Link to={`/blood-controls/batches/${row.id}`} className="dashboard-link font-medium hover:underline">
           {value}
@@ -355,7 +355,7 @@ export default function BloodControls() {
     {
       key: 'targetDensity',
       label: 'Target Density',
-      sortable: true,
+      sortType: 'number',
       render: (value, row) => (
         value ? (
           <div className="text-sm">
@@ -418,7 +418,7 @@ export default function BloodControls() {
     {
       key: 'inventoryTotal',
       label: 'Inventory',
-      sortable: true,
+      sortType: 'number',
       render: (_, row) => {
         const hasSpots = (row.spotCount ?? 0) > 0
         const hasMicronix = (row.micronixCount ?? 0) > 0
@@ -446,7 +446,7 @@ export default function BloodControls() {
     {
       key: 'productionDate',
       label: 'Production Date',
-      sortable: true,
+      sortType: 'date',
       render: (value) => value ? (
         <span className="dashboard-stat-value">{formatDate(value)}</span>
       ) : <span className="text-app-text-muted italic">Not set</span>,
@@ -690,8 +690,6 @@ export default function BloodControls() {
                 data={compositionGroups}
                 columns={compositionColumns}
                 loading={overviewQuery.isPending}
-                initialSortColumn="strains"
-                initialSortDirection="asc"
                 onRowClick={(row) => navigate(`/blood-controls/compositions/${encodeURIComponent(row.compositionKey)}`)}
                 emptyMessage="No compositions match the current filters. Create a control definition to get started."
                 pagination={{

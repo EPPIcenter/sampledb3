@@ -1,9 +1,15 @@
-import { useState, useEffect, useRef, useEffectEvent } from 'react'
-import { subjectsApi } from '../lib/api/subjects';
-import { studiesApi } from '../lib/api/studies';
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import type { StudySubject } from '../lib/api/types';
 import { useClickOutside } from '../hooks/useClickOutside'
-import { Modal } from '../ui'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useMergeSubjects } from '../hooks/useSubjects'
+import { useStudySubjects } from '../hooks/useStudies'
+import { Modal, getQueryErrorMessage } from '../ui'
+import { parseDisplayDate } from '../lib/date-utils'
+
+/** How many matches a picker lists; typing narrows the search on the server. */
+const SUBJECT_SEARCH_LIMIT = 50
+const SEARCH_DEBOUNCE_MS = 250
 
 interface SubjectMergeModalProps {
   isOpen: boolean
@@ -12,6 +18,183 @@ interface SubjectMergeModalProps {
   onSuccess: () => void
   /** Pass a key that increments when opening to reset inner state; parent should increment in the open handler. */
   openKey?: number
+}
+
+function specimenLabel(count: number): string {
+  return `${count} specimen${count !== 1 ? 's' : ''}`
+}
+
+/**
+ * Search box over a study's subjects. Each keystroke (debounced) searches the API, so every
+ * subject in the study can be found, not only one loaded page.
+ */
+function SubjectPicker({
+  inputId,
+  label,
+  tone,
+  studyId,
+  excludeId,
+  selected,
+  onSelect,
+}: {
+  inputId: string
+  label: ReactNode
+  tone: 'source' | 'target'
+  studyId: number
+  excludeId: number | null
+  selected: StudySubject | null
+  onSelect: (subject: StudySubject | null) => void
+}) {
+  const [search, setSearch] = useState('')
+  const [open, setOpen] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(-1)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const resultsRef = useRef<HTMLUListElement>(null)
+  const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS)
+
+  const subjectsQuery = useStudySubjects(
+    studyId,
+    { page: 1, limit: SUBJECT_SEARCH_LIMIT, ...(debouncedSearch ? { search: debouncedSearch } : {}) },
+    // Keep the last results while a newer search loads, so an option isn't pulled out from
+    // under the pointer mid-click.
+    { enabled: open, keepPreviousResults: true },
+  )
+  const results = (subjectsQuery.data?.subjects ?? []).filter((s) => s.id !== excludeId)
+  const total = subjectsQuery.data?.pagination?.total ?? results.length
+
+  useClickOutside(containerRef, () => setOpen(false), open)
+
+  useEffect(() => {
+    const el = selectedIndex >= 0 ? resultsRef.current?.querySelector(`[data-index="${selectedIndex}"]`) as HTMLElement | null : null
+    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [selectedIndex])
+
+  const choose = (subject: StudySubject) => {
+    onSelect(subject)
+    setSearch(subject.name)
+    setOpen(false)
+  }
+
+  const dropdownStyle = {
+    position: 'fixed' as const,
+    width: containerRef.current?.offsetWidth + 'px' || 'auto',
+    top: containerRef.current ? (containerRef.current.getBoundingClientRect().bottom + window.scrollY + 4) + 'px' : 'auto',
+    left: containerRef.current ? (containerRef.current.getBoundingClientRect().left + window.scrollX) + 'px' : 'auto',
+  }
+  const panelClass = 'absolute z-[200] w-full mt-1 bg-app-card border border-app-border rounded-md shadow-lg'
+  const messageClass = `${panelClass} p-4 text-sm text-app-text-muted`
+  const focusRing = tone === 'source' ? 'focus:ring-app-trend-down focus:border-app-trend-down' : 'focus:ring-app-accent focus:border-app-accent'
+
+  let dropdown: ReactNode = null
+  if (open) {
+    if (subjectsQuery.isError) {
+      dropdown = (
+        <div role="alert" className={`${panelClass} p-4 text-sm text-app-trend-down`} style={dropdownStyle}>
+          {getQueryErrorMessage(subjectsQuery.error, 'Failed to load subjects')}
+        </div>
+      )
+    } else if (subjectsQuery.isPending) {
+      dropdown = <div className={messageClass} style={dropdownStyle}>Searching subjects...</div>
+    } else if (results.length === 0) {
+      dropdown = (
+        <div className={messageClass} style={dropdownStyle}>
+          {debouncedSearch ? `No subjects found matching "${debouncedSearch}"` : 'No subjects found in this study'}
+        </div>
+      )
+    } else {
+      dropdown = (
+        <div className={`${panelClass} max-h-96 overflow-y-auto`} style={dropdownStyle}>
+          <ul ref={resultsRef} className="divide-y divide-app-border">
+            {results.map((subject, index) => (
+              <li key={subject.id}>
+                <button
+                  type="button"
+                  data-index={index}
+                  className={`w-full px-4 py-3 text-left hover:bg-app-surface focus:outline-none focus:bg-app-surface ${
+                    index === selectedIndex ? 'bg-app-accent-muted' : ''
+                  }`}
+                  onClick={() => choose(subject)}
+                >
+                  <p className="text-sm font-medium text-app-text">{subject.name}</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <p className="text-xs text-app-text-muted">ID: {subject.id}</p>
+                    {typeof subject.specimenCount === 'number' && (
+                      <p className="text-xs text-app-text-muted">{specimenLabel(subject.specimenCount)}</p>
+                    )}
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {total > results.length && (
+            <p className="px-4 py-2 text-xs text-app-text-muted border-t border-app-border">
+              Showing {results.length} of {total.toLocaleString('en-US')}. Type to narrow the search.
+            </p>
+          )}
+        </div>
+      )
+    }
+  }
+
+  return (
+    <>
+      <label htmlFor={inputId} className="block text-sm font-medium text-app-text mb-2">
+        {label}
+      </label>
+      <div className="relative" ref={containerRef} style={{ zIndex: 200 }}>
+        <div className="relative">
+          <input
+            id={inputId}
+            type="text"
+            value={selected ? selected.name : search}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setOpen(true)
+              setSelectedIndex(0)
+              if (selected) onSelect(null)
+            }}
+            onFocus={() => setOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                setSelectedIndex(prev => (prev < results.length - 1 ? prev + 1 : prev))
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                setSelectedIndex(prev => (prev > 0 ? prev - 1 : 0))
+              } else if (e.key === 'Enter' && selectedIndex >= 0 && results[selectedIndex]) {
+                e.preventDefault()
+                choose(results[selectedIndex])
+              } else if (e.key === 'Escape') {
+                setOpen(false)
+              }
+            }}
+            placeholder="Search by name or ID..."
+            autoComplete="off"
+            className={`w-full px-3 py-2 pr-8 border border-app-border rounded-md shadow-sm focus:outline-none ${focusRing} bg-app-card`}
+          />
+          <svg
+            className="absolute right-2 top-2.5 h-5 w-5 text-app-text-muted pointer-events-none"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+        {dropdown}
+      </div>
+      {selected && (
+        <div className="mt-3 text-sm">
+          <div className="text-app-text-muted">
+            Specimens: <span className="font-medium">{selected.specimenCount ?? '...'}</span>
+          </div>
+          <div className="text-app-text-muted text-xs mt-1">
+            Created: {parseDisplayDate(selected.created).toLocaleDateString()}
+          </div>
+        </div>
+      )}
+    </>
+  )
 }
 
 function SubjectMergeModalContent({
@@ -23,98 +206,15 @@ function SubjectMergeModalContent({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const [subjects, setSubjects] = useState<StudySubject[]>([])
-  const [sourceSubjectId, setSourceSubjectId] = useState<number | null>(null)
-  const [targetSubjectId, setTargetSubjectId] = useState<number | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [sourceSubject, setSourceSubject] = useState<StudySubject | null>(null)
+  const [targetSubject, setTargetSubject] = useState<StudySubject | null>(null)
   const [merging, setMerging] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [loadingCounts, setLoadingCounts] = useState(false)
-  const [sourceSearch, setSourceSearch] = useState('')
-  const [targetSearch, setTargetSearch] = useState('')
-  const [sourceOpen, setSourceOpen] = useState(false)
-  const [targetOpen, setTargetOpen] = useState(false)
-  const [sourceSelectedIndex, setSourceSelectedIndex] = useState(-1)
-  const [targetSelectedIndex, setTargetSelectedIndex] = useState(-1)
-  const [specimenCounts, setSpecimenCounts] = useState<Map<number, number>>(new Map())
-  const sourceRef = useRef<HTMLDivElement>(null)
-  const targetRef = useRef<HTMLDivElement>(null)
-  const sourceResultsRef = useRef<HTMLUListElement>(null)
-  const targetResultsRef = useRef<HTMLUListElement>(null)
-
-  // Derived from specimenCounts map during render
-  const sourceSpecimenCount = sourceSubjectId ? (specimenCounts.get(sourceSubjectId) ?? null) : null
-  const targetSpecimenCount = targetSubjectId ? (specimenCounts.get(targetSubjectId) ?? null) : null
-
-  // Load subjects when content mounts (key resets state on each open)
-  useEffect(() => {
-    if (studyId) {
-      loadSubjects()
-    }
-  }, [studyId])
-
-  // Scroll selected item into view
-  useEffect(() => {
-    const el = sourceSelectedIndex >= 0 ? sourceResultsRef.current?.querySelector(`[data-index="${sourceSelectedIndex}"]`) as HTMLElement | null : null
-    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [sourceSelectedIndex])
-
-  useEffect(() => {
-    const el = targetSelectedIndex >= 0 ? targetResultsRef.current?.querySelector(`[data-index="${targetSelectedIndex}"]`) as HTMLElement | null : null
-    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [targetSelectedIndex])
-
-  useClickOutside(sourceRef, () => setSourceOpen(false), sourceOpen)
-  useClickOutside(targetRef, () => setTargetOpen(false), targetOpen)
-
-  const loadAllSpecimenCounts = async (subjectsList: StudySubject[]) => {
-    if (subjectsList.length === 0) return
-    try {
-      const counts = new Map<number, number>()
-      const toLoad = subjectsList.slice(0, 50)
-      const promises = toLoad.map(async (subject) => {
-        try {
-          const summary = await subjectsApi.getSummary(subject.id)
-          counts.set(subject.id, summary.summary.totalSpecimens)
-        } catch (err) {
-          console.error(`Failed to load count for subject ${subject.id}:`, err)
-          counts.set(subject.id, 0)
-        }
-      })
-      await Promise.all(promises)
-      setSpecimenCounts(counts)
-    } catch (err) {
-      console.error('Failed to load specimen counts:', err)
-    }
-  }
-
-  const loadSubjects = useEffectEvent(async () => {
-    if (!studyId) {
-      setError('Study ID is required')
-      setLoading(false)
-      return
-    }
-
-    try {
-      setLoading(true)
-      setError(null)
-      const response = await studiesApi.getSubjects(studyId, { page: 1, limit: 1000 })
-      const subjectsList = response.subjects
-      setSubjects(subjectsList)
-      if (subjectsList.length === 0) {
-        setError('No subjects found in this study')
-      } else {
-        void loadAllSpecimenCounts(subjectsList)
-      }
-    } catch (err: unknown) {
-      console.error('Failed to load subjects:', err)
-      const errObj = err as { response?: { data?: { error?: string } } }
-      setError(errObj.response?.data?.error || 'Failed to load subjects')
-      setSubjects([])
-    } finally {
-      setLoading(false)
-    }
-  })
+  const mergeSubjects = useMergeSubjects()
+  const sourceSubjectId = sourceSubject?.id ?? null
+  const targetSubjectId = targetSubject?.id ?? null
+  const sourceSpecimenCount = sourceSubject?.specimenCount ?? null
+  const targetSpecimenCount = targetSubject?.specimenCount ?? null
 
   const handleMerge = async () => {
     if (!sourceSubjectId || !targetSubjectId) {
@@ -130,7 +230,7 @@ function SubjectMergeModalContent({
     try {
       setMerging(true)
       setError(null)
-      const response = await subjectsApi.merge(targetSubjectId, sourceSubjectId)
+      const response = await mergeSubjects.mutateAsync({ targetId: targetSubjectId, sourceId: sourceSubjectId })
       
       // Show success message
       const { specimensTransferred, specimensMerged, containersMerged, totalContainersTransferred } = response
@@ -150,28 +250,6 @@ function SubjectMergeModalContent({
       setMerging(false)
     }
   }
-
-  const sourceSubject = subjects.find(s => s.id === sourceSubjectId)
-  const targetSubject = subjects.find(s => s.id === targetSubjectId)
-  
-  // Filter subjects for dropdowns - exclude the other selected subject and filter by search
-  const availableSourceSubjects = subjects
-    .filter(s => s.id !== targetSubjectId)
-    .filter(s => {
-      if (!sourceSearch) return true
-      const searchLower = sourceSearch.toLowerCase()
-      return s.name.toLowerCase().includes(searchLower) || 
-             s.id.toString().includes(searchLower)
-    })
-  
-  const availableTargetSubjects = subjects
-    .filter(s => s.id !== sourceSubjectId)
-    .filter(s => {
-      if (!targetSearch) return true
-      const searchLower = targetSearch.toLowerCase()
-      return s.name.toLowerCase().includes(searchLower) || 
-             s.id.toString().includes(searchLower)
-    })
 
   return (
     <>
@@ -196,256 +274,28 @@ function SubjectMergeModalContent({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Source Subject Selection */}
                     <div className="border-2 border-app-trend-down rounded-lg p-4 bg-app-trend-down/10" style={{ position: 'relative', zIndex: 1 }}>
-                      <label className="block text-sm font-medium text-app-text mb-2">
-                        <span className="text-app-trend-down">Merge FROM</span> (will be deleted)
-                      </label>
-                      {loading ? (
-                        <div className="text-sm text-app-text-muted py-2">Loading subjects...</div>
-                      ) : (
-                        <div className="relative" ref={sourceRef} style={{ zIndex: 200 }}>
-                          <div className="relative">
-                            <input
-                              type="text"
-                              value={sourceSubject ? sourceSubject.name : sourceSearch}
-                              onChange={(e) => {
-                                setSourceSearch(e.target.value)
-                                setSourceOpen(true)
-                                setSourceSelectedIndex(0)
-                                if (!e.target.value) {
-                                  setSourceSubjectId(null)
-                                }
-                              }}
-                              onFocus={() => setSourceOpen(true)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'ArrowDown') {
-                                  e.preventDefault()
-                                  setSourceSelectedIndex(prev => 
-                                    prev < availableSourceSubjects.length - 1 ? prev + 1 : prev
-                                  )
-                                } else if (e.key === 'ArrowUp') {
-                                  e.preventDefault()
-                                  setSourceSelectedIndex(prev => prev > 0 ? prev - 1 : 0)
-                                } else if (e.key === 'Enter' && sourceSelectedIndex >= 0) {
-                                  e.preventDefault()
-                                  const selected = availableSourceSubjects[sourceSelectedIndex]
-                                  setSourceSubjectId(selected.id)
-                                  setSourceSearch(selected.name)
-                                  setSourceOpen(false)
-                                } else if (e.key === 'Escape') {
-                                  setSourceOpen(false)
-                                }
-                              }}
-                              placeholder="Search by name or ID..."
-                              className="w-full px-3 py-2 pr-8 border border-app-border rounded-md shadow-sm focus:outline-none focus:ring-app-trend-down focus:border-app-trend-down bg-app-card"
-                            />
-                            <svg
-                              className="absolute right-2 top-2.5 h-5 w-5 text-app-text-muted pointer-events-none"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                          </div>
-                          {sourceOpen && availableSourceSubjects.length > 0 && (
-                            <div 
-                              className="absolute z-[200] w-full mt-1 bg-app-card border border-app-border rounded-md shadow-lg max-h-96 overflow-y-auto"
-                              style={{ 
-                                position: 'fixed',
-                                width: sourceRef.current?.offsetWidth + 'px' || 'auto',
-                                top: sourceRef.current ? (sourceRef.current.getBoundingClientRect().bottom + window.scrollY + 4) + 'px' : 'auto',
-                                left: sourceRef.current ? (sourceRef.current.getBoundingClientRect().left + window.scrollX) + 'px' : 'auto'
-                              }}
-                            >
-                              <ul ref={sourceResultsRef} className="divide-y divide-app-border">
-                                {availableSourceSubjects.map((subject, index) => {
-                                  const count = specimenCounts.get(subject.id) ?? null
-                                  return (
-                                    <li key={subject.id}>
-                                      <button
-                                        type="button"
-                                        data-index={index}
-                                        className={`w-full px-4 py-3 text-left hover:bg-app-surface focus:outline-none focus:bg-app-surface ${
-                                          index === sourceSelectedIndex ? 'bg-app-accent-muted' : ''
-                                        }`}
-                                        onClick={() => {
-                                          setSourceSubjectId(subject.id)
-                                          setSourceSearch(subject.name)
-                                          setSourceOpen(false)
-                                        }}
-                                      >
-                                        <div className="flex items-center justify-between">
-                                          <div className="flex-1">
-                                            <p className="text-sm font-medium text-app-text">{subject.name}</p>
-                                            <div className="flex items-center gap-3 mt-1">
-                                              <p className="text-xs text-app-text-muted">ID: {subject.id}</p>
-                                              {count !== null && (
-                                                <p className="text-xs text-app-text-muted">
-                                                  {count} specimen{count !== 1 ? 's' : ''}
-                                                </p>
-                                              )}
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </button>
-                                    </li>
-                                  )
-                                })}
-                              </ul>
-                            </div>
-                          )}
-                          {sourceOpen && sourceSearch && availableSourceSubjects.length === 0 && (
-                            <div 
-                              className="absolute z-[200] w-full mt-1 bg-app-card border border-app-border rounded-md shadow-lg p-4 text-sm text-app-text-muted"
-                              style={{ 
-                                position: 'fixed',
-                                width: sourceRef.current?.offsetWidth + 'px' || 'auto',
-                                top: sourceRef.current ? (sourceRef.current.getBoundingClientRect().bottom + window.scrollY + 4) + 'px' : 'auto',
-                                left: sourceRef.current ? (sourceRef.current.getBoundingClientRect().left + window.scrollX) + 'px' : 'auto'
-                              }}
-                            >
-                              No subjects found matching "{sourceSearch}"
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {sourceSubject && (
-                        <div className="mt-3 text-sm">
-                          <div className="text-app-text-muted">
-                            Specimens: <span className="font-medium">{sourceSpecimenCount ?? '...'}</span>
-                          </div>
-                          <div className="text-app-text-muted text-xs mt-1">
-                            Created: {new Date(sourceSubject.created).toLocaleDateString()}
-                          </div>
-                        </div>
-                      )}
+                      <SubjectPicker
+                        inputId="merge-source-subject"
+                        label={<><span className="text-app-trend-down">Merge FROM</span> (will be deleted)</>}
+                        tone="source"
+                        studyId={studyId}
+                        excludeId={targetSubjectId}
+                        selected={sourceSubject}
+                        onSelect={setSourceSubject}
+                      />
                     </div>
 
                     {/* Target Subject Selection */}
                     <div className="border-2 border-app-trend-up rounded-lg p-4 bg-app-trend-up/10" style={{ position: 'relative', zIndex: 1 }}>
-                      <label className="block text-sm font-medium text-app-text mb-2">
-                        <span className="text-app-trend-up">Merge INTO</span> (will be kept)
-                      </label>
-                      {loading ? (
-                        <div className="text-sm text-app-text-muted py-2">Loading subjects...</div>
-                      ) : (
-                        <div className="relative" ref={targetRef} style={{ zIndex: 200 }}>
-                          <div className="relative">
-                            <input
-                              type="text"
-                              value={targetSubject ? targetSubject.name : targetSearch}
-                              onChange={(e) => {
-                                setTargetSearch(e.target.value)
-                                setTargetOpen(true)
-                                setTargetSelectedIndex(0)
-                                if (!e.target.value) {
-                                  setTargetSubjectId(null)
-                                }
-                              }}
-                              onFocus={() => setTargetOpen(true)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'ArrowDown') {
-                                  e.preventDefault()
-                                  setTargetSelectedIndex(prev => 
-                                    prev < availableTargetSubjects.length - 1 ? prev + 1 : prev
-                                  )
-                                } else if (e.key === 'ArrowUp') {
-                                  e.preventDefault()
-                                  setTargetSelectedIndex(prev => prev > 0 ? prev - 1 : 0)
-                                } else if (e.key === 'Enter' && targetSelectedIndex >= 0) {
-                                  e.preventDefault()
-                                  const selected = availableTargetSubjects[targetSelectedIndex]
-                                  setTargetSubjectId(selected.id)
-                                  setTargetSearch(selected.name)
-                                  setTargetOpen(false)
-                                } else if (e.key === 'Escape') {
-                                  setTargetOpen(false)
-                                }
-                              }}
-                              placeholder="Search by name or ID..."
-                              className="w-full px-3 py-2 pr-8 border border-app-border rounded-md shadow-sm focus:outline-none focus:ring-app-accent focus:border-app-accent bg-app-card"
-                            />
-                            <svg
-                              className="absolute right-2 top-2.5 h-5 w-5 text-app-text-muted pointer-events-none"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                          </div>
-                          {targetOpen && availableTargetSubjects.length > 0 && (
-                            <div 
-                              className="absolute z-[200] w-full mt-1 bg-app-card border border-app-border rounded-md shadow-lg max-h-96 overflow-y-auto"
-                              style={{ 
-                                position: 'fixed',
-                                width: targetRef.current?.offsetWidth + 'px' || 'auto',
-                                top: targetRef.current ? (targetRef.current.getBoundingClientRect().bottom + window.scrollY + 4) + 'px' : 'auto',
-                                left: targetRef.current ? (targetRef.current.getBoundingClientRect().left + window.scrollX) + 'px' : 'auto'
-                              }}
-                            >
-                              <ul ref={targetResultsRef} className="divide-y divide-app-border">
-                                {availableTargetSubjects.map((subject, index) => {
-                                  const count = specimenCounts.get(subject.id) ?? null
-                                  return (
-                                    <li key={subject.id}>
-                                      <button
-                                        type="button"
-                                        data-index={index}
-                                        className={`w-full px-4 py-3 text-left hover:bg-app-surface focus:outline-none focus:bg-app-surface ${
-                                          index === targetSelectedIndex ? 'bg-app-accent-muted' : ''
-                                        }`}
-                                        onClick={() => {
-                                          setTargetSubjectId(subject.id)
-                                          setTargetSearch(subject.name)
-                                          setTargetOpen(false)
-                                        }}
-                                      >
-                                        <div className="flex items-center justify-between">
-                                          <div className="flex-1">
-                                            <p className="text-sm font-medium text-app-text">{subject.name}</p>
-                                            <div className="flex items-center gap-3 mt-1">
-                                              <p className="text-xs text-app-text-muted">ID: {subject.id}</p>
-                                              {count !== null && (
-                                                <p className="text-xs text-app-text-muted">
-                                                  {count} specimen{count !== 1 ? 's' : ''}
-                                                </p>
-                                              )}
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </button>
-                                    </li>
-                                  )
-                                })}
-                              </ul>
-                            </div>
-                          )}
-                          {targetOpen && targetSearch && availableTargetSubjects.length === 0 && (
-                            <div 
-                              className="absolute z-[200] w-full mt-1 bg-app-card border border-app-border rounded-md shadow-lg p-4 text-sm text-app-text-muted"
-                              style={{ 
-                                position: 'fixed',
-                                width: targetRef.current?.offsetWidth + 'px' || 'auto',
-                                top: targetRef.current ? (targetRef.current.getBoundingClientRect().bottom + window.scrollY + 4) + 'px' : 'auto',
-                                left: targetRef.current ? (targetRef.current.getBoundingClientRect().left + window.scrollX) + 'px' : 'auto'
-                              }}
-                            >
-                              No subjects found matching "{targetSearch}"
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {targetSubject && (
-                        <div className="mt-3 text-sm">
-                          <div className="text-app-text-muted">
-                            Specimens: <span className="font-medium">{targetSpecimenCount ?? '...'}</span>
-                          </div>
-                          <div className="text-app-text-muted text-xs mt-1">
-                            Created: {new Date(targetSubject.created).toLocaleDateString()}
-                          </div>
-                        </div>
-                      )}
+                      <SubjectPicker
+                        inputId="merge-target-subject"
+                        label={<><span className="text-app-trend-up">Merge INTO</span> (will be kept)</>}
+                        tone="target"
+                        studyId={studyId}
+                        excludeId={sourceSubjectId}
+                        selected={targetSubject}
+                        onSelect={setTargetSubject}
+                      />
                     </div>
                   </div>
                 </div>

@@ -36,7 +36,7 @@ Open **Operations → Derivations** and click **Import CSV**. Four steps: **Uplo
 
 **Upload.** Choose **Source** (Control Batch or Study Subject) and **Parent container type**. Control batch parents: Paper (DBS spots) or Cryovial Tube. Study subject parents: Paper (DBS spots), Micronix Tube, or Cryovial Tube. Optional **Import settings** set derivation type, derived specimen type, derived container type, protocol, and date for the whole file; otherwise supply them per row. Select a CSV and **Download template** for columns that match the source, parent type, and current settings. Click **Validate & Continue**. Validation does not write.
 
-**Collections.** If the CSV names missing plates or boxes, assign a location each, then click **Create collections & continue**.
+**Collections.** If the CSV names plates or boxes that do not exist yet, assign a location for each one, then click **Continue to review**. They are created together with your derivations when you import.
 
 **Review & Edit.** Summary of valid, invalid, and warnings, plus a per-row table. Click **Create derivations**.
 
@@ -48,14 +48,18 @@ CSV columns for the derived container:
 - Cryovial: `box_name` or `collection_barcode`, and `position`. `container_barcode` is optional.
 - Paper: `box_name` or `bag_name`, plus `sheet_name`. `sublabel` is optional.
 
+A plate or cryovial box that doesn't exist yet is assigned a location in the **Collections** step and created when the import runs. One given only by `collection_barcode` is named after its barcode, as in bulk import, so either import finds it later by that barcode or by that name.
+
 For `derivation_type` in CSV, use the stored value: `aliquot` for Distribution, `dna_extraction` for DNA Extraction. The UI shows readable labels.
 
-Optional `quantity_used` and `reduce_parent_quantity` per row, or once in **Import settings**. If you reduce quantity, the parent must have enough remaining.
+Optional `quantity_used` and `reduce_parent_quantity` per row, or once in **Import settings**. `quantity_used` must be greater than 0 and `quantity` must be 0 or more. If you reduce quantity, the parent must have enough remaining for every row that draws from it, counted together; validation lists any row that would overdraw, and the import is rejected.
 
 A repository example for DBS-to-DNA from controls is `examples/derivation-control-dbs-to-dna/` (CSV and README). Operators can generate a CSV with `scripts/generate_derivation_control_dbs_to_dna_example.sh`. That is not in the app UI.
 
 ## After creation
 
 Type, date, protocol, and notes are read-only on the parent and child container pages. The app has no edit or delete for a derivation. Ask an administrator if a record is wrong.
+
+If `parent_container_barcode` is on more than one container, the row fails with an ambiguous barcode error that lists them. Use `parent_container_id` for that row instead.
 
 If the parent is not found, check identifier, source type (control vs subject), and parent container type. Position errors: use `A01` for micronix and static wells.

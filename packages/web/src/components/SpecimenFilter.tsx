@@ -19,7 +19,10 @@ export interface SpecimenFilters {
 interface SpecimenFilterProps {
   /** The applied filters. */
   filters: SpecimenFilters
-  /** Search text applies as it is typed; other filter edits wait for Apply. */
+  /**
+   * Search text applies once typing pauses for `SPECIMEN_SEARCH_DEBOUNCE_MS`, so a search sends
+   * one request instead of one per keystroke; other filter edits wait for Apply.
+   */
   onSearchChange: (search: string | undefined) => void
   /** Apply the edited filters (Apply, Enter in search, or Clear). */
   onSubmit: (filters: SpecimenFilters) => void
@@ -40,6 +43,9 @@ const FILTER_KEYS: Array<keyof SpecimenFilters> = [
 function sameFilters(a: SpecimenFilters, b: SpecimenFilters, ignore?: keyof SpecimenFilters): boolean {
   return FILTER_KEYS.every((key) => key === ignore || (a[key] || undefined) === (b[key] || undefined))
 }
+
+/** How long search typing must pause before the search applies. */
+export const SPECIMEN_SEARCH_DEBOUNCE_MS = 300
 
 const SOURCE_TYPES = [
   { value: '', label: 'All Sources' },
@@ -64,6 +70,20 @@ export default function SpecimenFilter({ filters, onSearchChange, onSubmit, isLo
     prevFiltersRef.current = filters
     setLocalFilters(searchOnly ? { ...localFilters, search: filters.search } : filters)
   }
+
+  // Apply typed search text once typing pauses. Apply, Enter, Clear, or an outside change to the
+  // applied search makes the two equal, which cancels a pending apply.
+  const onSearchChangeRef = useRef(onSearchChange)
+  useEffect(() => {
+    onSearchChangeRef.current = onSearchChange
+  })
+  const typedSearch = localFilters.search || undefined
+  const appliedSearch = filters.search || undefined
+  useEffect(() => {
+    if (typedSearch === appliedSearch) return
+    const timer = setTimeout(() => onSearchChangeRef.current(typedSearch), SPECIMEN_SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [typedSearch, appliedSearch])
 
   useEffect(() => {
     loadReferenceData()
@@ -131,7 +151,6 @@ export default function SpecimenFilter({ filters, onSearchChange, onSubmit, isLo
       newFilters[key] = value
     }
     setLocalFilters(newFilters)
-    if (key === 'search') onSearchChange(newFilters.search)
   }
 
   const handleSubmit = () => {
@@ -165,6 +184,7 @@ export default function SpecimenFilter({ filters, onSearchChange, onSubmit, isLo
               <input
                 type="text"
                 placeholder="Search subject, batch, or type..."
+                aria-label="Search specimens"
                 value={localFilters.search || ''}
                 onChange={(e) => updateFilter('search', e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}

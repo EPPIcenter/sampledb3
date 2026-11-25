@@ -46,4 +46,68 @@ describe('StudyCard', () => {
     expect(screen.getByText('Test Study')).toBeInTheDocument()
     expect(screen.getByText('ST1')).toBeInTheDocument()
   })
+
+  it('computes calendar-day duration when studyDurationDays is omitted, even with times of day or across DST', async () => {
+    await render(
+      <StudyCard
+        study={mockStudy}
+        summary={{
+          studyId: 1,
+          totalSubjects: 2,
+          totalSpecimens: 2,
+          totalContainers: 2,
+          collectionDateRange: {
+            earliest: '2024-03-01T08:00:00Z',
+            latest: '2024-03-05T16:00:00Z',
+          },
+          averageSpecimensPerSubject: 1,
+          topSpecimenTypes: [],
+        }}
+      />
+    )
+    expect(screen.getByText('Duration: 4 days')).toBeInTheDocument()
+  })
+
+  it('computes calendar-day duration across a fall-back DST boundary without rounding up', async () => {
+    await render(
+      <StudyCard
+        study={mockStudy}
+        summary={{
+          studyId: 1,
+          totalSubjects: 2,
+          totalSpecimens: 2,
+          totalContainers: 2,
+          collectionDateRange: {
+            earliest: '2024-11-02',
+            latest: '2024-11-04',
+          },
+          averageSpecimensPerSubject: 1,
+          topSpecimenTypes: [],
+        }}
+      />
+    )
+    expect(screen.getByText('Duration: 2 days')).toBeInTheDocument()
+  })
+
+  it('omits duration instead of showing NaN days when collectionDateRange has an invalid date', async () => {
+    await render(
+      <StudyCard
+        study={mockStudy}
+        summary={{
+          studyId: 1,
+          totalSubjects: 2,
+          totalSpecimens: 2,
+          totalContainers: 2,
+          collectionDateRange: {
+            earliest: '2024-02-31',
+            latest: '2024-11-04xyz',
+          },
+          averageSpecimensPerSubject: 1,
+          topSpecimenTypes: [],
+        }}
+      />
+    )
+    expect(screen.queryByText(/Duration:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument()
+  })
 })

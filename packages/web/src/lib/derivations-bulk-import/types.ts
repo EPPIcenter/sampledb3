@@ -13,8 +13,6 @@ export interface MissingDerivationCollection {
   barcode?: string
   containerType: 'micronix_tube' | 'cryovial_tube'
   locationId: number | null
-  status: 'pending' | 'creating' | 'success' | 'error'
-  error?: string
 }
 
 export interface DerivationsBulkState {
@@ -22,6 +20,8 @@ export interface DerivationsBulkState {
   csvContent: string
   reviewHeaders: string[]
   reviewRows: Record<string, string>[]
+  /** Spreadsheet row of each review row (header is row 1); the API's row index points into this. */
+  reviewFileRows: number[]
   validationResult: ValidationResult | null
   importResults: DerivationCsvImportResultRow[] | null
   error: string | null
@@ -33,7 +33,7 @@ export type DerivationsBulkEvent =
   | { type: 'FILE_CLEARED' }
   | { type: 'ERROR'; message: string }
   | { type: 'ERROR_CLEARED' }
-  | { type: 'VALIDATED'; result: ValidationResult; headers: string[]; rows: Record<string, string>[] }
+  | { type: 'VALIDATED'; result: ValidationResult; headers: string[]; rows: Record<string, string>[]; fileRows: number[] }
   | { type: 'STEP_SET'; step: DerivationsBulkStep }
   | { type: 'REVIEW_CELL_SET'; rowIndex: number; header: string; value: string }
   | { type: 'COLLECTION_PATCHED'; index: number; patch: Partial<MissingDerivationCollection> }
@@ -42,6 +42,4 @@ export type DerivationsBulkEvent =
 export interface DerivationsBulkGateway {
   validateCsv(csvContent: string, settings: BulkDerivationSettings): Promise<ValidationResult>
   importCsv(csvContent: string, settings: BulkDerivationSettings): Promise<{ rows: DerivationCsvImportResultRow[] }>
-  createMicronixPlate(input: { name: string; locationId: number; barcode?: string }): Promise<unknown>
-  createCryovialBox(input: { name: string; locationId: number; barcode?: string }): Promise<unknown>
 }

@@ -1,9 +1,12 @@
 import type { Database } from '../../db/client'
 import { specimen, storageContainer, studySubject, study, specimenType, controlBatch } from '../../db/schema'
-import { eq, and, or, sql } from 'drizzle-orm'
+import { eq, and, or, sql, inArray, asc, desc } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../constants'
-import { resolveContainerByBarcode } from '../identifier-resolution'
-import { dateToUpperBound } from '../sql-helpers'
+import { idQueryParam } from '../query-params'
+import { ValidationError } from '../error-handler'
+import { findContainersByBarcode } from '../identifier-resolution'
+import { collectionDateFilter, timestampFilter } from '../date-filters'
+import { dateRangeConditions, isCalendarDate } from '../sql-helpers'
 import { likeContains } from '../sql-like'
 
 export type ListSpecimensQuery = {
@@ -20,6 +23,59 @@ export type ListSpecimensQuery = {
   search?: string
   page?: string
   limit?: string
+  sort?: string
+  order?: string
+}
+
+/** Columns the Specimens list can sort by, as the `sort` query parameter names them. */
+export const SPECIMEN_SORT_COLUMNS = ['created', 'collection_date'] as const
+export type SpecimenSortColumn = (typeof SPECIMEN_SORT_COLUMNS)[number]
+export type SortOrder = 'asc' | 'desc'
+
+/**
+ * The list order from `sort` and `order`. With neither, newest created first; otherwise `sort`
+ * defaults to `created` and `order` to `asc`. An unknown column or direction throws a
+ * `ValidationError` (400) instead of being ignored.
+ */
+export function parseSpecimenSort(
+  sortParam: string | undefined,
+  orderParam: string | undefined,
+): { sort: SpecimenSortColumn; order: SortOrder } {
+  const sortText = sortParam?.trim() ?? ''
+  const orderText = orderParam?.trim().toLowerCase() ?? ''
+  if (sortText === '' && orderText === '') return { sort: 'created', order: 'desc' }
+
+  const sort = sortText === '' ? 'created' : sortText
+  if (!isSpecimenSortColumn(sort)) {
+    throw new ValidationError(`Invalid sort '${sortParam}': use one of ${SPECIMEN_SORT_COLUMNS.join(', ')}.`)
+  }
+  const order = orderText === '' ? 'asc' : orderText
+  if (order !== 'asc' && order !== 'desc') {
+    throw new ValidationError(`Invalid order '${orderParam}': use asc or desc.`)
+  }
+  return { sort, order }
+}
+
+function isSpecimenSortColumn(value: string): value is SpecimenSortColumn {
+  return (SPECIMEN_SORT_COLUMNS as readonly string[]).includes(value)
+}
+
+/**
+ * ORDER BY for a sort. Specimens without a collection date come last in either direction,
+ * just after those whose collection date is not a real YYYY-MM-DD date (left by migration 008),
+ * and the id breaks ties so that consecutive pages neither repeat nor skip a row.
+ */
+function specimenOrderBy(sort: SpecimenSortColumn, order: SortOrder) {
+  const direction = order === 'asc' ? asc : desc
+  if (sort === 'collection_date') {
+    return [
+      sql`${specimen.collectionDate} IS NULL`,
+      sql`NOT ${isCalendarDate(specimen.collectionDate)}`,
+      direction(specimen.collectionDate),
+      direction(specimen.id),
+    ]
+  }
+  return [direction(specimen.created), direction(specimen.id)]
 }
 
 export type ListSpecimensResult = {
@@ -47,7 +103,7 @@ export type ListSpecimensResult = {
       name: string | null
     } | null
   }>
-  pagination?: {
+  pagination: {
     page: number
     limit: number
     total: number
@@ -55,12 +111,10 @@ export type ListSpecimensResult = {
   }
 }
 
-const emptyBarcodeResult = (): ListSpecimensResult => ({
-  specimens: [],
-  pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
-})
-
-/** List and filter specimens with optional pagination. */
+/**
+ * List and filter specimens one page at a time. Without `page` or `limit` it returns the
+ * first page at the configured default page size, with the total across all pages.
+ */
 export async function listSpecimens(database: Database, query: ListSpecimensQuery): Promise<ListSpecimensResult> {
   const {
     sourceType,
@@ -76,7 +130,14 @@ export async function listSpecimens(database: Database, query: ListSpecimensQuer
     search,
     page: pageParam,
     limit: limitParam,
+    sort: sortParam,
+    order: orderParam,
   } = query
+
+  const page = validatePage(pageParam)
+  const limit = await validateLimit(database, limitParam)
+  const offset = (page - 1) * limit
+  const { sort, order } = parseSpecimenSort(sortParam, orderParam)
 
   let selectQuery = database
     .select({
@@ -121,56 +182,49 @@ export async function listSpecimens(database: Database, query: ListSpecimensQuer
     conditions.push(eq(study.shortCode, studyCode))
   }
 
-  if (subjectId) {
-    const id = parseInt(subjectId)
-    if (!isNaN(id)) {
-      conditions.push(eq(specimen.studySubjectId, id))
-    }
+  const subjectIdFilter = idQueryParam('subject_id', subjectId)
+  if (subjectIdFilter !== undefined) {
+    conditions.push(eq(specimen.studySubjectId, subjectIdFilter))
   }
 
-  if (controlBatchId) {
-    const id = parseInt(controlBatchId)
-    if (!isNaN(id)) {
-      conditions.push(eq(specimen.controlBatchId, id))
-    }
+  const controlBatchIdFilter = idQueryParam('control_batch_id', controlBatchId)
+  if (controlBatchIdFilter !== undefined) {
+    conditions.push(eq(specimen.controlBatchId, controlBatchIdFilter))
   }
 
-  if (specimenTypeId) {
-    const id = parseInt(specimenTypeId)
-    if (!isNaN(id)) {
-      conditions.push(eq(specimen.specimenTypeId, id))
-    }
+  const specimenTypeIdFilter = idQueryParam('specimen_type_id', specimenTypeId)
+  if (specimenTypeIdFilter !== undefined) {
+    conditions.push(eq(specimen.specimenTypeId, specimenTypeIdFilter))
   }
 
-  if (collectionDateFrom) {
-    conditions.push(sql`${specimen.collectionDate} >= ${collectionDateFrom}`)
+  const collectionFrom = collectionDateFilter('collection_date_from', collectionDateFrom)
+  const collectionTo = collectionDateFilter('collection_date_to', collectionDateTo)
+  const createdFromBound = timestampFilter('created_from', createdFrom)
+  const createdToBound = timestampFilter('created_to', createdTo)
+  if (collectionFrom) {
+    conditions.push(sql`${specimen.collectionDate} >= ${collectionFrom}`)
   }
-  if (collectionDateTo) {
-    conditions.push(sql`${specimen.collectionDate} <= ${collectionDateTo}`)
+  if (collectionTo) {
+    conditions.push(sql`${specimen.collectionDate} <= ${collectionTo}`)
   }
-  if (createdFrom) {
-    conditions.push(sql`${specimen.created} >= ${createdFrom}`)
-  }
-  if (createdTo) {
-    conditions.push(dateToUpperBound(specimen.created, createdTo))
-  }
+  if (collectionFrom || collectionTo) conditions.push(isCalendarDate(specimen.collectionDate))
+  conditions.push(...dateRangeConditions(specimen.created, createdFromBound, createdToBound))
 
   if (barcode) {
-    const containerId = await resolveContainerByBarcode(database, barcode)
-    if (containerId) {
-      const container = await database
-        .select({ specimenId: storageContainer.specimenId })
-        .from(storageContainer)
-        .where(eq(storageContainer.id, containerId))
-        .get()
-      if (container) {
-        conditions.push(eq(specimen.id, container.specimenId))
-      } else {
-        return emptyBarcodeResult()
-      }
-    } else {
-      return emptyBarcodeResult()
+    // Every Specimen with a Container carrying the barcode; cryovial barcodes repeat.
+    const containerIds = (await findContainersByBarcode(database, barcode)).map((match) => match.containerId)
+    if (containerIds.length === 0) {
+      return { specimens: [], pagination: { page, limit, total: 0, totalPages: 0 } }
     }
+    conditions.push(
+      inArray(
+        specimen.id,
+        database
+          .select({ specimenId: storageContainer.specimenId })
+          .from(storageContainer)
+          .where(inArray(storageContainer.id, containerIds)),
+      ),
+    )
   }
 
   if (search) {
@@ -185,19 +239,6 @@ export async function listSpecimens(database: Database, query: ListSpecimensQuer
     selectQuery = selectQuery.where(and(...conditions) as any) as any
   }
 
-  const returnAll = !pageParam && !limitParam
-
-  const page = pageParam ? validatePage(pageParam) : 1
-  let limit: number | undefined
-  if (returnAll) {
-    limit = undefined
-  } else if (limitParam) {
-    limit = await validateLimit(database, limitParam)
-  } else {
-    limit = 50
-  }
-  const offset = returnAll ? undefined : (page - 1) * limit!
-
   const countQuery = database
     .select({ count: sql<number>`COUNT(*)` })
     .from(specimen)
@@ -210,13 +251,13 @@ export async function listSpecimens(database: Database, query: ListSpecimensQuer
     countQuery.where(and(...conditions) as any) as any
   }
 
-  let queryWithOrder = selectQuery.orderBy(sql`${specimen.created} DESC`)
-  if (!returnAll) {
-    queryWithOrder = queryWithOrder.limit(limit!).offset(offset!) as any
-  }
+  const pageQuery = selectQuery
+    .orderBy(...specimenOrderBy(sort, order))
+    .limit(limit)
+    .offset(offset)
 
   const [specimensList, countResult] = await Promise.all([
-    queryWithOrder,
+    pageQuery,
     countQuery,
   ])
 
@@ -224,11 +265,11 @@ export async function listSpecimens(database: Database, query: ListSpecimensQuer
 
   return {
     specimens: specimensList,
-    pagination: returnAll ? undefined : {
+    pagination: {
       page,
-      limit: limit!,
+      limit,
       total,
-      totalPages: Math.ceil(total / limit!),
+      totalPages: Math.ceil(total / limit),
     },
   }
 }

@@ -49,6 +49,25 @@ export interface ScannerPlateCsvValidationError {
   error: string
 }
 
+/**
+ * One error per repeat of a value: `keys[i]` is row i+1's key (null = row not
+ * checked). The error names the row of the first occurrence.
+ */
+export function findDuplicateRows(
+  keys: Array<string | null>,
+  describe: (key: string, firstRow: number) => string,
+): ScannerPlateCsvValidationError[] {
+  const firstRowByKey = new Map<string, number>()
+  const errors: ScannerPlateCsvValidationError[] = []
+  keys.forEach((key, i) => {
+    if (key === null || key === '') return
+    const firstRow = firstRowByKey.get(key)
+    if (firstRow === undefined) firstRowByKey.set(key, i + 1)
+    else errors.push({ row: i + 1, error: describe(key, firstRow) })
+  })
+  return errors
+}
+
 export function validateScannerPlateCsv(
   rows: ScannerPlateCsvRow[],
   config: ScannerConfiguration
@@ -72,6 +91,18 @@ export function validateScannerPlateCsv(
       })
     }
   }
+
+  // A1 and A01 are the same well; compare in stored form.
+  errors.push(
+    ...findDuplicateRows(
+      rows.map((row) => normalizeWellPosition(row.target_position) ?? (row.target_position.trim() || null)),
+      (position, firstRow) => `Position ${position} appears more than once (also row ${firstRow})`,
+    ),
+    ...findDuplicateRows(
+      rows.map((row) => row.container_barcode.trim() || null),
+      (barcode, firstRow) => `Barcode ${barcode} appears more than once (also row ${firstRow})`,
+    ),
+  )
 
   const positionSet = new Set<string>()
   for (const row of rows) {

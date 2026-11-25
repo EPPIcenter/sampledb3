@@ -22,6 +22,7 @@ import { useUser } from '../contexts/UserContext'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import { useClickOutside } from '../hooks/useClickOutside'
 import '../styles/storage.css'
+import { parseDisplayDate } from '../lib/date-utils'
 
 interface Location {
   id: number
@@ -663,9 +664,9 @@ export default function Locations() {
               )}
               <p className="mt-2 text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 Created{' '}
-                {new Date(location.created).toLocaleDateString()} • Last
+                {parseDisplayDate(location.created).toLocaleDateString()} • Last
                 updated{' '}
-                {new Date(location.lastUpdated).toLocaleDateString()}
+                {parseDisplayDate(location.lastUpdated).toLocaleDateString()}
               </p>
             </div>
             <div className="flex flex-col items-end gap-2">

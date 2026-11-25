@@ -1,4 +1,4 @@
-import { ConflictError, ValidationError } from '../../error-handler'
+import { ConflictError, NotFoundError, ValidationError } from '../../error-handler'
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { setupTestDatabase, cleanupTestDatabase } from '../../../__tests__/helpers/db-setup'
 import {
@@ -149,6 +149,52 @@ describe('batch-with-specimens', () => {
       expect(result.specimens[0].specimenTypeName).toBe('DNA')
       expect(result.specimens[0].containerCount).toBe(1)
       expect(result.specimens[0].containerIds).toHaveLength(1)
+    })
+
+    it('stores batch properties as a JSON object and returns them as one', async () => {
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(testDb, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+      const definition = await createTestControlDefinition(testDb, { name: 'Def1' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      await testDb.insert(specimenTypeContainerType).values({
+        specimenTypeId: specimenType.id,
+        containerType: 'micronix_tube',
+        created: utcNow(),
+      })
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(testDb, { name: 'Plate1', locationId: location.id })
+      const properties = { lead_person: 'Ann', density: 100 }
+
+      const result = await createBatchWithSpecimens(testDb, {
+        batch: { controlDefinitionId: definition.id, name: 'Batch1', properties },
+        specimens: [
+          {
+            specimenTypeName: 'DNA',
+            containers: [
+              {
+                containerType: 'micronix_tube',
+                barcode: 'MT001',
+                collection: { type: 'micronix_plate', id: plate.id, position: 'A01' },
+              },
+            ],
+          },
+        ],
+      })
+
+      expect(result.batch.properties).toEqual(properties)
+      const stored = await testDb.select().from(controlBatch).where(eq(controlBatch.id, result.batch.id)).get()
+      expect(stored?.properties).toEqual(properties)
+      const raw = sqlite
+        .prepare('SELECT json_type(properties) AS type FROM control_batch WHERE id = ?')
+        .get(result.batch.id) as { type: string }
+      expect(raw.type).toBe('object')
     })
 
     it('rejects one new plate given two locations, though each container is registered on its own', async () => {
@@ -496,6 +542,14 @@ describe('batch-with-specimens', () => {
         addSpecimensToBatch(testDb, batch.id, { specimens: [{ ...dna('MT1', 'A01')[0], specimenTypeName: 'Nope' }] }),
       ).rejects.toBeInstanceOf(ValidationError)
     })
+
+    it('throws NotFoundError when the control batch does not exist', async () => {
+      const { dna } = await seedMicronixBatchFixtures()
+
+      await expect(addSpecimensToBatch(testDb, 999999, { specimens: dna('MT1', 'A01') })).rejects.toBeInstanceOf(
+        NotFoundError,
+      )
+    })
   })
 
   describe('createBatchesWithSpecimens', () => {
@@ -527,6 +581,33 @@ describe('batch-with-specimens', () => {
 
       expect(await testDb.select().from(controlBatch).all()).toHaveLength(0)
       expect(await testDb.select().from(storageContainer).all()).toHaveLength(0)
+    })
+
+    it('names each unnamed batch uniquely, though two batches share a definition and date', async () => {
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(testDb, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+      const def100 = await createTestControlDefinition(testDb, { name: 'D100' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      await testDb.insert(specimenTypeContainerType).values({ specimenTypeId: specimenType.id, containerType: 'micronix_tube', created: utcNow() })
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(testDb, { name: 'Plate1', locationId: location.id })
+      const tube = (barcode: string, position: string) => ({
+        containerType: 'micronix_tube' as const,
+        barcode,
+        collection: { type: 'micronix_plate' as const, id: plate.id, position },
+      })
+
+      const results = await createBatchesWithSpecimens(testDb, [
+        { batch: { controlDefinitionId: def100.id, productionDate: '2024-06-01' }, specimens: [{ specimenTypeName: 'DNA', containers: [tube('MT1', 'A01')] }] },
+        { batch: { controlDefinitionId: def100.id, productionDate: '2024-06-01' }, specimens: [{ specimenTypeName: 'DNA', containers: [tube('MT2', 'A02')] }] },
+      ])
+
+      expect(results.map((r) => r.batch.name)).toEqual(['D100 2024-06-01', 'D100 2024-06-01 (1)'])
+      expect(await testDb.select().from(controlBatch).all()).toHaveLength(2)
     })
 
     it('reports a batch name that already exists as a conflict', async () => {
@@ -629,6 +710,46 @@ describe('batch-with-specimens', () => {
       await expect(attempt).rejects.toBeInstanceOf(ConflictError)
       await expect(attempt).rejects.toThrow(/^Control batch 2 \('B200'\): .*No control batches were created\.$/)
       expect(await testDb.select().from(controlBatch).all()).toHaveLength(0)
+    })
+
+    it('rethrows unexpected internal errors instead of wrapping them in ValidationError', async () => {
+      const { def100, def200, dna } = await seedMicronixBatchFixtures()
+      // Drop a table read during container preparation/creation so an internal DB error occurs.
+      sqlite.exec('DROP TABLE micronix_tube')
+
+      let caught: unknown
+      try {
+        await createBatchesWithSpecimens(testDb, [
+          { batch: { controlDefinitionId: def100.id, name: 'B100' }, specimens: dna('MT1', 'A01') },
+          { batch: { controlDefinitionId: def200.id, name: 'B200' }, specimens: dna('MT2', 'A02') },
+        ])
+      } catch (err) {
+        caught = err
+      }
+
+      expect(caught).toBeInstanceOf(Error)
+      expect(caught).not.toBeInstanceOf(ValidationError)
+      expect(caught).not.toBeInstanceOf(ConflictError)
+      expect(await testDb.select().from(controlBatch).all()).toHaveLength(0)
+    })
+
+    it('rethrows unexpected errors during container preparation instead of wrapping them in ValidationError', async () => {
+      const { def100, dna } = await seedMicronixBatchFixtures()
+      sqlite.exec('DROP TABLE specimen_type_container_type')
+
+      let caught: unknown
+      try {
+        await createBatchWithSpecimens(testDb, {
+          batch: { controlDefinitionId: def100.id, name: 'B100' },
+          specimens: dna('MT1', 'A01'),
+        })
+      } catch (err) {
+        caught = err
+      }
+
+      expect(caught).toBeInstanceOf(Error)
+      expect(caught).not.toBeInstanceOf(ValidationError)
+      expect(caught).not.toBeInstanceOf(ConflictError)
     })
   })
 })

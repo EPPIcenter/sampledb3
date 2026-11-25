@@ -54,10 +54,13 @@ type SubjectsListResponse = {
 type SummariesResponse = { summaries: StudySummaryBasic[] }
 
 export const studiesApi = {
-  list: (search?: string, params?: { page?: number; limit?: number }) =>
+  list: (
+    search?: string,
+    params?: { page?: number; limit?: number; created_from?: string; created_to?: string },
+  ) =>
     api.get<StudiesListResponse>('/studies', { params: { search, ...params } }),
   get: (id: number) => api.get<StudyResponse>(`/studies/${id}`),
-  getSubjects: (id: number, params?: { page?: number; limit?: number }) =>
+  getSubjects: (id: number, params?: { page?: number; limit?: number; search?: string }) =>
     api.get<SubjectsListResponse>(`/studies/${id}/subjects`, { params }),
   getSummary: (id: number) => api.get<StudySummary>(`/studies/${id}/summary`),
   getSummaries: (ids: number[]) =>

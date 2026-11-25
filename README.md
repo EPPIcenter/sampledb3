@@ -55,8 +55,8 @@ Before pushing, run `bun run ci:verify`. The `Checks` workflow runs the same com
 
 Install the pre-commit hook once per clone with `bun run setup:hooks`. On each commit, `.githooks/pre-commit-checks.sh` reads the staged files, skipping staged deletions, and does the following:
 
-- It typechecks the API package when a staged file is under `packages/api/`, and the web package when one is under `packages/web/`.
-- It typechecks the contract, API, and web packages when a staged file is under `packages/contract/`, or is `Dockerfile`, `.dockerignore`, `bun.lock`, the root `package.json`, or a `package.json` or `tsconfig*.json` in any other package under `packages/`.
+- It typechecks the contract, API, and web packages when a staged file is under `packages/contract/`, or is `Dockerfile`, `.dockerignore`, `bun.lock`, the root `package.json`, or a `package.json` or `tsconfig*.json` in any package under `packages/`.
+- For other staged files, it typechecks the API package when a file is under `packages/api/`, and the web package when one is under `packages/web/`.
 - It runs ESLint on the staged `.ts` files under `packages/api/src/` and the staged `.ts` and `.tsx` files under `packages/web/src/`.
 - It refuses the commit when one of the files it would lint also has unstaged edits, because ESLint reads the file on disk and not the staged copy.
 

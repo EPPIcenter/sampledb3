@@ -156,4 +156,50 @@ describe('Collections page', () => {
       expect(screen.queryByText('Bag Delta')).not.toBeInTheDocument()
     })
   })
+
+  it('renders a plate and a box with the same id without logging duplicate React key errors', async () => {
+    vi.mocked(collectionsApi.listAllCollections).mockResolvedValueOnce({
+      collections: [
+        {
+          id: 1,
+          name: 'Plate One',
+          type: 'micronix_plate',
+          barcode: 'PLT-1',
+          locationId: 10,
+          itemCount: 12,
+          location: { id: 10, path: '/Freezer A' },
+        },
+        {
+          id: 1,
+          name: 'Box One',
+          type: 'box',
+          barcode: null,
+          locationId: 10,
+          itemCount: 4,
+          location: { id: 10, path: '/Freezer A' },
+        },
+      ],
+    })
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await render(<Collections />, { initialEntries: ['/collections'] })
+
+      expect(await screen.findByRole('link', { name: 'Plate One' })).toHaveAttribute(
+        'href',
+        '/collections/micronix-plates/1',
+      )
+      expect(screen.getByRole('link', { name: 'Box One' })).toHaveAttribute(
+        'href',
+        '/collections/boxes/1',
+      )
+
+      const duplicateKeyLogs = errorSpy.mock.calls.filter((args) =>
+        args.some((arg) => typeof arg === 'string' && arg.includes('same key')),
+      )
+      expect(duplicateKeyLogs).toEqual([])
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
 })

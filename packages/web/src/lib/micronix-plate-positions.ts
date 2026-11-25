@@ -1,34 +1,18 @@
 /**
- * Well position utilities for micronix plates (96-well: A01–H12).
- * Structured so other layouts (e.g. 384-well) can be added later.
+ * Well position utilities for micronix plates (96-well: A01–H12), on the shared Grid position
+ * rule from `@sampledb/contract`.
  */
-
-const ROWS_96 = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const
-const COLS_96 = 12
+import { gridCellKeys, gridPositionKey } from '@sampledb/contract'
 
 /** Set of all 96 well positions for a standard micronix plate (8×12). */
-export const MICRONIX_WELL_POSITIONS_96: Set<string> = new Set(
-  ROWS_96.flatMap((row) =>
-    Array.from({ length: COLS_96 }, (_, i) => {
-      const col = i + 1
-      return `${row}${col.toString().padStart(2, '0')}`
-    })
-  )
-)
+export const MICRONIX_WELL_POSITIONS_96: Set<string> = new Set(gridCellKeys('micronix_plate'))
 
 /**
  * Normalize well position to A01 style (row A–H, column 01–12).
  * Returns normalized position or null if invalid.
  */
 export function normalizeWellPosition(pos: string): string | null {
-  const t = pos.trim()
-  if (!t) return null
-  const match = t.match(/^([A-Ha-h])(\d{1,2})$/i)
-  if (!match) return null
-  const row = match[1].toUpperCase()
-  const col = parseInt(match[2], 10)
-  if (Number.isNaN(col) || col < 1 || col > 12) return null
-  return `${row}${col.toString().padStart(2, '0')}`
+  return gridPositionKey(pos, 'micronix_plate')
 }
 
 export interface FullPlateValidationResult {

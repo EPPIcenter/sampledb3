@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { formatDate } from '../lib/date-utils'
+import { calendarDaysBetween, formatDate, parseDisplayDate } from '../lib/date-utils'
 import type { Study, StudySummaryBasic } from '../lib/api/studies';interface StudySummaryData extends StudySummaryBasic {
   averageSpecimensPerSubject?: number
   studyDurationDays?: number | null
@@ -19,10 +19,8 @@ interface StudyCardProps {
 // Calculate study duration from date range
 const calculateDuration = (range: { earliest: string; latest: string } | null): number | null => {
   if (!range) return null
-  const start = new Date(range.earliest)
-  const end = new Date(range.latest)
-  const diffTime = Math.abs(end.getTime() - start.getTime())
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  const days = calendarDaysBetween(range.earliest, range.latest)
+  return Number.isFinite(days) ? days : null
 }
 
 // Simple icon components
@@ -65,7 +63,7 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
   }
 
   const formatDuration = (days: number | null | undefined) => {
-    if (days == null) return null
+    if (days == null || !Number.isFinite(days)) return null
     if (days < 30) return `${days} day${days !== 1 ? 's' : ''}`
     if (days < 365) return `${Math.floor(days / 30)} month${Math.floor(days / 30) !== 1 ? 's' : ''}`
     return `${(days / 365).toFixed(1)} year${(days / 365) !== 1 ? 's' : ''}`
@@ -198,7 +196,8 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
                   {formatDateRange(summary.collectionDateRange)}
                 </div>
                 {(() => {
-                  const duration = summary.studyDurationDays ?? calculateDuration(summary.collectionDateRange)
+                  const rawDuration = summary.studyDurationDays ?? calculateDuration(summary.collectionDateRange)
+                  const duration = rawDuration != null && Number.isFinite(rawDuration) ? rawDuration : null
                   return duration != null && (
                     <div className="text-xs mt-0.5" style={{ color: 'rgb(var(--app-text-muted))' }}>
                       Duration: {formatDuration(duration)}
@@ -263,7 +262,7 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
       {/* Footer */}
       <div className="px-5 py-3 border-t rounded-b-xl mt-auto" style={{ borderColor: 'rgb(var(--app-border))', backgroundColor: 'rgb(var(--app-surface))' }}>
         <div className="flex items-center justify-between text-xs">
-          <span style={{ color: 'rgb(var(--app-text-muted))' }}>Updated {new Date(study.lastUpdated).toLocaleDateString()}</span>
+          <span style={{ color: 'rgb(var(--app-text-muted))' }}>Updated {parseDisplayDate(study.lastUpdated).toLocaleDateString()}</span>
           <Link
             to={`/studies/${study.id}`}
             onClick={(e) => e.stopPropagation()}

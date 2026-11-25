@@ -9,7 +9,7 @@ You can also open **Bulk import** from **More actions** on a study detail page. 
 
 ## Import types
 
-**Subjects Only.** Creates subjects in studies that already exist. Required columns: `study_short_code` and `subject_name`. Subject names must be unique within each study.
+**Subjects Only.** Creates subjects in studies that already exist. Required columns: `study_short_code` and `subject_name`. Subject names must be unique within each study, ignoring case: `ABC-1` and `abc-1` are the same name.
 
 **Specimens Only.** Adds specimens to subjects that already exist. You must select a **Container Type**. Choose **No Containers** to register specimens without creating containers. If a subject name is missing, that row fails so you do not create a near-duplicate subject.
 
@@ -35,22 +35,24 @@ On a study detail page, **Bulk import** already knows the study. For **Subjects 
 Validation has two stages:
 
 1. **Parsing and collection lookup.** The browser maps columns, then asks the server which collections in the file do not exist yet. Row-level rules are not decided in the browser.
-2. **Server validation.** Before any write, the server checks study and subject names, specimen types, collection dates, container types and units, that collections exist or have a location so they can be created, that locations can hold collections, and that barcodes and positions are unique in the database and in the file. You see every error at once, with row numbers where applicable. Fix the CSV or collections, then click **Validate & Continue** again.
+2. **Server validation.** Before any write, the server checks study and subject names, specimen types, collection dates, container types and units, that collections exist or have a location so they can be created, that locations can hold collections, and that barcodes and positions are unique in the database and in the file. You see every error at once, with the row it is on where applicable. Rows are numbered as a spreadsheet shows them, with the header as row 1, so blank rows count. An error on a subject whose rows are spread through the file names each of its rows. Fix the CSV or collections, then click **Validate & Continue** again.
 
 Common failures include missing columns, wrong date or position format, unknown study codes, duplicate barcodes or positions, and locations that cannot hold collections.
 
-## Create missing collections
+## Assign locations for new collections
 
-This step appears only if the CSV names plates, boxes, or bags that are not in the system. For each missing collection, pick a location in the hierarchical tree. Only locations that can hold collections are selectable. For plates and boxes, you can enter an optional barcode.
+This step appears only if the CSV names plates, boxes, or bags that do not exist yet. For each new collection, pick a location in the hierarchical tree. Only locations that can hold collections are selectable. For plates and boxes, you can enter an optional barcode.
 
-- **Per subject:** click **Create Collections & Continue**. Collections are created, then each subject is imported in its own transaction.
-- **Full file (all-or-nothing):** click **Continue to Import**. Missing collections, subjects, specimens, and containers are created in one transaction. Either everything is committed or nothing is.
+Click **Continue to Import** once every new collection has a location. Missing collections are created by the import request itself rather than beforehand:
+
+- **Specimens only** and **Combined, Full file (all-or-nothing):** missing collections, subjects, specimens, and containers are created in one transaction. Either everything is committed or nothing is.
+- **Combined, Per subject:** each subject is imported in its own transaction, creating any missing collection referenced by that subject when it is imported.
 
 If you are importing subjects only, or specimens with **No Containers**, you skip this step.
 
 ## Import results
 
-After collections are created if needed, the server validates again. If that pass fails, you see all errors on the import step and nothing is written. Click **Back to Upload**, fix the CSV, and run **Validate & Continue** again.
+After you assign locations (if needed), the server validates the payload with those locations. If that pass fails, you see all errors and nothing is written. Fix the CSV or locations, then try again.
 
 When a specimen with the same study, subject, specimen type, and collection date already exists, the import reuses that specimen and only adds containers when container data is present. The summary shows how many specimens were created versus how many containers were added.
 
@@ -58,7 +60,7 @@ When a specimen with the same study, subject, specimen type, and collection date
 
 - **Subjects only** and **Specimens only:** the whole batch is one transaction. If anything fails after validation, the batch is rolled back.
 - **Combined, Full file (all-or-nothing):** the entire CSV is one transaction, including missing collections if you assigned locations and clicked **Continue to Import**. The server runs a final in-transaction check so stale pre-validation cannot produce a partial commit.
-- **Combined, Per subject:** each subject, with its specimens and containers, is committed separately. Some subjects can succeed while others fail. Create missing collections first with **Create Collections & Continue**.
+- **Combined, Per subject:** each subject, with its specimens and containers, is committed separately. Some subjects can succeed while others fail. Any new collection whose location you assigned on **Collection Locations** is created when the first subject that uses it is imported.
 - **Derivation bulk import:** all rows succeed together or none do. See [Derivations](/docs/guides/features/derivations/).
 
 If a **per subject** run partly succeeds, only failed subjects need to be fixed and re-imported.
@@ -71,18 +73,23 @@ Column headers are case-insensitive. `Position`, `position`, `well_position`, an
 
 **Specimens Only or Combined, no containers:** `study_short_code`, `subject_name`, `specimen_type_name`. Optional `collection_date` as YYYY-MM-DD. US-style M/D/YYYY and YYYY/MM/DD are also accepted and stored as YYYY-MM-DD; impossible dates such as 2024-02-30 are rejected.
 
-**With containers:** the same columns, plus container fields for the selected type. Optional `comment` is stored on each container. Collection identifier must use the column for that type (`plate_name`, `box_name`, or `bag_name`) so it matches the templates.
+**With containers:** the same columns, plus container fields for the selected type. Optional `comment` is stored on each container. Collection identifier must use the column for that type (`plate_name`, `box_name`, or `bag_name`) so it matches the templates. A value in that column is always a name, whatever it looks like: `PLATE-001` creates a plate named `PLATE-001`. For plates and cryovial boxes, an optional `collection_barcode` column gives the collection's barcode; a new collection given only a barcode is named after it.
 
 - Micronix: `plate_name`, unique barcode, `position` (letter A-H plus two digits, for example `A01`).
-- Cryovial: `box_name`, `position`. Barcode is optional.
+- Cryovial: `box_name`, `position` (letter A-J plus a column 1-10, for example `A05`). Barcode is optional.
 - Paper: exactly one of `box_name` or `bag_name`, plus `sheet_name`. Optional `sublabel` for the spot.
 - Static wells: `plate_name` and `position`, same A01-H12 format as micronix.
 
 ## Position format
 
-For micronix and static wells, the stored form is a letter plus two zero-padded digits: `A01`. `A1` and `a1` are accepted and padded to `A01`. `B012` is not valid.
+A position is a row letter plus a column number. The stored form pads the column to two digits: `A1`, `a1`, and `a01` are all stored as `A01`. `B012`, `25`, and anything else that is not a letter plus a number is rejected.
 
-For cryovial tubes, match the box layout. Letter-number (`A5`) and numbered (`25`) positions are both accepted. Keep the format consistent within a box.
+The position must also fit the plate or box:
+
+- Micronix plates and static wells: rows A-H, columns 1-12 (`A01`-`H12`).
+- Cryovial boxes: rows A-J, columns 1-10 (`A01`-`J10`). This covers both 9×9 and 10×10 boxes.
+
+Validation names the row and the value of each position that breaks these rules, for example `Position "Z99" is outside a micronix plate (A01–H12)`.
 
 ## Multiple collection dates
 
@@ -93,11 +100,12 @@ In a longitudinal study, use one CSV row per collection. Each row creates a sepa
 - **Missing required columns.** Add the columns named in the error. For the collection identifier, use `plate_name` for micronix or static wells, `box_name` for cryovial tubes, or exactly one of `box_name` or `bag_name` for paper.
 - **Invalid study codes / Study not found.** Create the study first, or correct the code.
 - **Subject name already exists / Duplicate subject.** For Combined, existing subjects get new specimens. For Subjects Only, each name must be new in the study and unique in the batch.
-- **Missing collections.** Assign locations on **Create Missing Collections**, or fix names and barcodes in the CSV.
+- **Subject name differs only by case.** Names compare ignoring case, so `abc-1` is refused when the study has `ABC-1`. Spell the name as the study already does, or choose a different name.
+- **Missing collections.** Assign locations on **Collection Locations**, or fix names and barcodes in the CSV.
 - **Location cannot contain collections.** Pick a location that is allowed to hold collections, such as a freezer or shelf configured for that.
 - **Position already used / duplicate position.** That well is taken in the plate or box, or the same position appears twice in the file for the same collection.
 - **Barcode already exists / duplicate barcode.** The barcode is already in the database or appears twice in the file.
-- **Position format errors.** Use `A01` for micronix and static wells. Match the box layout for cryovial tubes.
+- **Position format errors.** Use a row letter plus a column number inside the plate or box: `A01`-`H12` for micronix and static wells, `A01`-`J10` for cryovial tubes.
 - **Invalid specimen type.** The name does not match Reference Data. Spelling and capitalization must match.
 
 For column rules and date formats, see [CSV file guidelines](/docs/guides/troubleshooting/csv-guidelines/).

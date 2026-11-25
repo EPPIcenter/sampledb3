@@ -13,6 +13,7 @@ import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { validateBulkSpecimenRows, createBulkSpecimenRows } from '../lib/registration-orchestrator'
+import { mapIndexedZodRowIssues } from '../lib/bulk-validate-zod'
 import { insertedRow } from '../lib/inserted-row'
 
 /**
@@ -42,6 +43,8 @@ specimens.get('/', authMiddleware, async (c) => {
       search: c.req.query('search'),
       page: c.req.query('page'),
       limit: c.req.query('limit'),
+      sort: c.req.query('sort'),
+      order: c.req.query('order'),
     }))
   } catch (error) {
     return handleRouteError(error, c)
@@ -119,7 +122,8 @@ specimens.post('/:id/containers', memberMiddleware, async (c) => {
     })
 
     if (!result.success) {
-      return c.json({ error: result.error || 'Failed to create container' }, 400)
+      const message = result.error || 'Failed to create container'
+      throw result.conflict ? new ConflictError(message) : new ValidationError(message)
     }
 
     return c.json({ containerId: result.containerId }, 201)
@@ -193,16 +197,14 @@ specimens.post('/', memberMiddleware, async (c) => {
           quantity: pickContainerQuantity(container),
         })
         if (!result.success) {
-          await dbInstance.delete(storageContainer).where(eq(storageContainer.specimenId, newSpecimen.id))
-          await dbInstance.delete(specimen).where(eq(specimen.id, newSpecimen.id))
-          throw new ValidationError(result.error || 'Failed to create container')
+          const message = result.error || 'Failed to create container'
+          throw result.conflict ? new ConflictError(message) : new ValidationError(message)
         }
         containerResult = result
       } catch (err) {
         await dbInstance.delete(storageContainer).where(eq(storageContainer.specimenId, newSpecimen.id))
         await dbInstance.delete(specimen).where(eq(specimen.id, newSpecimen.id))
-        if (err instanceof ValidationError || err instanceof ConflictError) throw err
-        throw new ValidationError(err instanceof Error ? err.message : 'Failed to create container')
+        throw err
       }
     }
     
@@ -276,7 +278,15 @@ specimens.post('/bulk/validate', memberMiddleware, async (c) => {
         container: containerSchemaWithLocation,
       })),
     })
-    const data = schema.parse(body)
+    const parsed = schema.safeParse(body)
+    if (!parsed.success) {
+      const rowErrors = mapIndexedZodRowIssues(parsed.error, 'specimens')
+      if (rowErrors) {
+        return c.json({ valid: false, errors: rowErrors })
+      }
+      throw parsed.error
+    }
+    const data = parsed.data
     if (data.specimens.length === 0) {
       return c.json({ error: 'No specimens provided' }, 400)
     }

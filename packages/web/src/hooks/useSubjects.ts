@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { subjectsApi, type SubjectSummaryResponse } from '../lib/api/subjects'
 import { studyKeys } from './useStudies'
 import { specimenKeys } from './useSpecimens'
+import { invalidateAfterBulkWrite } from '../lib/query-client'
 
 export const subjectKeys = {
   all: ['subjects'] as const,
@@ -79,3 +80,18 @@ export function invalidateSubjectDetail(queryClient: ReturnType<typeof useQueryC
   }
 }
 
+/**
+ * Merge the source Subject into the target: the target takes the source's Specimens and Containers
+ * and the source is deleted. The merge changes Specimen lists, Collection grids, the study's Subjects,
+ * summary and timeline and the dashboard, so every query is invalidated; the source Subject's own
+ * queries are not refetched. Shows no toast; the caller reports the error.
+ */
+export function useMergeSubjects() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ targetId, sourceId }: { targetId: number; sourceId: number }) =>
+      subjectsApi.merge(targetId, sourceId),
+    onSuccess: (_result, { sourceId }) =>
+      invalidateAfterBulkWrite(queryClient, { deleted: [subjectKeys.detail(sourceId)] }),
+  })
+}

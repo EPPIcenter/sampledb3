@@ -14,6 +14,7 @@ import {
 import { useTableViewConfigurations } from '../hooks/useTableViewConfigurations'
 import { useCollectionSheets } from '../hooks/useCollectionSheets'
 import CollectionDeleteDialog from '../components/CollectionDeleteDialog'
+import CollectionDeleteButton from '../components/CollectionDeleteButton'
 import '../styles/storage.css'
 
 export default function BagDetail() {
@@ -133,13 +134,7 @@ export default function BagDetail() {
           Bag {bag.name}
         </h1>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowDeleteCollection(true)}
-            className="shrink-0 px-3 py-1.5 text-sm rounded border text-app-trend-down border-app-trend-down/50 hover:bg-app-trend-down/10"
-          >
-            Delete collection…
-          </button>
+          <CollectionDeleteButton onClick={() => setShowDeleteCollection(true)} />
         </div>
         {bag.locationPath && (
           <p className="mt-1 text-xs font-mono" style={{ color: 'rgb(var(--app-text-muted))' }}>{bag.locationPath}</p>

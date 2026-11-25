@@ -13,7 +13,7 @@ Read the validation messages first. They name the row and the problem. Nothing i
 
 **Subject already exists.** For **Specimens Only**, subjects must already exist. For **Combined**, existing subjects are reused and specimens are added. For **Subjects Only**, each name must be new in the study.
 
-**Collection not found.** Use the **Create Missing Collections** step, or fix the name or barcode in the CSV.
+**Collection not found.** Assign a location on the **Collection Locations** step so the import creates it, or fix the name or barcode in the CSV.
 
 **Invalid position.** For micronix and static wells, stored form is `A01` (letter A-H plus two digits). `A1` and `a1` are accepted and padded to `A01`. `B012` is not valid. For cryovial, match the box layout and stay consistent within the box.
 
@@ -23,7 +23,9 @@ For more column rules, see [CSV file guidelines](/docs/guides/troubleshooting/cs
 
 **Not found.** Check barcode or position, collection, and that the container was not deleted. Identifiers must match exactly.
 
-**Barcode already exists.** Micronix barcodes are unique across the system. Use a different barcode or open the existing container.
+**Barcode already exists.** A new or changed micronix or cryovial barcode can't match any other tube's barcode, of either type, ignoring case and surrounding spaces. Use a different barcode or open the existing container. A container whose barcode was already shared before this rule still saves when you leave its barcode unchanged.
+
+**Ambiguous barcode.** The barcode is on more than one container, so the app won't guess which one you mean. The message lists the matching containers. Identify the container by its id or by its collection and position instead. **Data integrity** lists every shared tube barcode.
 
 **Position occupied or out of range.** `A13` is invalid on a 96-well plate (columns 01-12). Pick an empty well.
 

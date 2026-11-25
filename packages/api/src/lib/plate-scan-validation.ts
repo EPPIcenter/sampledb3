@@ -8,10 +8,15 @@ import {
   tag,
 } from '../db/schema'
 import { eq, inArray } from 'drizzle-orm'
+import { gridCellKeys, gridPositionKey } from '@sampledb/contract'
 import { getScannerConfigurationById } from './settings'
 import { parsePlateCSV, normalizeWellPosition } from './plate-csv'
 
-export type WellValidationStatus = 'match' | 'mismatch' | 'missing_in_scan' | 'extra_in_scan'
+/**
+ * `unplaced_in_scan`: the scanned tube belongs to this plate but has no grid position
+ * (or a stored position that is not a plate cell), so it is expected, not extra.
+ */
+export type WellValidationStatus = 'match' | 'mismatch' | 'missing_in_scan' | 'extra_in_scan' | 'unplaced_in_scan'
 
 /** Where the scanned barcode is registered (plate + position), when it differs from expected or is extra. */
 export interface ScanBarcodeOrigin {
@@ -32,19 +37,33 @@ export interface WellValidationResult {
 }
 
 export interface ValidateScanSummary {
+  /** Every tube in the plate, placed or unplaced, plus placed static wells. */
   totalExpected: number
   matched: number
+  /** Placed wells empty in the scan, plus unplaced tubes whose barcode is nowhere in the scan. */
   missingInScan: number
   extraInScan: number
+  /** Unplaced tubes of this plate whose barcode the scan found at some position. */
+  unplacedInScan: number
   mismatch: number
   exhaustedCount: number
   taggedCount: number
+}
+
+/** A tube in the plate with no grid position, or a stored position that is not a plate cell. */
+export interface UnplacedTubeResult {
+  barcode: string
+  /** The stored position as recorded, or null when none is recorded. */
+  storedPosition: string | null
+  /** Where the scan found this barcode, or null when it is not in the scan. */
+  scannedPosition: string | null
 }
 
 export interface ValidateScanResult {
   plate: { id: number; name: string }
   summary: ValidateScanSummary
   wells: WellValidationResult[]
+  unplaced: UnplacedTubeResult[]
 }
 
 export interface InferPlateResult {
@@ -254,15 +273,29 @@ export async function validatePlateScan(
     ...wells.map((w) => w.id),
   ]
 
-  const expectedByPosition = new Map<string, ExpectedWell & { position: string }>()
+  const expectedByPosition = new Map<string, ExpectedWell & { position: string; containerId: number }>()
+  // Tubes whose position is missing or not a plate cell (or a cell another tube already holds).
+  const unplacedByBarcode = new Map<string, Omit<ExpectedWell, 'barcode'> & { barcode: string; storedPosition: string | null; containerId: number }>()
 
   for (const t of tubes) {
-    const pos = t.position ? normalizeWellPosition(t.position) : null
-    if (pos) expectedByPosition.set(pos, { position: pos, barcode: t.barcode, remainingQuantity: null, tags: [] })
+    const pos = gridPositionKey(t.position, 'micronix_plate')
+    if (pos != null && !expectedByPosition.has(pos)) {
+      expectedByPosition.set(pos, { position: pos, containerId: t.id, barcode: t.barcode, remainingQuantity: null, tags: [] })
+    } else {
+      unplacedByBarcode.set(t.barcode, {
+        storedPosition: t.position,
+        containerId: t.id,
+        barcode: t.barcode,
+        remainingQuantity: null,
+        tags: [],
+      })
+    }
   }
   for (const w of wells) {
-    const pos = w.position ? normalizeWellPosition(w.position) : null
-    if (pos) expectedByPosition.set(pos, { position: pos, barcode: null, remainingQuantity: null, tags: [] })
+    const pos = gridPositionKey(w.position, 'micronix_plate')
+    if (pos != null && !expectedByPosition.has(pos)) {
+      expectedByPosition.set(pos, { position: pos, containerId: w.id, barcode: null, remainingQuantity: null, tags: [] })
+    }
   }
 
   if (containerIds.length > 0) {
@@ -283,19 +316,17 @@ export async function validatePlateScan(
       tagsByContainerId.set(tr.storageContainerId, list)
     }
 
-    for (const t of tubes) {
-      const entry = expectedByPosition.get(normalizeWellPosition(t.position ?? ''))
-      if (entry) {
-        entry.remainingQuantity = remainingByContainerId.get(t.id) ?? null
-        entry.tags = tagsByContainerId.get(t.id) ?? []
-      }
+    for (const entry of [...expectedByPosition.values(), ...unplacedByBarcode.values()]) {
+      entry.remainingQuantity = remainingByContainerId.get(entry.containerId) ?? null
+      entry.tags = tagsByContainerId.get(entry.containerId) ?? []
     }
-    for (const w of wells) {
-      const entry = expectedByPosition.get(normalizeWellPosition(w.position ?? ''))
-      if (entry) {
-        entry.remainingQuantity = remainingByContainerId.get(w.id) ?? null
-        entry.tags = tagsByContainerId.get(w.id) ?? []
-      }
+  }
+
+  const scannedPositionByUnplacedBarcode = new Map<string, string>()
+  for (const [pos, barcode] of scannedByPosition) {
+    const trimmed = barcode.trim()
+    if (unplacedByBarcode.has(trimmed) && !scannedPositionByUnplacedBarcode.has(trimmed)) {
+      scannedPositionByUnplacedBarcode.set(trimmed, pos)
     }
   }
 
@@ -305,16 +336,14 @@ export async function validatePlateScan(
     if (barcode.trim() !== '') allPositions.add(pos)
     else if (expectedByPosition.has(pos)) allPositions.add(pos)
   }
-  const ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
-  const sortedPositions = ROWS.flatMap((r) =>
-    Array.from({ length: 12 }, (_, i) => `${r}${(i + 1).toString().padStart(2, '0')}`)
-  ).filter((p) => allPositions.has(p))
+  const sortedPositions = gridCellKeys('micronix_plate').filter((p) => allPositions.has(p))
   const rest = [...allPositions].filter((p) => !sortedPositions.includes(p)).sort()
   const positionOrder = [...sortedPositions, ...rest]
 
   let matched = 0
   let missingInScan = 0
   let extraInScan = 0
+  let unplacedInScan = 0
   let mismatch = 0
   let exhaustedCount = 0
   let taggedCount = 0
@@ -328,8 +357,10 @@ export async function validatePlateScan(
     const scanHasBarcode = scanPresent && (scanBarcodeRaw ?? '').trim() !== ''
     const scanBarcode = scanPresent ? (scanBarcodeRaw ?? null) : null
     const expectedBarcode = expected?.barcode ?? null
-    const exhausted = expected != null && expected.remainingQuantity != null && expected.remainingQuantity <= 0
-    const tagsList = expected?.tags ?? []
+    const unplacedTube = !expected && scanHasBarcode ? unplacedByBarcode.get((scanBarcode ?? '').trim()) : undefined
+    const described = expected ?? unplacedTube
+    const exhausted = described != null && described.remainingQuantity != null && described.remainingQuantity <= 0
+    const tagsList = described?.tags ?? []
     if (exhausted) exhaustedCount++
     if (tagsList.length > 0) taggedCount++
 
@@ -345,6 +376,8 @@ export async function validatePlateScan(
     } else if (expected && (!scanPresent || !scanHasBarcode)) {
       status = 'missing_in_scan'
       missingInScan++
+    } else if (unplacedTube) {
+      status = 'unplaced_in_scan'
     } else {
       status = 'extra_in_scan'
       extraInScan++
@@ -367,7 +400,7 @@ export async function validatePlateScan(
       wellResults
         .filter(
           (w) =>
-            (w.status === 'mismatch' || w.status === 'extra_in_scan') &&
+            (w.status === 'mismatch' || w.status === 'extra_in_scan' || w.status === 'unplaced_in_scan') &&
             w.scanBarcode != null &&
             w.scanBarcode.trim() !== ''
         )
@@ -400,7 +433,7 @@ export async function validatePlateScan(
   }
   for (const w of wellResults) {
     if (
-      (w.status === 'mismatch' || w.status === 'extra_in_scan') &&
+      (w.status === 'mismatch' || w.status === 'extra_in_scan' || w.status === 'unplaced_in_scan') &&
       w.scanBarcode != null &&
       w.scanBarcode.trim() !== ''
     ) {
@@ -409,12 +442,23 @@ export async function validatePlateScan(
     }
   }
 
-  const totalExpected = expectedByPosition.size
+  const unplaced: UnplacedTubeResult[] = [...unplacedByBarcode.values()].map((t) => ({
+    barcode: t.barcode,
+    storedPosition: t.storedPosition,
+    scannedPosition: scannedPositionByUnplacedBarcode.get(t.barcode) ?? null,
+  }))
+  for (const t of unplaced) {
+    if (t.scannedPosition != null) unplacedInScan++
+    else missingInScan++
+  }
+
+  const totalExpected = expectedByPosition.size + unplacedByBarcode.size
   const summary: ValidateScanSummary = {
     totalExpected,
     matched,
     missingInScan,
     extraInScan,
+    unplacedInScan,
     mismatch,
     exhaustedCount,
     taggedCount,
@@ -424,5 +468,6 @@ export async function validatePlateScan(
     plate: { id: plate.id, name: plate.name },
     summary,
     wells: wellResults,
+    unplaced,
   }
 }

@@ -111,7 +111,7 @@ describe('ReferenceDataForm', () => {
       expect(valueInput.value).toBe('50')
     })
 
-    const saveButton = screen.getByText('Create')
+    const saveButton = screen.getByRole('button', { name: 'Add' })
     expect(saveButton).not.toBeDisabled()
     
     await user.click(saveButton)
@@ -199,7 +199,7 @@ describe('ReferenceDataForm', () => {
     const nameInput = screen.getByLabelText(/^Name/)
     await user.clear(nameInput)
     await user.type(nameInput, 'Test')
-    const saveButton = screen.getByText('Create')
+    const saveButton = screen.getByRole('button', { name: 'Add' })
     await user.click(saveButton)
 
     await waitFor(() => {
@@ -225,7 +225,7 @@ describe('ReferenceDataForm', () => {
     )
 
     await user.type(screen.getByLabelText(/^Name/), 'Test')
-    const saveButton = screen.getByText('Create')
+    const saveButton = screen.getByRole('button', { name: 'Add' })
     await user.click(saveButton)
 
     // Button should be disabled during save
@@ -233,7 +233,34 @@ describe('ReferenceDataForm', () => {
       expect(saveButton).toBeDisabled()
     })
   })
+
+  describe('submit button label', () => {
+    const renderForm = (item: TestItem | Record<string, never> | null) =>
+      render(
+        <ReferenceDataForm<TestItem>
+          item={item as TestItem | null}
+          fields={fields as any}
+          onSave={vi.fn().mockResolvedValue(undefined)}
+          onCancel={vi.fn()}
+          title="Item"
+        />
+      )
+
+    it('says Add for the empty item the Add New button opens', async () => {
+      await renderForm({})
+      expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Update' })).not.toBeInTheDocument()
+    })
+
+    it('says Add when there is no item', async () => {
+      await renderForm(null)
+      expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument()
+    })
+
+    it('says Update when editing a saved item', async () => {
+      await renderForm({ id: 1, name: 'Existing Item' })
+      expect(screen.getByRole('button', { name: 'Update' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument()
+    })
+  })
 })
-
-
-

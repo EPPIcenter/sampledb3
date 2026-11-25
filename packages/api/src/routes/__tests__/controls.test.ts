@@ -19,6 +19,7 @@ import {
   createTestControlDefinition,
   createTestLocation,
   createTestMicronixPlate,
+  createTestSpecimen,
   createTestSpecimenType,
   createTestStorageType,
   createTestStrain,
@@ -48,7 +49,7 @@ async function seedMicronixBatchFixtures(db: Database) {
   const specimenType = await createTestSpecimenType(db, { name: 'DNA' })
   await db.insert(specimenTypeContainerType).values({ specimenTypeId: specimenType.id, containerType: 'micronix_tube', created: utcNow() })
   const storageType = await createTestStorageType(db, { name: 'Freezer' })
-  const location = await createTestLocation(db, { name: 'Loc', storageTypeId: String(storageType.id) })
+  const location = await createTestLocation(db, { name: 'Loc', storageTypeId: String(storageType.id), canContainCollections: true })
   const plate = await createTestMicronixPlate(db, { name: 'Plate1', locationId: location.id })
   const specimens = (barcode: string, position: string, specimenTypeName = 'DNA') => [
     {
@@ -60,7 +61,7 @@ async function seedMicronixBatchFixtures(db: Database) {
     batch: { controlDefinitionId, name },
     specimens: specimens(barcode, position, specimenTypeName),
   })
-  return { def100, def200, batch, specimens }
+  return { def100, def200, batch, specimens, location, unit, specimenType }
 }
 
 describe('Controls API', () => {
@@ -74,6 +75,7 @@ describe('Controls API', () => {
         password: 'password123',
         role: 'admin',
       },
+      additionalUsers: [{ key: 'member', email: 'member@test.com', password: 'password123', role: 'member' }],
       mount: (app, { db }) => {
         app.route('/api/blood-controls', createControlsRoutes(db))
       },
@@ -139,6 +141,41 @@ describe('Controls API', () => {
     })
   })
 
+  describe(`POST ${BASE}/batches/create-many-with-specimens`, () => {
+    it('gives two unnamed batches with the same definition and date different names', async () => {
+      const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(ctx.db, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      await ctx.db.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+      const def = await createTestControlDefinition(ctx.db, { name: 'D100' })
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'DNA' })
+      await ctx.db.insert(specimenTypeContainerType).values({ specimenTypeId: specimenType.id, containerType: 'micronix_tube', created: utcNow() })
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const location = await createTestLocation(ctx.db, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'Plate1', locationId: location.id })
+      const tube = (barcode: string, position: string) => ({
+        containerType: 'micronix_tube',
+        barcode,
+        collection: { type: 'micronix_plate', id: plate.id, position },
+      })
+
+      const res = await ctx.request(`${BASE}/batches/create-many-with-specimens`, {
+        method: 'POST',
+        json: {
+          batches: [
+            { batch: { controlDefinitionId: def.id, productionDate: '2024-06-01' }, specimens: [{ specimenTypeName: 'DNA', containers: [tube('MT1', 'A01')] }] },
+            { batch: { controlDefinitionId: def.id, productionDate: '2024-06-01' }, specimens: [{ specimenTypeName: 'DNA', containers: [tube('MT2', 'A02')] }] },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(201)
+      const data = (await res.json()) as { batches: Array<{ batch: { name: string } }> }
+      expect(data.batches.map((b) => b.batch.name)).toEqual(['D100 2024-06-01', 'D100 2024-06-01 (1)'])
+    })
+  })
+
   describe(`GET ${BASE}/batches`, () => {
     it('returns 200 and batches list when authenticated', async () => {
       const res = await ctx.request(`${BASE}/batches`, {
@@ -170,6 +207,26 @@ describe('Controls API', () => {
       const data = (await res.json()) as { batch: { id: number; controlDefinitionId: number } }
       expect(data.batch).toBeDefined()
       expect(data.batch.controlDefinitionId).toBe(definition.id)
+    })
+
+    it('stores batch properties as a JSON object and reads them back as one', async () => {
+      const definition = await createTestControlDefinition(ctx.db, { name: 'Props Def', controlType: 'blood' })
+      const properties = { lead_person: 'Ann', nested: { strains: [1, 2] } }
+
+      const res = await ctx.request(`${BASE}/${definition.id}/batches`, {
+        method: 'POST',
+        json: { productionDate: '2024-01-01', properties },
+      })
+
+      expect(res.status).toBe(201)
+      const created = (await res.json()) as { batch: { id: number; properties: unknown } }
+      expect(created.batch.properties).toEqual(properties)
+      const stored = ctx.sqlite
+        .prepare('SELECT json_type(properties) AS type FROM control_batch WHERE id = ?')
+        .get(created.batch.id) as { type: string }
+      expect(stored.type).toBe('object')
+      const readRes = await ctx.request(`${BASE}/batches/${created.batch.id}`, { method: 'GET' })
+      expect(((await readRes.json()) as { batch: { properties: unknown } }).batch.properties).toEqual(properties)
     })
 
     it('returns 404 when definition does not exist', async () => {
@@ -405,7 +462,7 @@ describe('Controls API', () => {
       expect(res.status).toBe(400)
     })
 
-    it('returns 400 when provided name is already used by another definition', async () => {
+    it('returns 409 when provided name is already used by another definition', async () => {
       const strain = await createTestStrain(ctx.db, { name: 'Strain Dup' })
       const unit = await createTestUnit(ctx.db, {
         symbol: 'p/ul',
@@ -430,10 +487,10 @@ describe('Controls API', () => {
           names: ['Taken Name', 'Other Name'],
         },
       })
-      expect(res.status).toBe(400)
-      const body = (await res.json()) as { error?: string }
-      expect(body.error).toBeDefined()
-      expect(String(body.error).toLowerCase()).toMatch(/name|unique|taken|duplicate/)
+      expect(res.status).toBe(409)
+      const body = (await res.json()) as { error?: string; errorCode?: string }
+      expect(body.errorCode).toBe('CONFLICT')
+      expect(body.error).toBe('Control definition name "Taken Name" is already in use')
     })
   })
 
@@ -539,6 +596,78 @@ describe('Controls API', () => {
 
       expect(res.status).toBe(200)
     })
+
+    it('returns 409 when clearing targetDensityUnitId via properties creates a duplicate composition', async () => {
+      const strain = await createTestStrain(ctx.db, { name: '3D7' })
+      const unit = await createTestUnit(ctx.db, {
+        symbol: 'p/ul',
+        name: 'parasites per microliter',
+        category: 'concentration',
+      })
+      const strains = [{ id: strain.id, name: '3D7', percentage: 100 }]
+      await createTestControlDefinition(ctx.db, { name: 'NoUnit', properties: { strains, targetDensity: 100 } })
+      const withUnit = await createTestControlDefinition(ctx.db, {
+        name: 'WithUnit',
+        properties: { strains, targetDensity: 100, targetDensityUnitId: unit.id, targetDensityUnitSymbol: unit.symbol },
+      })
+
+      const res = await ctx.request(`${BASE}/${withUnit.id}`, {
+        method: 'PATCH',
+        json: { properties: { targetDensityUnitId: null } },
+      })
+
+      expect(res.status).toBe(409)
+      expect(await res.json()).toMatchObject({ errorCode: 'CONFLICT', existingDefinition: { name: 'NoUnit' } })
+    })
+
+    it('returns 409 when clearing top-level targetDensityUnitId creates a duplicate composition', async () => {
+      const strain = await createTestStrain(ctx.db, { name: '3D7' })
+      const unit = await createTestUnit(ctx.db, {
+        symbol: 'p/ul',
+        name: 'parasites per microliter',
+        category: 'concentration',
+      })
+      const strains = [{ id: strain.id, name: '3D7', percentage: 100 }]
+      await createTestControlDefinition(ctx.db, { name: 'NoUnit', properties: { strains, targetDensity: 100 } })
+      const withUnit = await createTestControlDefinition(ctx.db, {
+        name: 'WithUnit',
+        properties: { strains, targetDensity: 100, targetDensityUnitId: unit.id, targetDensityUnitSymbol: unit.symbol },
+      })
+
+      const res = await ctx.request(`${BASE}/${withUnit.id}`, {
+        method: 'PATCH',
+        json: { targetDensityUnitId: null },
+      })
+
+      expect(res.status).toBe(409)
+      expect(await res.json()).toMatchObject({ errorCode: 'CONFLICT', existingDefinition: { name: 'NoUnit' } })
+    })
+
+    it('returns 400 for malformed strains or density fields inside properties', async () => {
+      const strain = await createTestStrain(ctx.db, { name: '3D7' })
+      const def = await createTestControlDefinition(ctx.db, {
+        name: 'ValidDef',
+        properties: { strains: [{ id: strain.id, name: '3D7', percentage: 100 }], targetDensity: 100 },
+      })
+
+      for (const badProperties of [
+        { strains: [null] },
+        { strains: [{}] },
+        { strains: [{ id: strain.id }] },
+        { strains: [{ id: strain.id, percentage: 150 }] },
+        { strains: 'not-an-array' },
+        { targetDensity: 'not-a-number' },
+        { targetDensityUnitId: 'not-an-int' },
+        { targetDensityUnitId: 1.5 },
+      ]) {
+        const res = await ctx.request(`${BASE}/${def.id}`, {
+          method: 'PATCH',
+          json: { properties: badProperties },
+        })
+        expect(res.status).toBe(400)
+        expect(await res.json()).toMatchObject({ errorCode: 'VALIDATION_ERROR' })
+      }
+    })
   })
 
   describe(`PATCH ${BASE}/batches/:id`, () => {
@@ -592,7 +721,7 @@ describe('Controls API', () => {
       expect(patchData.batch.productionDate).toBe('2026-06-15')
     })
 
-    it('returns 400 when name already exists', async () => {
+    it('returns 409 when name already exists', async () => {
       const strain = await createTestStrain(ctx.db, { name: 'Strain Dup' })
       const definition = await createTestControlDefinition(ctx.db, {
         name: 'DefDup',
@@ -601,10 +730,19 @@ describe('Controls API', () => {
           targetDensity: 700,
         },
       })
-      await ctx.request(`${BASE}/${definition.id}/batches`, {
+      const firstCreate = await ctx.request(`${BASE}/${definition.id}/batches`, {
         method: 'POST',
         json: { name: 'Existing Batch', productionDate: '2026-04-01' },
       })
+      expect(firstCreate.status).toBe(201)
+
+      const dupCreate = await ctx.request(`${BASE}/${definition.id}/batches`, {
+        method: 'POST',
+        json: { name: 'Existing Batch', productionDate: '2026-04-01' },
+      })
+      expect(dupCreate.status).toBe(409)
+      expect(await dupCreate.json()).toMatchObject({ errorCode: 'CONFLICT' })
+
       const createRes = await ctx.request(`${BASE}/${definition.id}/batches`, {
         method: 'POST',
         json: { name: 'Second Batch', productionDate: '2026-04-02' },
@@ -616,7 +754,8 @@ describe('Controls API', () => {
         method: 'PATCH',
         json: { name: 'Existing Batch' },
       })
-      expect(patchRes.status).toBe(400)
+      expect(patchRes.status).toBe(409)
+      expect(await patchRes.json()).toMatchObject({ errorCode: 'CONFLICT' })
     })
 
     it('returns 404 for non-existent batch', async () => {
@@ -730,6 +869,31 @@ describe('Controls API', () => {
       expect(res.status).toBe(401)
     })
   })
+  describe(`DELETE ${BASE}/batches/:id`, () => {
+    async function createBatchWithSpecimen(name: string) {
+      const definition = await createTestControlDefinition(ctx.db, { name: `Def-${name}` })
+      const batch = await createTestControlBatch(ctx.db, definition.id, { name })
+      const specType = await createTestSpecimenType(ctx.db, { name: `Type-${name}` })
+      const spec = await createTestSpecimen(ctx.db, specType.id, { controlBatchId: batch.id })
+      return { batch, spec }
+    }
+
+    it('returns 403 to a member and keeps the Control batch and its Specimens', async () => {
+      const { batch, spec } = await createBatchWithSpecimen('BatchMemberDel')
+      const res = await ctx.request(`${BASE}/batches/${batch.id}`, { method: 'DELETE', cookie: ctx.cookies.member })
+      expect(res.status).toBe(403)
+      expect(await ctx.db.select().from(controlBatch).where(eq(controlBatch.id, batch.id)).get()).toBeDefined()
+      expect(await ctx.db.select().from(specimen).where(eq(specimen.id, spec.id)).get()).toBeDefined()
+    })
+
+    it('lets an admin delete the Control batch and its Specimens', async () => {
+      const { batch, spec } = await createBatchWithSpecimen('BatchAdminDel')
+      const res = await ctx.request(`${BASE}/batches/${batch.id}`, { method: 'DELETE' })
+      expect(res.status).toBe(200)
+      expect(await ctx.db.select().from(controlBatch).where(eq(controlBatch.id, batch.id)).get()).toBeUndefined()
+      expect(await ctx.db.select().from(specimen).where(eq(specimen.id, spec.id)).get()).toBeUndefined()
+    })
+  })
 
   describe(`POST ${BASE}/batches/create-many-with-specimens`, () => {
     const path = `${BASE}/batches/create-many-with-specimens`
@@ -801,9 +965,10 @@ describe('Controls API', () => {
 
     it('returns 400 for a body that does not match the schema', async () => {
       const { def100, batch } = await seedMicronixBatchFixtures(ctx.db)
-      const noName = { ...batch(def100.id, 'B100', 'MT1', 'A01'), batch: { controlDefinitionId: def100.id } }
+      // A batch may omit its name here (it is generated), so the mismatch is the missing definition.
+      const noDefinition = { ...batch(def100.id, 'B100', 'MT1', 'A01'), batch: { name: 'B100' } }
 
-      for (const json of [{ batches: [] }, { batches: [noName] }]) {
+      for (const json of [{ batches: [] }, { batches: [noDefinition] }]) {
         const res = await ctx.request(path, { method: 'POST', json })
         expect(res.status).toBe(400)
         expect(await res.json()).toMatchObject({ errorCode: 'VALIDATION_ERROR' })
@@ -840,6 +1005,91 @@ describe('Controls API', () => {
       expect(await ctx.db.select().from(storageContainer).all()).toHaveLength(1)
     })
 
+    it('returns 409 for a paper sublabel already used on an existing sheet and for a new plate barcode clashing with a stored plate name', async () => {
+      const { def100, def200, location, unit, specimenType } = await seedMicronixBatchFixtures(ctx.db)
+      await setContainerDefaults(ctx.db, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      await ctx.db.insert(containerTypeUnit).values({ containerType: 'paper', unitId: unit.id })
+      await ctx.db.insert(specimenTypeContainerType).values({
+        specimenTypeId: specimenType.id,
+        containerType: 'paper',
+        created: utcNow(),
+      })
+
+      // Seed a paper with sublabel 'S1' on Sheet-1 in PaperBox.
+      const seedPaper = await ctx.request(`${BASE}/batches/create-with-specimens`, {
+        method: 'POST',
+        json: {
+          batch: { controlDefinitionId: def100.id, name: 'B-Paper-1' },
+          specimens: [
+            {
+              specimenTypeName: 'DNA',
+              containers: [
+                {
+                  containerType: 'paper',
+                  sublabel: 'S1',
+                  collection: { type: 'sheet', name: 'Sheet-1', parent: { type: 'box', name: 'PaperBox', locationId: location.id } },
+                },
+              ],
+            },
+          ],
+        },
+      })
+      expect(seedPaper.status).toBe(201)
+
+      const dupSublabel = await ctx.request(`${BASE}/batches/create-with-specimens`, {
+        method: 'POST',
+        json: {
+          batch: { controlDefinitionId: def200.id, name: 'B-Paper-2' },
+          specimens: [
+            {
+              specimenTypeName: 'DNA',
+              containers: [
+                {
+                  containerType: 'paper',
+                  sublabel: 'S1',
+                  collection: { type: 'sheet', name: 'Sheet-1', parent: { type: 'box', name: 'PaperBox', locationId: location.id } },
+                },
+              ],
+            },
+          ],
+        },
+      })
+      expect(dupSublabel.status).toBe(409)
+      expect(await dupSublabel.json()).toMatchObject({
+        error: "Sublabel 'S1' is already used on this sheet.",
+        errorCode: 'CONFLICT',
+      })
+
+      // Plate1 already exists (seeded by seedMicronixBatchFixtures) with no barcode; creating a
+      // new plate given only barcode 'Plate1' clashes with that stored Collection name.
+      const plateNameClash = await ctx.request(`${BASE}/batches/create-with-specimens`, {
+        method: 'POST',
+        json: {
+          batch: { controlDefinitionId: def200.id, name: 'B-Plate-Clash' },
+          specimens: [
+            {
+              specimenTypeName: 'DNA',
+              containers: [
+                {
+                  containerType: 'micronix_tube',
+                  barcode: 'MT-CLASH',
+                  collection: { type: 'micronix_plate', barcode: 'Plate1', locationId: location.id, position: 'A01' },
+                },
+              ],
+            },
+          ],
+        },
+      })
+      expect(plateNameClash.status).toBe(409)
+      expect(await plateNameClash.json()).toMatchObject({
+        error: expect.stringContaining("would be named 'Plate1', but a micronix plate with that name already exists"),
+        errorCode: 'CONFLICT',
+      })
+    })
+
     it('returns 400 for an unknown specimen type or control definition', async () => {
       const { def100, batch } = await seedMicronixBatchFixtures(ctx.db)
 
@@ -865,6 +1115,17 @@ describe('Controls API', () => {
       expect(occupied.status).toBe(409)
       expect(unknownType.status).toBe(400)
       expect(await ctx.db.select().from(storageContainer).all()).toHaveLength(1)
+    })
+
+    it('returns 404 when the control batch does not exist', async () => {
+      const { specimens } = await seedMicronixBatchFixtures(ctx.db)
+      const res = await ctx.request(`${BASE}/batches/999999/specimens/bulk`, {
+        method: 'POST',
+        json: { specimens: specimens('MT1', 'A01') },
+      })
+
+      expect(res.status).toBe(404)
+      expect(await res.json()).toMatchObject({ errorCode: 'NOT_FOUND' })
     })
   })
 })

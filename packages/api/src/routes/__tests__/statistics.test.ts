@@ -5,7 +5,7 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createStatisticsRoutes } from '../statistics'
-import { createTestSpecimenType, createTestStorageContainer } from '../../__tests__/helpers/factories'
+import { createTestSpecimen, createTestSpecimenType, createTestStorageContainer } from '../../__tests__/helpers/factories'
 
 describe('Statistics API', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -48,7 +48,7 @@ describe('Statistics API', () => {
       expect(data).toBeDefined()
     })
 
-    it('filters by a numeric specimen_type_id and ignores a non-numeric one or location_id', async () => {
+    it('filters by a numeric specimen_type_id', async () => {
       await createTestStorageContainer(ctx.db)
       const otherType = await createTestSpecimenType(ctx.db, { name: 'Other type' })
       const total = async (query: string) => {
@@ -59,7 +59,40 @@ describe('Statistics API', () => {
 
       expect(await total('')).toBe(1)
       expect(await total(`?specimen_type_id=${otherType.id}`)).toBe(0)
-      expect(await total('?specimen_type_id=abc&location_id=abc')).toBe(1)
+    })
+
+    it.each([
+      ['specimen_type_id', 'abc'],
+      ['location_id', 'abc'],
+      ['tag_ids', '1x'],
+    ])('returns 400 for a non-numeric %s=%s', async (param, value) => {
+      const res = await ctx.request(`/api/statistics?${param}=${value}`, { method: 'GET' })
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toContain(param)
+    })
+
+    it.each([
+      ['collection_date_from', 'garbage'],
+      ['collection_date_to', '9/7/2022'],
+      ['collection_date_from', '2024'],
+      ['created_to', 'soon'],
+    ])('returns 400 for %s=%s, even for an unknown study', async (param, value) => {
+      for (const study of ['', '&study=NONEXISTENT']) {
+        const res = await ctx.request(`/api/statistics?${param}=${encodeURIComponent(value)}${study}`, { method: 'GET' })
+        expect(res.status).toBe(400)
+        expect(((await res.json()) as { error: string }).error).toContain(param)
+      }
+    })
+
+    it('filters by collection date as a calendar date', async () => {
+      const type = await createTestSpecimenType(ctx.db, { name: 'Dated' })
+      await createTestSpecimen(ctx.db, type.id, { collectionDate: '1999-12-31' })
+      await createTestSpecimen(ctx.db, type.id, { collectionDate: '2024-05-07' })
+
+      const res = await ctx.request('/api/statistics?collection_date_to=2000-01-01', { method: 'GET' })
+
+      expect(res.status).toBe(200)
+      expect(((await res.json()) as { specimens: { total: number } }).specimens.total).toBe(1)
     })
 
     it('returns 401 without auth', async () => {

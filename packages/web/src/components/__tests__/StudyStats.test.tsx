@@ -108,4 +108,30 @@ describe('StudyStats', () => {
     const durationCard = screen.getByText('Study Duration').parentElement!
     expect(within(durationCard).getByText('1 day')).toBeInTheDocument()
   })
+
+  it('omits Study Duration instead of showing NaN days when filtered dates are invalid', async () => {
+    const invalidTimeline: StudyTimelineData = {
+      subjects: [
+        {
+          id: 1,
+          name: 'S1',
+          specimens: [
+            { id: 10, collectionDate: '2024-02-31', specimenTypeId: 1, specimenTypeName: 'DBS' },
+            { id: 11, collectionDate: '2024-11-04xyz', specimenTypeId: 1, specimenTypeName: 'DBS' },
+          ],
+        },
+      ],
+      specimenTypes: [{ id: 1, name: 'DBS' }],
+      dateRange: { earliest: '2024-02-31', latest: '2024-11-04xyz' },
+    }
+
+    await render(
+      <DateFilterProvider>
+        <StudyStats summary={summary} timelineData={invalidTimeline} />
+      </DateFilterProvider>
+    )
+
+    expect(screen.queryByText('Study Duration')).not.toBeInTheDocument()
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument()
+  })
 })

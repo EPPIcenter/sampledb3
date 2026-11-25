@@ -5,13 +5,15 @@ import SubjectForm from '../SubjectForm'
 vi.mock('../../../lib/api/studies', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   const { specimenFormMock } = await import('../../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('studies', specimenFormMock())
+  const { studiesApi } = specimenFormMock()
+  return createMockedDomainModule('studies', { studiesApi })
 })
 
 vi.mock('../../../lib/api/subjects', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   const { specimenFormMock } = await import('../../../__tests__/helpers/mock-api-templates')
-  return createMockedDomainModule('subjects', specimenFormMock())
+  const { subjectsApi } = specimenFormMock()
+  return createMockedDomainModule('subjects', { subjectsApi })
 })
 
 vi.mock('../../../contexts/UserContext', async () => {

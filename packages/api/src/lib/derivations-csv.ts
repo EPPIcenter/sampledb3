@@ -2,35 +2,36 @@ import type { Database } from '../db/client'
 import {
   containerDerivation,
   cryovialBox,
-  cryovialTube,
+  location,
   micronixPlate,
-  micronixTube,
-  paper,
   specimen,
-  specimenType,
   storageContainer,
-  study,
-  studySubject,
 } from '../db/schema'
-import { and, eq, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import {
+  containerQuantityBoundsError,
   csvRowToContainerWriteInput,
   parseCsv as parseCsvCells,
+  parseGridPosition,
+  quantityDrawError,
+  quantityUsedError,
   PAPER_DERIVATION_USE_SUBLABEL_NOT_CONTAINER_BARCODE,
   PAPER_DERIVATION_USE_SUBLABEL_NOT_POSITION,
   type ContainerCsvRow,
 } from '@sampledb/contract'
 import { createDerivation, type CreateDerivationInput } from './derivations'
-import { withWriteTransaction } from '../db/write-transaction'
+import { withRolledBackTransaction, withWriteTransaction } from '../db/write-transaction'
+import { isDateOrTimestamp } from './date-filters'
 import { resolveParentContainerId } from './derivations/parent-container-resolver'
-import { normalizePosition } from './normalize-position'
+import { findTubesUsingBarcode } from './identifier-resolution'
 import { checkGridPositionOccupancy } from './container-occupancy'
 import { CollectionPlanner } from './specimen-registration/collections'
+import { ConflictError, sqliteConstraintConflict, ValidationError } from './error-handler'
 
 /**
  * Map technical DB/constraint errors to messages that are clear for non-technical users.
  */
-function toUserFriendlyDerivationError(rawMessage: string): string {
+function toUserFriendlyDerivationError(rawMessage: string, fallback: string): string {
   const m = rawMessage
   if (
     m.includes('UNIQUE constraint failed') &&
@@ -45,7 +46,7 @@ function toUserFriendlyDerivationError(rawMessage: string): string {
   if (m.includes('FOREIGN KEY constraint failed') || m.includes('NOT NULL constraint failed')) {
     return 'A required value is missing or does not match existing data (e.g. parent container, collection, or specimen type). Check your CSV and try again.'
   }
-  return rawMessage
+  return fallback
 }
 
 /** A CSV value conflicts only with a shared setting that is set; '' means "In CSV (per row)". */
@@ -69,7 +70,6 @@ export interface BulkDerivationSettings {
   
   // Validation flags
   validateSourceSpecimenType?: boolean
-  validateParentQuantity?: boolean
 }
 
 export interface DerivationCsvRow {
@@ -105,6 +105,8 @@ export interface DerivationCsvRow {
   bag_name?: string
   sheet_name?: string
   collection_barcode?: string
+  location_id?: string
+  collection_location_id?: string
   container_barcode?: string
   sublabel?: string
   position?: string
@@ -173,7 +175,32 @@ function rowValueError(row: DerivationCsvRow): string | null {
   if (flag != null && flag.trim() !== '' && !BOOLEAN_WORDS.has(flag.trim().toLowerCase())) {
     return `reduce_parent_quantity '${flag}' must be true or false`
   }
+  const date = row.derivation_date
+  if (date != null && date.trim() !== '' && !isDateOrTimestamp(date)) {
+    return `derivation_date '${date}' is not a date (use YYYY-MM-DD)`
+  }
   return null
+}
+
+/** The quantity used a row draws from its Parent container, or undefined when it draws none. */
+function rowQuantityDraw(row: DerivationCsvRow, settings: BulkDerivationSettings | undefined): number | undefined {
+  const reduce = parseBoolean(row.reduce_parent_quantity) ?? settings?.reduceParentQuantity ?? true
+  return reduce ? rowQuantityUsed(row, settings) : undefined
+}
+
+function rowQuantityUsed(row: DerivationCsvRow, settings: BulkDerivationSettings | undefined): number | undefined {
+  return row.quantity_used ? parseNumber(row.quantity_used) : settings?.quantityUsed
+}
+
+/** A row's Child container quantity or quantity used out of bounds, before looking at the Parent container. */
+function rowQuantityError(row: DerivationCsvRow, settings: BulkDerivationSettings | undefined): string | null {
+  const quantity = row.quantity ? parseNumber(row.quantity) : settings?.quantity
+  if (quantity != null) {
+    const childError = containerQuantityBoundsError({ totalQuantity: quantity, remainingQuantity: quantity })
+    if (childError) return `Child container: ${childError}`
+  }
+  const quantityUsed = rowQuantityUsed(row, settings)
+  return quantityUsed == null ? null : quantityUsedError(quantityUsed)
 }
 
 function parseNumber(value?: string): number | undefined {
@@ -266,6 +293,7 @@ function getCollectionNameLabelForType(
 function derivationCsvRowToContainerWrite(
   row: DerivationCsvRow,
   containerType: 'micronix_tube' | 'cryovial_tube' | 'paper',
+  defaultLocationId?: number,
 ) {
   const csvRow: ContainerCsvRow = {
     container_type: containerType,
@@ -274,6 +302,9 @@ function derivationCsvRowToContainerWrite(
     bag_name: row.bag_name,
     sheet_name: row.sheet_name,
     collection_barcode: row.collection_barcode,
+    ...(containerType !== 'paper'
+      ? { location_id: row.location_id, collection_location_id: row.collection_location_id }
+      : {}),
     barcode: containerType === 'paper' ? undefined : row.container_barcode,
     sublabel: row.sublabel,
     position: row.position,
@@ -281,6 +312,7 @@ function derivationCsvRowToContainerWrite(
   return csvRowToContainerWriteInput(csvRow, {
     defaultContainerType: containerType,
     requireSheetName: containerType === 'paper',
+    ...(containerType !== 'paper' && defaultLocationId != null ? { defaultLocationId } : {}),
   })
 }
 
@@ -376,270 +408,485 @@ async function resolveCollectionId(
   return { status: 'will_be_created' }
 }
 
+type DerivationChildContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper'
+
+function resolveChildContainerType(
+  row: DerivationCsvRow,
+  settings?: BulkDerivationSettings,
+): { ok: true; containerType: DerivationChildContainerType } | { ok: false; error: string } {
+  const raw = (settings?.containerType || row.container_type || '').trim()
+  if (!raw) {
+    return { ok: false, error: 'container_type is required' }
+  }
+  if (raw !== 'micronix_tube' && raw !== 'cryovial_tube' && raw !== 'paper') {
+    return { ok: false, error: `Unsupported container_type '${raw}'. Use micronix_tube, cryovial_tube, or paper.` }
+  }
+  return { ok: true, containerType: raw }
+}
+
+function collectionRunKey(containerType: DerivationChildContainerType, id: number): string {
+  return `${containerType}:${id}`
+}
+
+async function resolveCollectionStatus(
+  database: Database,
+  containerType: DerivationChildContainerType,
+  ref: ChildCollectionRef,
+  createdInThisRun: Set<string>,
+): Promise<{ id?: number; status: 'existing' | 'will_be_created' }> {
+  const info = await resolveCollectionId(database, containerType, ref)
+  if (info.id !== undefined && createdInThisRun.has(collectionRunKey(containerType, info.id))) {
+    return { id: info.id, status: 'will_be_created' }
+  }
+  return info
+}
+
+async function recordCreatedCollection(
+  database: Database,
+  containerType: DerivationChildContainerType,
+  ref: ChildCollectionRef,
+  createdInThisRun: Set<string>,
+): Promise<void> {
+  const info = await resolveCollectionId(database, containerType, ref)
+  if (info.id !== undefined) {
+    createdInThisRun.add(collectionRunKey(containerType, info.id))
+  }
+}
+
+/**
+ * Map a known input or SQLite constraint error to a user-facing message, or null for an
+ * unexpected internal error that should propagate as a 500.
+ */
+function formatKnownDerivationRowError(error: unknown): string | null {
+  if (error instanceof ValidationError || error instanceof ConflictError) {
+    return error.message
+  }
+  const constraint = error instanceof Error ? sqliteConstraintConflict(error) : null
+  if (constraint !== null) {
+    const rawMessage = error instanceof Error ? error.message : String(error)
+    return toUserFriendlyDerivationError(rawMessage, constraint)
+  }
+  return null
+}
+
+function buildCreateDerivationInput(
+  row: DerivationCsvRow,
+  parentContainerId: number,
+  container: CreateDerivationInput['container'],
+  settings?: BulkDerivationSettings,
+): CreateDerivationInput {
+  return {
+    parentContainerId,
+    derivationType: settings?.derivationType || row.derivation_type!,
+    specimenTypeName: settings?.specimenTypeName || row.specimen_type_name!,
+    container,
+    quantity: row.quantity ? parseNumber(row.quantity) : settings?.quantity,
+    unitSymbol: row.unit_symbol || settings?.unitSymbol,
+    quantityUsed: row.quantity_used ? parseNumber(row.quantity_used) : settings?.quantityUsed,
+    // A blank cell falls back to the shared setting rather than the library default.
+    reduceParentQuantity: parseBoolean(row.reduce_parent_quantity) ?? settings?.reduceParentQuantity,
+    derivationDate: settings?.derivationDate || row.derivation_date || undefined,
+    protocol: settings?.protocol || row.protocol!,
+    notes: row.notes,
+  }
+}
+
+async function executeDerivationCsvRow(
+  tx: Database,
+  row: DerivationCsvRow,
+  settings: BulkDerivationSettings | undefined,
+  createdInThisRun: Set<string>,
+  options?: { defaultLocationId?: number },
+) {
+  const valueError = rowValueError(row)
+  if (valueError) throw new ValidationError(valueError)
+  const parentContainerId = await resolveParentContainerId(tx, row)
+  const resolvedType = resolveChildContainerType(row, settings)
+  if (!resolvedType.ok) {
+    throw new ValidationError(resolvedType.error)
+  }
+  const childContainerType = resolvedType.containerType
+  const containerParsed = derivationCsvRowToContainerWrite(row, childContainerType, options?.defaultLocationId)
+  if (!containerParsed.success) {
+    throw new ValidationError(containerParsed.error)
+  }
+  const childCollection = childCollectionRef(row, childContainerType)
+  const collectionInfo = await resolveCollectionStatus(tx, childContainerType, childCollection, createdInThisRun)
+  // An import creates a missing sheet, but not the box or bag that holds it.
+  if (childContainerType === 'paper' && collectionInfo.status !== 'existing') {
+    throw new ValidationError(missingPaperParentError(childCollection))
+  }
+
+  const input = buildCreateDerivationInput(row, parentContainerId, containerParsed.data, settings)
+  const result = await createDerivation(tx, input)
+  if (collectionInfo.id === undefined) {
+    await recordCreatedCollection(tx, childContainerType, childCollection, createdInThisRun)
+  }
+
+  return {
+    result,
+    parentContainerId,
+    collectionStatus: collectionInfo.status,
+    derivationTypeName: ((settings?.derivationType || row.derivation_type) ?? '').trim() || undefined,
+    parentSummary: buildParentSummary(row),
+    childSummary: buildChildSummary(row),
+  }
+}
+
 export async function validateDerivationsCsv(
   database: Database,
   text: string,
   settings?: BulkDerivationSettings,
 ): Promise<ValidationResult> {
   const rows = parseCsv(text)
+  if (rows.length === 0) {
+    return {
+      rows: [],
+      collections: [],
+      summary: { total: 0, valid: 0, invalid: 0, warnings: 0 },
+    }
+  }
+
   const validationRows: ValidationResult['rows'] = []
   const collectionsMap = new Map<string, CollectionStatus>()
   /** Track (collectionKey, position) to catch duplicate position in same collection within the CSV */
   const seenCollectionPosition = new Set<string>()
-  /** Track micronix container_barcode to catch duplicates within the CSV */
-  const seenMicronixBarcode = new Set<string>()
+  /** Track tube container_barcode (lowercased) to catch duplicates within the CSV */
+  const seenTubeBarcode = new Set<string>()
+  /** Collections created inside the rolled-back transaction still report as will_be_created. */
+  const createdInThisRun = new Set<string>()
   let validCount = 0
   let invalidCount = 0
   let warningCount = 0
   let firstParentSpecimenTypeId: number | null = null
+  /** Parent container remaining quantity after the draws of earlier rows. */
+  const parentRemaining = new Map<number, number | null>()
 
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i]
-    const validationRow: ValidationResult['rows'][0] = {
-      index: i,
-      valid: false,
+  // Run the real derivation write per row inside a transaction that always rolls back (ADR 0010),
+  // so validation checks every rule the import enforces without persisting anything.
+  await withRolledBackTransaction(database, async (tx) => {
+    // A missing plate or cryovial box with no location_id in the CSV is allowed during validation
+    // because the wizard's Collections step lets the user choose a Location before import.
+    let placeholderLocationId: number | undefined
+    const getPlaceholderLocationId = async (): Promise<number> => {
+      if (placeholderLocationId !== undefined) return placeholderLocationId
+      const [inserted] = await tx
+        .insert(location)
+        .values({
+          parentId: null,
+          name: '__validate_derivations_placeholder_location__',
+          storageTypeId: '__validate_placeholder__',
+          canContainCollections: true,
+        })
+        .returning({ id: location.id })
+      placeholderLocationId = inserted.id
+      return placeholderLocationId
     }
 
-    try {
-      // Validate required fields from settings
-      if (settings) {
-        if (conflictsWithSetting(row.derivation_type, settings.derivationType)) {
-          validationRow.error = 'derivation_type in CSV conflicts with shared settings. Remove derivation_type from CSV.'
-          validationRows.push(validationRow)
-          invalidCount++
-          continue
-        }
-        if (conflictsWithSetting(row.specimen_type_name, settings.specimenTypeName)) {
-          validationRow.error = 'specimen_type_name in CSV conflicts with shared settings. Remove specimen_type_name from CSV.'
-          validationRows.push(validationRow)
-          invalidCount++
-          continue
-        }
-        if (conflictsWithSetting(row.container_type, settings.containerType)) {
-          validationRow.error = 'container_type in CSV conflicts with shared settings. Remove container_type from CSV.'
-          validationRows.push(validationRow)
-          invalidCount++
-          continue
-        }
-        if (conflictsWithSetting(row.protocol, settings.protocol)) {
-          validationRow.error = 'protocol in CSV conflicts with shared settings. Remove protocol from CSV.'
-          validationRows.push(validationRow)
-          invalidCount++
-          continue
-        }
-        if (conflictsWithSetting(row.derivation_date, settings.derivationDate)) {
-          validationRow.error = 'derivation_date in CSV conflicts with shared settings. Remove derivation_date from CSV.'
-          validationRows.push(validationRow)
-          invalidCount++
-          continue
-        }
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]
+      const validationRow: ValidationResult['rows'][0] = {
+        index: i,
+        valid: false,
       }
 
-      const valueError = rowValueError(row)
-      if (valueError) {
-        validationRow.error = valueError
-        validationRows.push(validationRow)
-        invalidCount++
-        continue
-      }
-
-      const containerType = row.container_type || settings?.containerType || 'micronix_tube'
-      const childCollection = childCollectionRef(row, containerType)
-      const collectionName = childCollection.name
-      if ((containerType === 'micronix_tube' || containerType === 'cryovial_tube') && !collectionName && !row.collection_barcode) {
-        validationRow.error = `${getCollectionNameLabelForType(containerType)} or collection_barcode is required for ${containerType} derivations`
-        validationRows.push(validationRow)
-        invalidCount++
-        continue
-      }
-      if (containerType === 'paper') {
-        const paperParse = derivationCsvRowToContainerWrite(row, 'paper')
-        if (!paperParse.success) {
-          validationRow.error = paperParse.error
-          validationRows.push(validationRow)
-          invalidCount++
-          continue
-        }
-      }
-
-      // Resolve parent container
-      const parentContainerId = await resolveParentContainerId(database, row)
-      validationRow.parentContainerId = parentContainerId
-
-      // Get parent specimen type for validation
-      let currentParentSpecimenTypeId: number | null = null
-      if (settings?.validateSourceSpecimenType && parentContainerId) {
-        const parentContainer = await database
-          .select({ specimenId: storageContainer.specimenId })
-          .from(storageContainer)
-          .where(eq(storageContainer.id, parentContainerId))
-          .get()
-        
-        if (parentContainer) {
-          const parentSpecimen = await database
-            .select({ specimenTypeId: specimen.specimenTypeId })
-            .from(specimen)
-            .where(eq(specimen.id, parentContainer.specimenId))
-            .get()
-          
-          if (parentSpecimen) {
-            currentParentSpecimenTypeId = parentSpecimen.specimenTypeId
-            
-            // Compare against the first row whose parent resolved
-            if (firstParentSpecimenTypeId === null) {
-              firstParentSpecimenTypeId = currentParentSpecimenTypeId
-            } else if (currentParentSpecimenTypeId !== firstParentSpecimenTypeId) {
-              validationRow.warnings = validationRow.warnings || []
-              validationRow.warnings.push('Source specimen type does not match other rows')
-              warningCount++
-            }
+      try {
+        // Validate required fields from settings
+        if (settings) {
+          if (conflictsWithSetting(row.derivation_type, settings.derivationType)) {
+            validationRow.error = 'derivation_type in CSV conflicts with shared settings. Remove derivation_type from CSV.'
+            validationRows.push(validationRow)
+            invalidCount++
+            continue
           }
-        }
-      }
-
-      // Validate parent quantity if enabled
-      if (settings?.validateParentQuantity && parentContainerId) {
-        const parentContainer = await database
-          .select({ 
-            remainingQuantity: storageContainer.remainingQuantity,
-            unitId: storageContainer.unitId,
-          })
-          .from(storageContainer)
-          .where(eq(storageContainer.id, parentContainerId))
-          .get()
-        
-        if (parentContainer) {
-          const quantityUsed = row.quantity_used 
-            ? parseNumber(row.quantity_used) 
-            : settings.quantityUsed
-          
-          if (quantityUsed && parentContainer.remainingQuantity !== null && parentContainer.remainingQuantity < quantityUsed) {
-            validationRow.warnings = validationRow.warnings || []
-            validationRow.warnings.push(`Insufficient parent quantity: ${parentContainer.remainingQuantity} available, ${quantityUsed} requested`)
-            warningCount++
+          if (conflictsWithSetting(row.specimen_type_name, settings.specimenTypeName)) {
+            validationRow.error = 'specimen_type_name in CSV conflicts with shared settings. Remove specimen_type_name from CSV.'
+            validationRows.push(validationRow)
+            invalidCount++
+            continue
           }
-        }
-      }
-
-      // Resolve collection and track status
-      const collectionInfo = await resolveCollectionId(database, containerType, childCollection)
-      validationRow.collectionStatus = collectionInfo.status
-
-      if (containerType === 'paper' && collectionInfo.status !== 'existing') {
-        validationRow.error = missingPaperParentError(childCollection)
-        validationRows.push(validationRow)
-        invalidCount++
-        continue
-      }
-
-      // For tube types, validate position and check for duplicate (existing collection or within CSV)
-      if (containerType === 'micronix_tube' || containerType === 'cryovial_tube') {
-        // Normalize ("A2" -> "A02") so checks match what the import stores.
-        const position = normalizePosition(row.position) ?? ''
-        if (!position) {
-          validationRow.error = 'position is required for each row when deriving to a plate or box'
-          validationRows.push(validationRow)
-          invalidCount++
-          continue
-        }
-        const collectionKey = `${collectionName || ''}_${row.collection_barcode || ''}_${containerType}`
-        const positionKey = `${collectionKey}\t${position}`
-
-        // Check if position is already used in an existing collection
-        if (collectionInfo.id !== undefined) {
-          // Shared check: on a plate, tubes and static wells both occupy cells.
-          const occupancy = await checkGridPositionOccupancy(database as Database, {
-            collectionKind: containerType === 'micronix_tube' ? 'micronix_plate' : 'cryovial_box',
-            collectionId: collectionInfo.id,
-            position,
-          })
-          if (occupancy.occupied) {
-            const kind = containerType === 'micronix_tube' ? 'plate' : 'box'
-            validationRow.error = `That position is already used in that ${kind}. Each position in a ${kind} can only be used once. Use a different position or a different ${kind}.`
+          if (conflictsWithSetting(row.container_type, settings.containerType)) {
+            validationRow.error = 'container_type in CSV conflicts with shared settings. Remove container_type from CSV.'
+            validationRows.push(validationRow)
+            invalidCount++
+            continue
+          }
+          if (conflictsWithSetting(row.protocol, settings.protocol)) {
+            validationRow.error = 'protocol in CSV conflicts with shared settings. Remove protocol from CSV.'
+            validationRows.push(validationRow)
+            invalidCount++
+            continue
+          }
+          if (conflictsWithSetting(row.derivation_date, settings.derivationDate)) {
+            validationRow.error = 'derivation_date in CSV conflicts with shared settings. Remove derivation_date from CSV.'
             validationRows.push(validationRow)
             invalidCount++
             continue
           }
         }
 
-        // Check for duplicate (collection + position) within the CSV
-        if (seenCollectionPosition.has(positionKey)) {
-          validationRow.error = 'This position in this plate or box is used more than once in your file. Each position can only be used once.'
+        const valueError = rowValueError(row)
+        if (valueError) {
+          validationRow.error = valueError
           validationRows.push(validationRow)
           invalidCount++
           continue
         }
-        seenCollectionPosition.add(positionKey)
-      }
 
-      // For micronix tubes, container_barcode is required (barcodes are scanned and provided externally)
-      if (containerType === 'micronix_tube') {
-        const barcode = (row.container_barcode ?? '').toString().trim()
-        if (!barcode) {
-          validationRow.error =
-            'container_barcode is required for micronix tube derivations. Barcodes are scanned and provided by you; the system does not assign them.'
+        const resolvedType = resolveChildContainerType(row, settings)
+        if (!resolvedType.ok) {
+          validationRow.error = resolvedType.error
           validationRows.push(validationRow)
           invalidCount++
           continue
         }
-        if (seenMicronixBarcode.has(barcode)) {
-          validationRow.error =
-            'That micronix barcode is used more than once in your file. Each barcode must be unique.'
+        const containerType = resolvedType.containerType
+        const childCollection = childCollectionRef(row, containerType)
+        const collectionName = childCollection.name
+        if ((containerType === 'micronix_tube' || containerType === 'cryovial_tube') && !collectionName && !row.collection_barcode) {
+          validationRow.error = `${getCollectionNameLabelForType(containerType)} or collection_barcode is required for ${containerType} derivations`
           validationRows.push(validationRow)
           invalidCount++
           continue
         }
-        const existingTube = await database
-          .select({ id: micronixTube.id })
-          .from(micronixTube)
-          .where(eq(micronixTube.barcode, barcode))
-          .get()
-        if (existingTube) {
-          validationRow.error =
-            'That barcode is already used for another container. Use a different barcode. Barcodes are scanned and provided by you; the system does not assign them.'
-          validationRows.push(validationRow)
-          invalidCount++
-          continue
+        if (containerType === 'paper') {
+          const paperParse = derivationCsvRowToContainerWrite(row, 'paper')
+          if (!paperParse.success) {
+            validationRow.error = paperParse.error
+            validationRows.push(validationRow)
+            invalidCount++
+            continue
+          }
         }
-        seenMicronixBarcode.add(barcode)
-      }
 
-      if (containerType === 'paper') {
-        if ((row.container_barcode ?? '').toString().trim()) {
-          validationRow.error = PAPER_DERIVATION_USE_SUBLABEL_NOT_CONTAINER_BARCODE
-          validationRows.push(validationRow)
-          invalidCount++
-          continue
-        }
-        if ((row.position ?? '').toString().trim()) {
-          validationRow.error = PAPER_DERIVATION_USE_SUBLABEL_NOT_POSITION
-          validationRows.push(validationRow)
-          invalidCount++
-          continue
-        }
-      }
+        // Resolve parent container
+        const parentContainerId = await resolveParentContainerId(tx, row)
+        validationRow.parentContainerId = parentContainerId
 
-      // Track unique collections
-      const collectionKey = `${collectionName || ''}_${row.collection_barcode || ''}_${containerType}`
-      if (!collectionsMap.has(collectionKey) && (collectionName || row.collection_barcode)) {
-        collectionsMap.set(collectionKey, {
-          name: collectionName,
-          barcode: row.collection_barcode,
-          status: collectionInfo.status,
-          containerType: containerType as 'micronix_tube' | 'cryovial_tube' | 'paper',
+        // Get parent specimen type for validation
+        let currentParentSpecimenTypeId: number | null = null
+        if (settings?.validateSourceSpecimenType && parentContainerId) {
+          const parentContainer = await tx
+            .select({ specimenId: storageContainer.specimenId })
+            .from(storageContainer)
+            .where(eq(storageContainer.id, parentContainerId))
+            .get()
+
+          if (parentContainer) {
+            const parentSpecimen = await tx
+              .select({ specimenTypeId: specimen.specimenTypeId })
+              .from(specimen)
+              .where(eq(specimen.id, parentContainer.specimenId))
+              .get()
+
+            if (parentSpecimen) {
+              currentParentSpecimenTypeId = parentSpecimen.specimenTypeId
+
+              // Compare against the first row whose parent resolved
+              if (firstParentSpecimenTypeId === null) {
+                firstParentSpecimenTypeId = currentParentSpecimenTypeId
+              } else if (currentParentSpecimenTypeId !== firstParentSpecimenTypeId) {
+                validationRow.warnings = validationRow.warnings || []
+                validationRow.warnings.push('Source specimen type does not match other rows')
+                warningCount++
+              }
+            }
+          }
+        }
+
+        // Same bounds createDerivation enforces; rows drawing from one Parent container add up.
+        const quantityError = rowQuantityError(row, settings)
+        if (quantityError) {
+          validationRow.error = quantityError
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+        const draw = rowQuantityDraw(row, settings)
+        let nextParentRemaining: number | null | undefined
+        if (draw != null && parentContainerId) {
+          let remaining = parentRemaining.get(parentContainerId)
+          if (remaining === undefined) {
+            const parentContainer = await tx
+              .select({ remainingQuantity: storageContainer.remainingQuantity })
+              .from(storageContainer)
+              .where(eq(storageContainer.id, parentContainerId))
+              .get()
+            remaining = parentContainer?.remainingQuantity ?? null
+          }
+          const drawError = quantityDrawError(draw, remaining)
+          if (drawError) {
+            validationRow.error = parentRemaining.has(parentContainerId)
+              ? `${drawError} Earlier rows in this file draw from the same Parent container.`
+              : drawError
+            validationRows.push(validationRow)
+            invalidCount++
+            continue
+          }
+          nextParentRemaining = remaining == null ? null : remaining - draw
+        }
+
+        // Resolve collection and track status
+        const collectionInfo = await resolveCollectionStatus(tx, containerType, childCollection, createdInThisRun)
+        validationRow.collectionStatus = collectionInfo.status
+
+        if (containerType === 'paper' && collectionInfo.status !== 'existing') {
+          validationRow.error = missingPaperParentError(childCollection)
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+
+        // For tube types, validate position and check for duplicate (within CSV or existing collection)
+        let positionKey: string | undefined
+        if (containerType === 'micronix_tube' || containerType === 'cryovial_tube') {
+          if (!row.position?.trim()) {
+            validationRow.error = 'position is required for each row when deriving to a plate or box'
+            validationRows.push(validationRow)
+            invalidCount++
+            continue
+          }
+          // Grid position rule: normalize ("A2" -> "A02") so checks match what the import stores.
+          const parsedPosition = parseGridPosition(row.position, containerType === 'micronix_tube' ? 'micronix_plate' : 'cryovial_box')
+          if (!parsedPosition.ok) {
+            validationRow.error = parsedPosition.error
+            validationRows.push(validationRow)
+            invalidCount++
+            continue
+          }
+          const position = parsedPosition.position
+          const collectionKey = `${collectionName || ''}_${row.collection_barcode || ''}_${containerType}`
+          positionKey = `${collectionKey}\t${position}`
+
+          // Check for duplicate (collection + position) within the CSV before querying tx
+          // (earlier valid rows in this file have already written into tx).
+          if (seenCollectionPosition.has(positionKey)) {
+            validationRow.error = 'This position in this plate or box is used more than once in your file. Each position can only be used once.'
+            validationRows.push(validationRow)
+            invalidCount++
+            continue
+          }
+
+          // Check if position is already used in an existing collection
+          if (collectionInfo.id !== undefined) {
+            // Shared check: on a plate, tubes and static wells both occupy cells.
+            const occupancy = await checkGridPositionOccupancy(tx, {
+              collectionKind: containerType === 'micronix_tube' ? 'micronix_plate' : 'cryovial_box',
+              collectionId: collectionInfo.id,
+              position,
+            })
+            if (occupancy.occupied) {
+              const kind = containerType === 'micronix_tube' ? 'plate' : 'box'
+              validationRow.error = `That position is already used in that ${kind}. Each position in a ${kind} can only be used once. Use a different position or a different ${kind}.`
+              validationRows.push(validationRow)
+              invalidCount++
+              continue
+            }
+          }
+        }
+
+        // For micronix tubes, container_barcode is required (barcodes are scanned and provided externally)
+        let normalizedTubeBarcode: string | undefined
+        if (containerType === 'micronix_tube' || containerType === 'cryovial_tube') {
+          const barcode = (row.container_barcode ?? '').toString().trim()
+          if (!barcode && containerType === 'micronix_tube') {
+            validationRow.error =
+              'container_barcode is required for micronix tube derivations. Barcodes are scanned and provided by you; the system does not assign them.'
+            validationRows.push(validationRow)
+            invalidCount++
+            continue
+          }
+          // Tube barcodes are unique across tube types, ignoring case.
+          if (barcode && seenTubeBarcode.has(barcode.toLowerCase())) {
+            validationRow.error =
+              'That tube barcode is used more than once in your file. Each barcode must be unique.'
+            validationRows.push(validationRow)
+            invalidCount++
+            continue
+          }
+          if (barcode && (await findTubesUsingBarcode(tx, barcode)).length > 0) {
+            validationRow.error =
+              'That barcode is already used for another container. Use a different barcode. Barcodes are scanned and provided by you; the system does not assign them.'
+            validationRows.push(validationRow)
+            invalidCount++
+            continue
+          }
+          if (barcode) normalizedTubeBarcode = barcode.toLowerCase()
+        }
+
+        if (containerType === 'paper') {
+          if ((row.container_barcode ?? '').toString().trim()) {
+            validationRow.error = PAPER_DERIVATION_USE_SUBLABEL_NOT_CONTAINER_BARCODE
+            validationRows.push(validationRow)
+            invalidCount++
+            continue
+          }
+          if ((row.position ?? '').toString().trim()) {
+            validationRow.error = PAPER_DERIVATION_USE_SUBLABEL_NOT_POSITION
+            validationRows.push(validationRow)
+            invalidCount++
+            continue
+          }
+        }
+
+        // Perform the real derivation write in a per-row savepoint so every domain rule
+        // (specimen type, allowed container type, unit, collection identity, constraints)
+        // agrees with importDerivationsFromCsv.
+        const needsPlaceholderLocation =
+          (containerType === 'micronix_tube' || containerType === 'cryovial_tube') &&
+          collectionInfo.id === undefined &&
+          !row.location_id?.trim() &&
+          !row.collection_location_id?.trim()
+        const defaultLocationId = needsPlaceholderLocation ? await getPlaceholderLocationId() : undefined
+
+        const containerParsed = derivationCsvRowToContainerWrite(row, containerType, defaultLocationId)
+        if (!containerParsed.success) {
+          validationRow.error = containerParsed.error
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+
+        const input = buildCreateDerivationInput(row, parentContainerId, containerParsed.data, settings)
+        await withWriteTransaction(tx, async (rowTx) => {
+          await createDerivation(rowTx, input)
         })
+
+        if (collectionInfo.id === undefined) {
+          await recordCreatedCollection(tx, containerType, childCollection, createdInThisRun)
+        }
+        if (draw != null && parentContainerId && nextParentRemaining !== undefined) {
+          parentRemaining.set(parentContainerId, nextParentRemaining)
+        }
+        if (positionKey) seenCollectionPosition.add(positionKey)
+        if (normalizedTubeBarcode) seenTubeBarcode.add(normalizedTubeBarcode)
+
+        // Track unique collections
+        const collectionKey = `${collectionName || ''}_${row.collection_barcode || ''}_${containerType}`
+        if (!collectionsMap.has(collectionKey) && (collectionName || row.collection_barcode)) {
+          collectionsMap.set(collectionKey, {
+            name: collectionName,
+            barcode: row.collection_barcode,
+            status: collectionInfo.status,
+            containerType,
+          })
+        }
+
+        validationRow.valid = true
+        validCount++
+      } catch (error: unknown) {
+        const message = formatKnownDerivationRowError(error)
+        if (message !== null) {
+          validationRow.error = message
+          invalidCount++
+        } else {
+          throw error
+        }
       }
 
-      validationRow.valid = true
-      validCount++
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      validationRow.error = errorMessage
-      invalidCount++
+      validationRows.push(validationRow)
     }
-
-    validationRows.push(validationRow)
-  }
+  })
 
   return {
     rows: validationRows,
@@ -666,23 +913,28 @@ export async function importDerivationsFromCsv(
   if (settings) {
     for (const row of rows) {
       if (conflictsWithSetting(row.derivation_type, settings.derivationType)) {
-        throw new Error(`Row ${rows.indexOf(row) + 1}: derivation_type in CSV conflicts with shared settings. Remove derivation_type from CSV.`)
+        throw new ValidationError(`Row ${rows.indexOf(row) + 1}: derivation_type in CSV conflicts with shared settings. Remove derivation_type from CSV.`)
       }
       if (conflictsWithSetting(row.specimen_type_name, settings.specimenTypeName)) {
-        throw new Error(`Row ${rows.indexOf(row) + 1}: specimen_type_name in CSV conflicts with shared settings. Remove specimen_type_name from CSV.`)
+        throw new ValidationError(`Row ${rows.indexOf(row) + 1}: specimen_type_name in CSV conflicts with shared settings. Remove specimen_type_name from CSV.`)
       }
       if (conflictsWithSetting(row.container_type, settings.containerType)) {
-        throw new Error(`Row ${rows.indexOf(row) + 1}: container_type in CSV conflicts with shared settings. Remove container_type from CSV.`)
+        throw new ValidationError(`Row ${rows.indexOf(row) + 1}: container_type in CSV conflicts with shared settings. Remove container_type from CSV.`)
       }
       if (conflictsWithSetting(row.protocol, settings.protocol)) {
-        throw new Error(`Row ${rows.indexOf(row) + 1}: protocol in CSV conflicts with shared settings. Remove protocol from CSV.`)
+        throw new ValidationError(`Row ${rows.indexOf(row) + 1}: protocol in CSV conflicts with shared settings. Remove protocol from CSV.`)
       }
       if (conflictsWithSetting(row.derivation_date, settings.derivationDate)) {
-        throw new Error(`Row ${rows.indexOf(row) + 1}: derivation_date in CSV conflicts with shared settings. Remove derivation_date from CSV.`)
+        throw new ValidationError(`Row ${rows.indexOf(row) + 1}: derivation_date in CSV conflicts with shared settings. Remove derivation_date from CSV.`)
       }
     }
   }
 
+  if (rows.length === 0) {
+    return { rows: results }
+  }
+
+  const createdInThisRun = new Set<string>()
   const useTx = !options.dryRun
 
   if (useTx) {
@@ -690,57 +942,24 @@ export async function importDerivationsFromCsv(
     // Wrap in try-catch to capture which row failed, but still let transaction rollback
     let failedRowIndex: number | null = null
     let transactionError: unknown = null
-    
+
     try {
       await withWriteTransaction(database, async (tx) => {
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i]
           try {
-            const valueError = rowValueError(row)
-            if (valueError) throw new Error(valueError)
-            const parentContainerId = await resolveParentContainerId(tx, row)
-            const childContainerType = (settings?.containerType || row.container_type!) as 'micronix_tube' | 'cryovial_tube' | 'paper'
-            const containerParsed = derivationCsvRowToContainerWrite(row, childContainerType)
-            if (!containerParsed.success) {
-              throw new Error(containerParsed.error)
-            }
-            const collectionInfo = await resolveCollectionId(
-              tx,
-              childContainerType,
-              childCollectionRef(row, childContainerType),
-            )
-
-            const input: CreateDerivationInput = {
-              parentContainerId,
-              derivationType: settings?.derivationType || row.derivation_type!,
-              specimenTypeName: settings?.specimenTypeName || row.specimen_type_name!,
-              container: containerParsed.data,
-              quantity: row.quantity ? parseNumber(row.quantity) : settings?.quantity,
-              unitSymbol: row.unit_symbol || settings?.unitSymbol,
-              quantityUsed: row.quantity_used ? parseNumber(row.quantity_used) : settings?.quantityUsed,
-              // A blank cell falls back to the shared setting rather than the library default.
-              reduceParentQuantity: parseBoolean(row.reduce_parent_quantity) ?? settings?.reduceParentQuantity,
-              derivationDate: settings?.derivationDate || row.derivation_date!,
-              protocol: settings?.protocol || row.protocol!,
-              notes: row.notes,
-            }
-
-            const result = await createDerivation(tx, input)
-            const derivationTypeName = ((settings?.derivationType || row.derivation_type) ?? '').trim() || undefined
-            const parentSummary = buildParentSummary(row)
-            const childSummary = buildChildSummary(row)
-
+            const executed = await executeDerivationCsvRow(tx, row, settings, createdInThisRun)
             results.push({
               index: i,
               success: true,
-              derivationId: result.derivation.id,
-              parentContainerId,
-              childContainerId: result.childContainer.id,
-              warnings: result.warnings.map(w => w.message),
-              collectionStatus: collectionInfo.status,
-              derivationTypeName,
-              parentSummary,
-              childSummary,
+              derivationId: executed.result.derivation.id,
+              parentContainerId: executed.parentContainerId,
+              childContainerId: executed.result.childContainer.id,
+              warnings: executed.result.warnings.map(w => w.message),
+              collectionStatus: executed.collectionStatus,
+              derivationTypeName: executed.derivationTypeName,
+              parentSummary: executed.parentSummary,
+              childSummary: executed.childSummary,
             })
           } catch (error: unknown) {
             // Track which row failed and throw to trigger rollback
@@ -751,15 +970,15 @@ export async function importDerivationsFromCsv(
         }
       })
     } catch (error: unknown) {
-      // Transaction failed and rolled back - return error for failed row
-      // All other rows are marked as not processed (transaction rolled back)
-      // failedRowIndex is set in the inner catch before rethrow; control flow narrows it to number here
+      // Transaction failed and rolled back - return error for failed row only on known input or
+      // constraint failures; rethrow unexpected internal errors so they become logged 500s.
       const idx = failedRowIndex as number | null
       if (idx !== null) {
-        const transactionErrorMessage = transactionError instanceof Error ? transactionError.message : String(transactionError || 'Unknown error')
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        const rawMessage = transactionErrorMessage !== 'null' && transactionErrorMessage !== 'Unknown error' ? transactionErrorMessage : errorMessage
-        const friendlyMessage = toUserFriendlyDerivationError(rawMessage)
+        const cause = transactionError ?? error
+        const friendlyMessage = formatKnownDerivationRowError(cause)
+        if (friendlyMessage === null) {
+          throw error
+        }
         results.push({
           index: idx,
           success: false,
@@ -779,48 +998,39 @@ export async function importDerivationsFromCsv(
       }
     }
   } else {
-    // Dry run: the checks an import makes on each row, with no DB writes
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i]
-      try {
-        const valueError = rowValueError(row)
-        if (valueError) {
-          results.push({ index: i, success: false, error: valueError })
-          continue
-        }
-        const parentContainerId = await resolveParentContainerId(database, row)
-        const containerType = (settings?.containerType || row.container_type || 'micronix_tube') as 'micronix_tube' | 'cryovial_tube' | 'paper'
-        const containerParsed = derivationCsvRowToContainerWrite(row, containerType)
-        if (!containerParsed.success) {
+    // Dry run: execute the real import inside a transaction that always rolls back (ADR 0010),
+    // isolating each row in a savepoint so every row is checked and nothing is persisted.
+    await withRolledBackTransaction(database, async (tx) => {
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
+        try {
+          const executed = await withWriteTransaction(tx, (rowTx) =>
+            executeDerivationCsvRow(rowTx, row, settings, createdInThisRun),
+          )
           results.push({
             index: i,
-            success: false,
-            error: containerParsed.error,
+            success: true,
+            parentContainerId: executed.parentContainerId,
+            warnings: executed.result.warnings.map(w => w.message),
+            collectionStatus: executed.collectionStatus,
+            derivationTypeName: executed.derivationTypeName,
+            parentSummary: executed.parentSummary,
+            childSummary: executed.childSummary,
           })
-          continue
+        } catch (error: unknown) {
+          const message = formatKnownDerivationRowError(error)
+          if (message !== null) {
+            results.push({
+              index: i,
+              success: false,
+              error: message,
+            })
+          } else {
+            throw error
+          }
         }
-        const childCollection = childCollectionRef(row, containerType)
-        const collectionInfo = await resolveCollectionId(database, containerType, childCollection)
-        // An import creates a missing sheet, but not the box or bag that holds it.
-        if (containerType === 'paper' && collectionInfo.status !== 'existing') {
-          results.push({ index: i, success: false, error: missingPaperParentError(childCollection) })
-          continue
-        }
-
-        results.push({
-          index: i,
-          success: true,
-          collectionStatus: collectionInfo.status,
-        })
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        results.push({
-          index: i,
-          success: false,
-          error: errorMessage,
-        })
       }
-    }
+    })
   }
 
   return { rows: results }

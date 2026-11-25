@@ -11,19 +11,22 @@ import {
 } from '../db/schema'
 import { eq, sql, and, inArray, or, isNull } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../lib/constants'
+import { dateRangeConditions } from '../lib/sql-helpers'
+import { timestampFilter } from '../lib/date-filters'
 import { z } from 'zod'
 import { resolveStudyByShortCode, resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from '../lib/identifier-resolution'
-import { validateSubjectName, validateStudyShortCode, validateSpecimenData, validateCollectionDate, validateContainerTypeForSpecimenType, validateUnitForContainerType } from '../lib/validation'
+import { subjectNameKey, validateSubjectName, validateStudyShortCode, validateSpecimenData, validateCollectionDate, validateContainerTypeForSpecimenType, validateUnitForContainerType } from '../lib/validation'
 import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } from '../lib/defaults'
 import { resolveCollection, resolveCollectionByName } from '../lib/collections/collection-resolve'
 import { findExistingStudySpecimen } from '../lib/specimen-helpers'
-import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
+import { ExpectedNotFoundError, handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import {
   runOneSubjectWithSpecimens,
   formatOneSubjectWithSpecimensResponse,
 } from '../lib/bulk-combined-import'
+import { mapIndexedZodRowIssues } from '../lib/bulk-validate-zod'
 import { withSpecimensRequestSchema } from '../lib/schemas'
 import { mergeSubjects } from '../lib/subjects/merge'
 import {
@@ -48,10 +51,17 @@ subjects.get('/', authMiddleware, async (c) => {
     const page = validatePage(c.req.query('page'))
     const limit = await validateLimit(dbInstance, c.req.query('limit'))
     const offset = (page - 1) * limit
-    
+    const whereClause = and(
+      ...dateRangeConditions(
+        studySubject.created,
+        timestampFilter('created_from', c.req.query('created_from')),
+        timestampFilter('created_to', c.req.query('created_to')),
+      ),
+    )
+
     const [subjectsList, countResult] = await Promise.all([
-      dbInstance.select().from(studySubject).limit(limit).offset(offset),
-      dbInstance.select({ count: sql<number>`COUNT(*)`.as('count') }).from(studySubject),
+      dbInstance.select().from(studySubject).where(whereClause).limit(limit).offset(offset),
+      dbInstance.select({ count: sql<number>`COUNT(*)`.as('count') }).from(studySubject).where(whereClause),
     ])
     
     const total = countResult[0]?.count || 0
@@ -132,7 +142,7 @@ subjects.post('/', memberMiddleware, async (c) => {
     } else if (data.studyShortCode) {
       const resolved = await resolveStudyByShortCode(dbInstance, data.studyShortCode)
       if (!resolved) {
-        throw new NotFoundError(`Study with short code '${data.studyShortCode}'`)
+        throw new ExpectedNotFoundError(`Study with short code '${data.studyShortCode}' not found`)
       }
       studyId = resolved
     } else {
@@ -232,7 +242,7 @@ subjects.post('/bulk', memberMiddleware, async (c) => {
     const duplicateErrors: Array<{ index: number; error: string }> = []
     
     for (let i = 0; i < validSubjects.length; i++) {
-      const key = `${validSubjects[i].studyId}:${validSubjects[i].name}`
+      const key = subjectNameKey(validSubjects[i].studyId, validSubjects[i].name)
       if (seen.has(key)) {
         duplicateErrors.push({
           index: i,
@@ -293,7 +303,15 @@ subjects.post('/bulk/validate', memberMiddleware, async (c) => {
         name: z.string().min(1),
       })),
     })
-    const data = schema.parse(body)
+    const parsed = schema.safeParse(body)
+    if (!parsed.success) {
+      const rowErrors = mapIndexedZodRowIssues(parsed.error, 'subjects')
+      if (rowErrors) {
+        return c.json({ valid: false, errors: rowErrors })
+      }
+      throw parsed.error
+    }
+    const data = parsed.data
     if (data.subjects.length === 0) {
       return c.json({ error: 'No subjects provided' }, 400)
     }
@@ -316,7 +334,7 @@ subjects.post('/bulk/validate', memberMiddleware, async (c) => {
     }
     const seen = new Set<string>()
     for (let i = 0; i < validSubjects.length; i++) {
-      const key = `${validSubjects[i].studyId}:${validSubjects[i].name}`
+      const key = subjectNameKey(validSubjects[i].studyId, validSubjects[i].name)
       if (seen.has(key)) {
         errors.push({ index: i, message: `Duplicate subject name '${validSubjects[i].name}' in study` })
       }
@@ -408,28 +426,10 @@ subjects.put('/:id', memberMiddleware, async (c) => {
     const data = schema.parse(body)
     const trimmedName = data.name.trim()
     
-    // Validate name length
-    if (trimmedName.length === 0) {
-      return c.json({ error: 'Subject name cannot be empty' }, 400)
-    }
-    
-    if (trimmedName.length > 255) {
-      return c.json({ error: 'Subject name cannot exceed 255 characters' }, 400)
-    }
-    
-      // Check for duplicate name within the same study (excluding current subject)
-      if (trimmedName !== existingSubject.name) {
-        const duplicate = await dbInstance
-        .select({ id: studySubject.id })
-        .from(studySubject)
-        .where(and(
-          eq(studySubject.studyId, existingSubject.studyId),
-          eq(studySubject.name, trimmedName)
-        ) as any)
-        .get()
-      
-      if (duplicate) {
-        return c.json({ error: `Subject name '${trimmedName}' already exists in this study` }, 400)
+    if (trimmedName !== existingSubject.name) {
+      const nameValidation = await validateSubjectName(dbInstance, existingSubject.studyId, trimmedName, { excludeSubjectId: id })
+      if (!nameValidation.valid) {
+        throw new ValidationError(nameValidation.error ?? 'Invalid subject name')
       }
     }
     

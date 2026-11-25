@@ -526,7 +526,7 @@ const tableViewConfigurationsSchema = z.object({
 const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', 'static_well'])
 
   // GET /api/settings/container-types/:containerType/units - Get allowed units for a container type
-  settings.get('/container-types/:containerType/units', async (c) => {
+  settings.get('/container-types/:containerType/units', authMiddleware, async (c) => {
     try {
       const containerType = requireParam(c, 'containerType')
       

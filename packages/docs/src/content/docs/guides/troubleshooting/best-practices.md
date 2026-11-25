@@ -13,7 +13,7 @@ These are constraints in the product, not optional style.
 
 ## Subjects and specimens
 
-- Subject names are unique **within a study**.
+- Subject names are unique **within a study**, ignoring case: `ABC-1` and `abc-1` can't both exist in one study.
 - Specimen type names in import and forms must match **Reference Data** exactly, including capitalization.
 - Collection dates use `YYYY-MM-DD`. The registration form does not default to today if you leave the date blank.
 - Specimens cannot be edited in the app after create.

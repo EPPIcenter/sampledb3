@@ -2,7 +2,7 @@ import type { Database } from '../../db/client'
 import { controlBatch, controlDefinition } from '../../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { validateControlBatchName, generateUniqueBatchName } from '../validation'
-import { NotFoundError, ValidationError } from '../error-handler'
+import { ConflictError, NotFoundError, ValidationError } from '../error-handler'
 import type { CreateBloodControlBatchInput } from './batch-schemas'
 import { insertedRow } from '../inserted-row'
 
@@ -33,9 +33,12 @@ export async function createBloodControlBatch(
   if (input.name) {
     const nameValidation = await validateControlBatchName(database, input.name)
     if (!nameValidation.valid) {
-      throw new ValidationError(nameValidation.error || 'Batch name must be unique', {
-        suggestion: nameValidation.suggestion,
-      })
+      const details = { suggestion: nameValidation.suggestion }
+      const message = nameValidation.error || 'Batch name must be unique'
+      if (nameValidation.conflict) {
+        throw new ConflictError(message, details)
+      }
+      throw new ValidationError(message, details)
     }
     batchName = input.name
   } else {
@@ -49,7 +52,7 @@ export async function createBloodControlBatch(
         controlDefinitionId: definitionId,
         name: batchName,
         productionDate: input.productionDate || null,
-        properties: input.properties ? JSON.stringify(input.properties) : null,
+        properties: input.properties ?? null,
         createdBy: userId,
         updatedBy: userId,
       })
@@ -61,7 +64,7 @@ export async function createBloodControlBatch(
       const suggestion = await generateUniqueBatchName(database, definition.name, input.productionDate).catch(
         () => undefined,
       )
-      throw new ValidationError('Batch name already exists', { suggestion })
+      throw new ConflictError('Batch name already exists', { suggestion })
     }
     throw error
   }

@@ -68,7 +68,7 @@ interface SheetResponse {
   updatedBy?: number | null
 }
 
-interface WellEntry {
+export interface WellEntry {
   type: 'micronix_tube' | 'static_well'
   id: number
   barcode?: string | null
@@ -76,7 +76,7 @@ interface WellEntry {
   container?: unknown
 }
 
-interface CryovialTubeEntry {
+export interface CryovialTubeEntry {
   kind: 'cryovial_tube'
   id: number
   barcode?: string | null
@@ -91,6 +91,22 @@ interface PaperEntry {
   container?: unknown
 }
 
+export interface MicronixPlateDetail {
+  plate: MicronixPlateResponse
+  /** Placed Containers keyed by grid cell (A01–H12). */
+  wells: Record<string, WellEntry>
+  /** Containers with no grid position, or a stored position that is not a plate cell. */
+  unplaced: WellEntry[]
+}
+
+export interface CryovialBoxDetail {
+  box: CryovialBoxResponse
+  /** Placed Containers keyed by grid cell (A01–J10). */
+  positions: Record<string, CryovialTubeEntry[]>
+  /** Containers with no grid position, or a stored position that is not a box cell. */
+  unplaced: CryovialTubeEntry[]
+}
+
 export interface ValidatePlateScanResult {
   plate: { id: number; name: string }
   summary: {
@@ -98,6 +114,8 @@ export interface ValidatePlateScanResult {
     matched: number
     missingInScan: number
     extraInScan: number
+    /** Unplaced tubes of this plate that the scan found at some position. */
+    unplacedInScan: number
     mismatch: number
     exhaustedCount: number
     taggedCount: number
@@ -106,12 +124,15 @@ export interface ValidatePlateScanResult {
     position: string
     scanBarcode: string | null
     expectedBarcode: string | null
-    status: 'match' | 'mismatch' | 'missing_in_scan' | 'extra_in_scan'
+    /** `unplaced_in_scan`: the scanned tube belongs to this plate but has no grid position. */
+    status: 'match' | 'mismatch' | 'missing_in_scan' | 'extra_in_scan' | 'unplaced_in_scan'
     exhausted: boolean
     tags: string[]
     /** When status is mismatch or extra_in_scan, where the scanned barcode is registered (plate + position). */
     scanBarcodeOrigin: { plateId: number; plateName: string; position: string } | null
   }>
+  /** Tubes in the plate with no grid position, or a stored position that is not a plate cell. */
+  unplaced: Array<{ barcode: string; storedPosition: string | null; scannedPosition: string | null }>
   /** True when plate was inferred from scan barcodes (plateId was not sent). */
   inferredPlate?: boolean
 }
@@ -137,9 +158,9 @@ export type ValidatePlateScanResponse =
 
 export const collectionsApi = {
   getMicronixPlate: (id: number) =>
-    api.get<{ plate: MicronixPlateResponse; wells: Record<string, WellEntry> }>(`/collections/plates/micronix/${id}`),
+    api.get<MicronixPlateDetail>(`/collections/plates/micronix/${id}`),
   getCryovialBox: (id: number) =>
-    api.get<{ box: CryovialBoxResponse; positions: Record<string, CryovialTubeEntry[]> }>(`/collections/boxes/cryovial/${id}`),
+    api.get<CryovialBoxDetail>(`/collections/boxes/cryovial/${id}`),
   getBox: (id: number) =>
     api.get<{ box: BoxResponse; contents: { sheets: Array<SheetResponse & { papers: PaperEntry[] }> } }>(`/collections/boxes/${id}`),
   getBag: (id: number) =>
@@ -167,7 +188,15 @@ export const collectionsApi = {
       | { type: 'position'; sourceCollectionName: string; sourcePosition: string }
     >
   }) =>
-    api.post<{ containers: Array<{ identifier: { type: string; value: string } | string; container: unknown }> }>('/collections/containers/resolve', data),
+    api.post<{
+      containers: Array<{
+        identifier: { type: string; value: string } | string
+        container: unknown
+        /** Set, with `container` null, when a barcode matches more than one Container. */
+        error?: string
+        candidates?: Array<{ containerId: number; containerType: string; barcode: string }>
+      }>
+    }>('/collections/containers/resolve', data),
   listCollectionsByType: (type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet') =>
     api.get<{ collections: Array<{ id: number; name: string; locationId?: number | null; itemCount?: number; location?: { id: number; path: string | null } | null }> }>(`/collections/list/${type}`),
   listAllCollections: () =>
@@ -196,10 +225,16 @@ export const collectionsApi = {
     targetCollectionId: number
     targetCollectionType: 'box' | 'bag'
   }) => api.post<{ success: boolean; moved: number }>('/collections/sheets/move', data),
+  /**
+   * Move Collections of any type in one transaction. Each move names its type, or inherits
+   * `collectionType`. Resolves to 200 bodies, including a best-effort move that moved some
+   * Collections (`success: false`, `moved > 0`, `errors`); a move that moved nothing rejects with 400.
+   */
   moveCollections: (data: {
-    collectionType: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+    collectionType?: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
     atomicMode?: 'all_or_nothing' | 'best_effort'
     moves: Array<{
+      collectionType?: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
       identifier:
         | { type: 'id'; id: number }
         | { type: 'name'; name: string; locationId?: number; locationPath?: string }

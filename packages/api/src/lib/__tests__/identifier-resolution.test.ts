@@ -5,12 +5,26 @@ import {
   resolveSubjectByNameAndStudy,
   resolveSpecimenTypeByName,
   resolveContainerByBarcode,
+  findContainersByBarcode,
+  findTubesUsingBarcode,
+  AmbiguousBarcodeError,
   resolveStudiesByShortCodes,
   resolveSpecimenTypesByNames,
   resolveSubjectNamesByStudy,
 } from '../identifier-resolution'
 import { SQL_IN_CHUNK_SIZE } from '../sql-helpers'
-import { createTestStudy, createTestStudySubject, createTestSpecimenType, createTestStorageContainer, createTestStorageType, createTestLocation } from '../../__tests__/helpers/factories'
+import {
+  createTestStudy,
+  createTestStudySubject,
+  createTestSpecimenType,
+  createTestStorageContainer,
+  createTestStorageType,
+  createTestLocation,
+  createTestCryovialBox,
+  createTestCryovialTube,
+  createTestMicronixPlate,
+  createTestMicronixTube,
+} from '../../__tests__/helpers/factories'
 import { box, sheet, paper } from '../../db/schema'
 import { utcNow } from '../datetime'
 import type { Database } from '../../db/client'
@@ -104,10 +118,68 @@ describe('identifier-resolution lib', () => {
         sublabel: 'SPOT-42',
       })
 
-      const id = await resolveContainerByBarcode(testDb, 'SPOT-42')
-      expect(id).toBe(container.id)
+      const match = await resolveContainerByBarcode(testDb, 'SPOT-42')
+      expect(match?.containerId).toBe(container.id)
+    })
+
+    it('throws AmbiguousBarcodeError listing every Container when the barcode is on several', async () => {
+      const { first, second } = await seedSharedCryovialBarcode('NA')
+
+      const error = await resolveContainerByBarcode(testDb, 'NA').catch((e: unknown) => e)
+
+      expect(error).toBeInstanceOf(AmbiguousBarcodeError)
+      expect((error as AmbiguousBarcodeError).candidates.map((c) => c.containerId)).toEqual([first, second])
+      expect((error as AmbiguousBarcodeError).message).toBe(
+        `Ambiguous barcode 'NA': it matches 2 containers (container ${first} (cryovial_tube in BOX-1 A01), ` +
+          `container ${second} (cryovial_tube in BOX-1 A02)). Identify the container by its id or position instead.`,
+      )
     })
   })
+
+  describe('findContainersByBarcode', () => {
+    it('returns every Container carrying the barcode, ordered by id', async () => {
+      const { first, second } = await seedSharedCryovialBarcode('NA')
+      const matches = await findContainersByBarcode(testDb, 'NA')
+      expect(matches.map((m) => [m.containerId, m.containerType, m.barcode])).toEqual([
+        [first, 'cryovial_tube', 'NA'],
+        [second, 'cryovial_tube', 'NA'],
+      ])
+    })
+
+    it('matches exactly unless asked to ignore case', async () => {
+      await seedSharedCryovialBarcode('CK3-3FR4')
+      expect(await findContainersByBarcode(testDb, 'Ck3-3Fr4')).toEqual([])
+      expect(await findContainersByBarcode(testDb, ' Ck3-3Fr4 ', { ignoreCase: true })).toHaveLength(2)
+    })
+  })
+
+  describe('findTubesUsingBarcode', () => {
+    it('finds tubes of every type ignoring case, except the given Container', async () => {
+      const { location, sibling } = await seedSharedCryovialBarcode('OTHER')
+      const plate = await createTestMicronixPlate(testDb, { name: 'PLATE-1', locationId: location.id })
+      const micronix = await createTestStorageContainer(testDb, sibling)
+      await createTestMicronixTube(testDb, { containerId: micronix.id, collectionId: plate.id, barcode: 'MX-1' })
+      const box2 = await createTestCryovialBox(testDb, { name: 'BOX-2', locationId: location.id })
+      const cryovial = await createTestStorageContainer(testDb, sibling)
+      await createTestCryovialTube(testDb, { containerId: cryovial.id, collectionId: box2.id, barcode: 'mx-1 ' })
+
+      expect((await findTubesUsingBarcode(testDb, 'Mx-1')).map((m) => m.containerId)).toEqual([micronix.id, cryovial.id])
+      expect((await findTubesUsingBarcode(testDb, 'MX-1', micronix.id)).map((m) => m.containerId)).toEqual([cryovial.id])
+    })
+  })
+
+  /** Two cryovial tubes in BOX-1 (A01 and A02) whose barcodes are `barcode` and a lower-case copy when it has letters. */
+  async function seedSharedCryovialBarcode(barcode: string) {
+    const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+    const location = await createTestLocation(testDb, { name: 'Freezer 1', storageTypeId: String(storageType.id), path: 'Freezer 1' })
+    const cryoBox = await createTestCryovialBox(testDb, { name: 'BOX-1', locationId: location.id })
+    const a = await createTestStorageContainer(testDb, {})
+    const b = await createTestStorageContainer(testDb, { unitId: a.unitId, specimenId: a.specimenId })
+    const second = barcode === 'CK3-3FR4' ? barcode.toLowerCase() : barcode
+    await createTestCryovialTube(testDb, { containerId: a.id, collectionId: cryoBox.id, barcode, position: 'A01' })
+    await createTestCryovialTube(testDb, { containerId: b.id, collectionId: cryoBox.id, barcode: second, position: 'A02' })
+    return { first: a.id, second: b.id, location, sibling: { unitId: a.unitId, specimenId: a.specimenId } }
+  }
 
   describe('resolveStudiesByShortCodes', () => {
     it('returns empty map for empty array', async () => {
