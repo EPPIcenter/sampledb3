@@ -45,9 +45,9 @@ describe('ReferenceDataTable', () => {
     }
   }
 
-  /** The row for an item, found by its name cell. */
-  async function rowOf(name: string) {
-    return (await screen.findByRole('cell', { name })).closest('tr')!
+  /** The row for an item. A row's name is its cells' text, which starts with the item's name. */
+  function rowOf(name: string) {
+    return screen.findByRole('row', { name: new RegExp(`^${name}\\b`) })
   }
 
   beforeEach(() => {
@@ -190,9 +190,9 @@ describe('ReferenceDataTable', () => {
 
   it('should filter data when search is provided', async () => {
     const user = userEvent.setup()
-    await renderTable({ searchPlaceholder: 'Search items...' }).rendered
+    await renderTable().rendered
 
-    await user.type(screen.getByPlaceholderText('Search items...'), 'Item 1')
+    await user.type(screen.getByRole('textbox'), 'Item 1')
 
     expect(screen.getByRole('cell', { name: 'Item 1' })).toBeInTheDocument()
     expect(screen.queryByRole('cell', { name: 'Item 2' })).not.toBeInTheDocument()

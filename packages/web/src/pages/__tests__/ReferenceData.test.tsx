@@ -118,6 +118,7 @@ describe('ReferenceData Page', () => {
 
       const { container } = await renderPage('specimen-types')
 
+      // SkeletonTable has no role or label to query by.
       expect(container.querySelector('.animate-pulse')).toBeInTheDocument()
       expect(screen.queryByText('No Specimen Types found')).not.toBeInTheDocument()
 
