@@ -13,12 +13,9 @@ import {
   getBulkImportCollectionType,
   getBulkImportRequiredFields,
   getBulkImportOptionalFields,
-  parseBulkImportCsvFileRows,
-  validateBulkImportRequiredCells,
-  validateBulkImportCollectionBarcodes,
-  mapBulkImportRowsToPayload,
+  parseSubjectsBulkImportCsv,
+  templateErrorsToValidationErrors,
   formatBulkImportError,
-  getBulkImportRowCollectionRef,
   type CSVRow,
   type BulkImportValidationError,
   type ImportType as LibImportType,
@@ -30,7 +27,7 @@ import {
 } from '../lib/bulk-import-success-message'
 import LocationPicker from './LocationPicker'
 import '../styles/storage.css'
-import { parseCsv } from '@sampledb/contract'
+import { mapBulkImportTemplateCsv, parseCsv } from '@sampledb/contract'
 
 export type ImportType = LibImportType
 type Step = 'upload' | 'collections' | 'import'
@@ -98,9 +95,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     errors?: BulkImportValidationError[]
   } | null>(null)
   const [missingCollections, setMissingCollections] = useState<MissingCollection[]>([])
-  const [validatedData, setValidatedData] = useState<Record<string, unknown>[]>([])
-  // Spreadsheet row of each validatedData item, so errors name the file's row.
-  const [validatedFileRows, setValidatedFileRows] = useState<number[]>([])
+  const [validatedCsvText, setValidatedCsvText] = useState<string>('')
   const [atomicMode, setAtomicMode] = useState<BulkCombinedAtomicMode>('full_file')
 
   const bulkCsvWorkflow = useBulkCsvWorkflow({
@@ -132,7 +127,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       setValidationErrors([])
       setImportResult(null)
       setCurrentStep('upload')
-      setValidatedFileRows([])
+      setValidatedCsvText('')
       setMissingCollections([])
 
       const reader = new FileReader()
@@ -164,7 +159,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     setPreview([])
     setValidationErrors([])
     setImportResult(null)
-    setValidatedFileRows([])
+    setValidatedCsvText('')
     setMissingCollections([])
     const fileInput = document.getElementById('import-csv-file')
     if (fileInput) {
@@ -194,16 +189,14 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
   }
 
   const runPreReviewServerValidation = async (
-    data: Record<string, unknown>[],
-    fileRows: number[]
+    csvText: string,
   ): Promise<BulkImportValidationError[]> => {
-    return bulkCsvWorkflow.runServerValidation(data, fileRows)
+    return bulkCsvWorkflow.runServerValidation(csvText)
   }
 
   const handleImport = async (
-    data: Record<string, unknown>[],
-    fileRows: number[],
-    options?: { alreadyValidated?: boolean }
+    csvText: string,
+    options?: { alreadyValidated?: boolean },
   ) => {
     setCurrentStep('import')
     setWorkflowLoading(true)
@@ -211,7 +204,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     setValidationErrors([])
 
     try {
-      const result = await bulkCsvWorkflow.runImport(data, fileRows, {
+      const result = await bulkCsvWorkflow.runImport(csvText, {
         skipServerValidate: options?.alreadyValidated,
       })
 
@@ -228,7 +221,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         errors: result.errors,
       })
     } catch (error: unknown) {
-      const requestErrors = bulkCsvWorkflow.formatRequestError(error, data, fileRows, 'Import failed')
+      const requestErrors = bulkCsvWorkflow.formatRequestError(error, csvText, 'Import failed')
       setValidationErrors(requestErrors)
       setImportResult({
         success: false,
@@ -246,51 +239,33 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     setWorkflowLoading(true)
     setValidationErrors([])
 
-    let parsedData: Record<string, unknown>[] = []
-    let parsedFileRows: number[] = []
+    let csvText = ''
 
     try {
-      const text = await file.text()
-      const { rows, fileRows } = parseBulkImportCsvFileRows(text)
-      parsedFileRows = fileRows
-      setValidatedFileRows(fileRows)
+      csvText = await file.text()
+      setValidatedCsvText(csvText)
 
-      if (rows.length === 0) {
-        setValidationErrors([{ fileRows: [], error: 'CSV file is empty or has no data rows' }])
-        return
-      }
+      if (importType === 'subjects') {
+        const parsed = parseSubjectsBulkImportCsv(csvText, fixedStudyShortCode)
+        if (!parsed.ok) {
+          setValidationErrors(parsed.errors)
+          return
+        }
+      } else {
+        const mapped = mapBulkImportTemplateCsv(csvText, {
+          containerType: containerType || 'none',
+          defaultStudyShortCode: fixedStudyShortCode,
+          atomicMode,
+        })
+        if (!mapped.ok) {
+          setValidationErrors(templateErrorsToValidationErrors(mapped.errors))
+          return
+        }
 
-      const requiredCellErrors = [
-        ...validateBulkImportRequiredCells(rows, fileRows, {
-          importType,
-          containerType,
-          fixedStudyShortCode,
-        }),
-        ...validateBulkImportCollectionBarcodes(rows, fileRows, {
-          importType,
-          containerType,
-        }),
-      ]
-      if (requiredCellErrors.length > 0) {
-        setValidationErrors(requiredCellErrors)
-        return
-      }
-
-      const data = mapBulkImportRowsToPayload(rows, {
-        importType,
-        containerType,
-        fixedStudyShortCode,
-      })
-      parsedData = data
-      setValidatedData(data)
-
-      if (importType !== 'subjects' && containerType !== 'none') {
-        const collectionType = getCollectionType()
-        if (collectionType || containerType === 'paper') {
+        if (containerType !== 'none' && mapped.collections.length > 0) {
           try {
             const missing = await fetchBulkImportMissingCollections({
-              rows,
-              getRowCollectionRef: (row) => getBulkImportRowCollectionRef(row, containerType),
+              collections: mapped.collections,
             })
             setMissingCollections(missing)
 
@@ -310,16 +285,16 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         }
       }
 
-      const preErrors = await runPreReviewServerValidation(data, fileRows)
+      const preErrors = await runPreReviewServerValidation(csvText)
       if (preErrors.length > 0) {
         setValidationErrors(preErrors)
         return
       }
 
-      await handleImport(data, fileRows, { alreadyValidated: true })
+      await handleImport(csvText, { alreadyValidated: true })
     } catch (error: unknown) {
       setValidationErrors(
-        bulkCsvWorkflow.formatRequestError(error, parsedData, parsedFileRows, 'Validation failed')
+        bulkCsvWorkflow.formatRequestError(error, csvText, 'Validation failed'),
       )
     } finally {
       setWorkflowLoading(false)
@@ -330,15 +305,15 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     setWorkflowLoading(true)
     setValidationErrors([])
     try {
-      const preErrors = await runPreReviewServerValidation(validatedData, validatedFileRows)
+      const preErrors = await runPreReviewServerValidation(validatedCsvText)
       if (preErrors.length > 0) {
         setValidationErrors(preErrors)
         return
       }
-      await handleImport(validatedData, validatedFileRows, { alreadyValidated: true })
+      await handleImport(validatedCsvText, { alreadyValidated: true })
     } catch (error: unknown) {
       setValidationErrors(
-        bulkCsvWorkflow.formatRequestError(error, validatedData, validatedFileRows, 'Validation failed')
+        bulkCsvWorkflow.formatRequestError(error, validatedCsvText, 'Validation failed'),
       )
     } finally {
       setWorkflowLoading(false)
@@ -829,9 +804,8 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                     setFile(null)
                     setPreview([])
                     setImportResult(null)
-                    setValidatedFileRows([])
+                    setValidatedCsvText('')
                     setMissingCollections([])
-                    setValidatedData([])
                   }}
                   className="storage-btn-primary py-2 font-medium"
                 >

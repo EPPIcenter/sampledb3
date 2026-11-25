@@ -1,24 +1,36 @@
 /**
  * Shared bulk CSV workflow: server validate and import orchestration.
- * Used by BulkImportFlow and derivations bulk import.
+ * Builds bulk combined and specimen payloads through @sampledb/contract's template mapper.
  */
+import {
+  mapBulkImportTemplateCsv,
+  type BulkCombinedValidateRequest,
+  type BulkImportCollectionOverride,
+} from '@sampledb/contract'
 import { subjectsApi } from './api/subjects'
 import { specimensApi } from './api/specimens'
 import { importsApi } from './api/imports'
 import type { BulkCombinedAtomicMode } from './api/imports'
-import {
-  buildBulkCombinedRequestPayload,
-  buildCollectionBarcodeMap,
-  buildCollectionLocationMap,
-  buildSpecimensWithLocationIds,
-  toBulkCombinedImportRequest,
-} from './bulk-import-payload'
-import type { MissingCollectionForPayload } from './bulk-import-payload'
 import type { ContainerType } from './container-types'
-import type { BulkImportValidationError, ImportType } from './bulk-import-validation'
+import {
+  getBulkImportCollectionType,
+  parseSubjectsBulkImportCsv,
+  templateErrorsToValidationErrors,
+  type BulkImportCollectionType,
+  type BulkImportValidationError,
+  type ImportType,
+} from './bulk-import-validation'
 import { getQueryErrorMessage } from '../ui'
 
 export type BulkCsvValidationError = BulkImportValidationError
+
+export interface MissingCollectionForPayload {
+  name: string
+  collectionType?: BulkImportCollectionType
+  barcode?: string
+  locationId: number | null
+  collectionBarcode?: string
+}
 
 export type BulkCsvSubjectsImportResult = {
   success: boolean
@@ -39,36 +51,67 @@ export type BulkCsvWorkflowContext = {
   fixedStudyShortCode?: string
   missingCollections: MissingCollectionForPayload[]
   atomicMode: BulkCombinedAtomicMode
-  /** Spreadsheet row of each data item, counting the header as row 1. */
-  fileRows: number[]
 }
 
-type CombinedPayload = ReturnType<typeof buildBulkCombinedRequestPayload>
-
-function combinedPayload(data: Record<string, unknown>[], ctx: BulkCsvWorkflowContext): CombinedPayload {
-  return buildBulkCombinedRequestPayload(data, {
-    containerType: ctx.containerType,
-    fixedStudyShortCode: ctx.fixedStudyShortCode,
-    missingCollections: ctx.missingCollections,
-    atomicMode: ctx.atomicMode,
-    fileRows: ctx.fileRows,
+function toCollectionOverrides(ctx: BulkCsvWorkflowContext): BulkImportCollectionOverride[] {
+  const fallbackType = getBulkImportCollectionType(ctx.containerType)
+  return ctx.missingCollections.flatMap((coll) => {
+    const type = coll.collectionType ?? fallbackType
+    if (!type) return []
+    const barcode = coll.collectionBarcode?.trim() || coll.barcode?.trim() || undefined
+    return [
+      {
+        type,
+        ...(coll.name ? { name: coll.name } : {}),
+        ...(barcode ? { barcode } : {}),
+        locationId: coll.locationId,
+      },
+    ]
   })
 }
 
+function mapTemplate(csvText: string, ctx: BulkCsvWorkflowContext) {
+  return mapBulkImportTemplateCsv(csvText, {
+    containerType: ctx.containerType || 'none',
+    defaultStudyShortCode: ctx.fixedStudyShortCode,
+    atomicMode: ctx.atomicMode,
+    collections: toCollectionOverrides(ctx),
+  })
+}
+
+/** Flatten a grouped BulkCombinedValidateRequest back to file-ordered rows for POST /specimens/bulk. */
+function validateRequestToSpecimensBulk(request: BulkCombinedValidateRequest) {
+  const items = request.subjects.flatMap((subject) =>
+    subject.specimens.map((spec) => ({
+      rowIndex: spec.rowIndex ?? 0,
+      specimen: {
+        sourceType: 'subject' as const,
+        studyShortCode: subject.studyShortCode ?? request.studyShortCode,
+        subjectName: subject.subjectName,
+        specimenTypeName: spec.specimenTypeName,
+        ...(spec.collectionDate ? { collectionDate: spec.collectionDate } : {}),
+        ...(spec.container ? { container: spec.container } : {}),
+      },
+    })),
+  )
+  items.sort((a, b) => a.rowIndex - b.rowIndex)
+  return items.map((item) => item.specimen)
+}
+
 /** The spreadsheet row of data item `index`. */
-function fileRowOf(ctx: BulkCsvWorkflowContext, index: number): number {
-  return ctx.fileRows[index] ?? index + 2
+function fileRowOf(fileRows: number[], index: number): number {
+  return fileRows[index] ?? index + 2
 }
 
 /** Spreadsheet rows of a subject's specimens: the payload groups rows by subject, so they need not be adjacent. */
-function subjectFileRows(payload: CombinedPayload, subjectIndex: number): number[] {
+function subjectFileRows(payload: BulkCombinedValidateRequest, subjectIndex: number): number[] {
   return (payload.subjects[subjectIndex]?.specimens ?? []).flatMap((s) => (s.rowIndex == null ? [] : [s.rowIndex]))
 }
 
 /** A combined-import error the API reports per subject, and per specimen when it knows which. */
 type CombinedSubjectError = { subjectIndex: number; specimenIndex?: number; rowIndex?: number; message: string }
 
-function combinedErrorFileRows(payload: CombinedPayload, e: CombinedSubjectError): number[] {
+function combinedErrorFileRows(payload: BulkCombinedValidateRequest, e: CombinedSubjectError): number[] {
   if (e.rowIndex != null) return [e.rowIndex]
   const rows = subjectFileRows(payload, e.subjectIndex)
   const specimenRow = e.specimenIndex == null ? undefined : rows[e.specimenIndex]
@@ -84,23 +127,39 @@ function isIndexedError(e: unknown): e is { index: number; error: string } {
   return typeof e === 'object' && e != null && typeof (e as { index?: unknown }).index === 'number'
 }
 
+function resolvePayloadAndFileRows(
+  csvText: string,
+  ctx: BulkCsvWorkflowContext,
+): { payload: BulkCombinedValidateRequest | null; fileRows: number[] } {
+  if (!csvText) return { payload: null, fileRows: [] }
+  if (ctx.importType === 'subjects') {
+    const parsed = parseSubjectsBulkImportCsv(csvText, ctx.fixedStudyShortCode)
+    return { payload: null, fileRows: parsed.fileRows }
+  }
+  const mapped = mapTemplate(csvText, ctx)
+  return {
+    payload: ctx.importType === 'combined' && mapped.ok ? mapped.validateRequest : null,
+    fileRows: mapped.fileRows,
+  }
+}
+
 /**
  * Map the API's per-item import errors to spreadsheet rows. `index` names a data item, except in
  * a combined import, where it names a subject and so every row of that subject.
  */
 export function bulkCsvImportErrorsToFileRows(
   errors: unknown[],
-  data: Record<string, unknown>[],
+  csvText: string,
   ctx: BulkCsvWorkflowContext,
 ): BulkCsvValidationError[] {
-  const payload = ctx.importType === 'combined' ? combinedPayload(data, ctx) : null
+  const { payload, fileRows } = resolvePayloadAndFileRows(csvText, ctx)
   return errors.flatMap((e): BulkCsvValidationError[] => {
     if (payload && isCombinedSubjectError(e)) {
       return [{ fileRows: combinedErrorFileRows(payload, e), error: e.message }]
     }
     if (isIndexedError(e)) {
-      const fileRows = payload ? subjectFileRows(payload, e.index) : [fileRowOf(ctx, e.index)]
-      return [{ fileRows, error: e.error }]
+      const rows = payload ? subjectFileRows(payload, e.index) : [fileRowOf(fileRows, e.index)]
+      return [{ fileRows: rows, error: e.error }]
     }
     return []
   })
@@ -118,7 +177,7 @@ function isZodIssueLike(value: unknown): value is ZodIssueLike {
  */
 export function formatBulkCsvRequestError(
   error: unknown,
-  data: Record<string, unknown>[],
+  csvText: string,
   ctx: BulkCsvWorkflowContext,
   fallback: string,
 ): BulkCsvValidationError[] {
@@ -128,24 +187,24 @@ export function formatBulkCsvRequestError(
       : undefined
 
   if (Array.isArray(errData?.errors) && errData.errors.length > 0) {
-    const mapped = bulkCsvImportErrorsToFileRows(errData.errors, data, ctx)
+    const mapped = bulkCsvImportErrorsToFileRows(errData.errors, csvText, ctx)
     if (mapped.length > 0) return mapped
   }
 
   if (Array.isArray(errData?.details)) {
     const issues = errData.details.filter(isZodIssueLike)
     if (issues.length > 0) {
-      const payload = ctx.importType === 'combined' && data.length > 0 ? combinedPayload(data, ctx) : null
+      const { payload, fileRows } = resolvePayloadAndFileRows(csvText, ctx)
       return issues.map((issue) => {
         const path = Array.isArray(issue.path) ? issue.path : []
         const message = issue.message!
         if (ctx.importType === 'specimens' && path[0] === 'specimens' && typeof path[1] === 'number') {
           const field = path.slice(2).join('.')
-          return { fileRows: [fileRowOf(ctx, path[1])], error: field ? `${field}: ${message}` : message }
+          return { fileRows: [fileRowOf(fileRows, path[1])], error: field ? `${field}: ${message}` : message }
         }
         if (ctx.importType === 'subjects' && path[0] === 'subjects' && typeof path[1] === 'number') {
           const field = path.slice(2).join('.')
-          return { fileRows: [fileRowOf(ctx, path[1])], error: field ? `${field}: ${message}` : message }
+          return { fileRows: [fileRowOf(fileRows, path[1])], error: field ? `${field}: ${message}` : message }
         }
         if (payload && path[0] === 'subjects' && typeof path[1] === 'number') {
           if (path[2] === 'specimens' && typeof path[3] === 'number') {
@@ -171,78 +230,81 @@ export function formatBulkCsvRequestError(
 }
 
 export async function runBulkCsvServerValidation(
-  data: Record<string, unknown>[],
-  ctx: BulkCsvWorkflowContext
+  csvText: string,
+  ctx: BulkCsvWorkflowContext,
 ): Promise<BulkCsvValidationError[]> {
   if (ctx.importType === 'subjects') {
-    const validateRes = await subjectsApi.validateBulk({
-      subjects: data as Array<{ studyShortCode: string; name: string }>,
-    })
+    const parsed = parseSubjectsBulkImportCsv(csvText, ctx.fixedStudyShortCode)
+    if (!parsed.ok) return parsed.errors
+    const validateRes = await subjectsApi.validateBulk({ subjects: parsed.subjects })
     if (validateRes.valid || validateRes.errors.length === 0) return []
-    return validateRes.errors.map((e) => ({ fileRows: [fileRowOf(ctx, e.index)], error: e.message }))
+    return validateRes.errors.map((e) => ({ fileRows: [fileRowOf(parsed.fileRows, e.index)], error: e.message }))
   }
+
+  const mapped = mapTemplate(csvText, ctx)
+  if (!mapped.ok) return templateErrorsToValidationErrors(mapped.errors)
 
   if (ctx.importType === 'specimens') {
-    const map = buildCollectionLocationMap(ctx.missingCollections)
-    const barcodeMap = buildCollectionBarcodeMap(ctx.missingCollections)
-    const specimensWithLocations = buildSpecimensWithLocationIds(data, map, barcodeMap)
     type SpecimenBulkItem = Parameters<typeof specimensApi.createBulk>[0]['specimens'][number]
+    const specimens = validateRequestToSpecimensBulk(mapped.validateRequest)
     const validateRes = await specimensApi.validateBulk({
-      specimens: specimensWithLocations as SpecimenBulkItem[],
+      specimens: specimens as SpecimenBulkItem[],
     })
     if (validateRes.valid) return []
-    return validateRes.errors.map((e) => ({ fileRows: [fileRowOf(ctx, e.index)], error: e.message }))
+    return validateRes.errors.map((e) => ({ fileRows: [fileRowOf(mapped.fileRows, e.index)], error: e.message }))
   }
 
-  const payload = combinedPayload(data, ctx)
-  const validateRes = await importsApi.bulkCombinedValidate(payload)
+  const validateRes = await importsApi.bulkCombinedValidate(mapped.validateRequest)
   if (validateRes.valid || validateRes.errors.length === 0) return []
-  return validateRes.errors.map((e) => ({ fileRows: combinedErrorFileRows(payload, e), error: e.message }))
+  return validateRes.errors.map((e) => ({ fileRows: combinedErrorFileRows(mapped.validateRequest, e), error: e.message }))
 }
 
 export async function runBulkCsvImport(
-  data: Record<string, unknown>[],
+  csvText: string,
   ctx: BulkCsvWorkflowContext,
-  options?: { skipServerValidate?: boolean }
+  options?: { skipServerValidate?: boolean },
 ): Promise<BulkCsvSubjectsImportResult> {
   if (!options?.skipServerValidate) {
-    const errors = await runBulkCsvServerValidation(data, ctx)
+    const errors = await runBulkCsvServerValidation(csvText, ctx)
     if (errors.length > 0) {
       return { success: false, errors }
     }
   }
 
   if (ctx.importType === 'subjects') {
-    const response = await subjectsApi.createBulk({
-      subjects: data as Array<{ studyShortCode: string; name: string }>,
-    })
+    const parsed = parseSubjectsBulkImportCsv(csvText, ctx.fixedStudyShortCode)
+    if (!parsed.ok) return { success: false, errors: parsed.errors }
+    const response = await subjectsApi.createBulk({ subjects: parsed.subjects })
     return {
       success: true,
       created: response.created,
-      errors: response.errors && bulkCsvImportErrorsToFileRows(response.errors, data, ctx),
+      errors: response.errors && bulkCsvImportErrorsToFileRows(response.errors, csvText, ctx),
     }
   }
 
+  const mapped = mapTemplate(csvText, ctx)
+  if (!mapped.ok) {
+    return { success: false, errors: templateErrorsToValidationErrors(mapped.errors) }
+  }
+
   if (ctx.importType === 'specimens') {
-    const collectionLocationMap = buildCollectionLocationMap(ctx.missingCollections)
-    const collectionBarcodeMap = buildCollectionBarcodeMap(ctx.missingCollections)
-    const specimensWithLocations = buildSpecimensWithLocationIds(data, collectionLocationMap, collectionBarcodeMap)
     type SpecimenBulkItem = Parameters<typeof specimensApi.createBulk>[0]['specimens'][number]
+    const specimens = validateRequestToSpecimensBulk(mapped.validateRequest)
     const response = await specimensApi.createBulk({
-      specimens: specimensWithLocations as SpecimenBulkItem[],
+      specimens: specimens as SpecimenBulkItem[],
     })
     return {
       success: true,
       created: response.created,
       containersCreated: response.containersCreated,
-      errors: response.errors && bulkCsvImportErrorsToFileRows(response.errors, data, ctx),
+      errors: response.errors && bulkCsvImportErrorsToFileRows(response.errors, csvText, ctx),
     }
   }
 
-  const response = await importsApi.bulkCombined(toBulkCombinedImportRequest(combinedPayload(data, ctx)))
+  const response = await importsApi.bulkCombined(mapped.importRequest)
   return {
     success: !response.errors?.length,
     combinedSummary: response.summary,
-    errors: response.errors && bulkCsvImportErrorsToFileRows(response.errors, data, ctx),
+    errors: response.errors && bulkCsvImportErrorsToFileRows(response.errors, csvText, ctx),
   }
 }

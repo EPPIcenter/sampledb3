@@ -12,20 +12,18 @@ export type { BulkCsvWorkflowContext, BulkCsvValidationError, BulkCsvSubjectsImp
 
 /**
  * Shared bulk CSV workflow hook — parse/validate/import orchestration for import pages.
- * Each call takes the data with its file rows, since both come from the CSV parsed in the same handler.
  */
-export function useBulkCsvWorkflow(ctx: Omit<BulkCsvWorkflowContext, 'fileRows'>) {
+export function useBulkCsvWorkflow(ctx: BulkCsvWorkflowContext) {
   const queryClient = useQueryClient()
   return {
-    runServerValidation: (data: Record<string, unknown>[], fileRows: number[]) =>
-      runBulkCsvServerValidation(data, { ...ctx, fileRows }),
+    runServerValidation: (csvText: string) => runBulkCsvServerValidation(csvText, ctx),
     // Per-subject imports can write partially even when they report errors, so refresh either way.
-    runImport: (data: Record<string, unknown>[], fileRows: number[], options?: { skipServerValidate?: boolean }) =>
-      runBulkCsvImport(data, { ...ctx, fileRows }, options).finally(() => void invalidateAfterBulkWrite(queryClient)),
-    importErrorsToFileRows: (errors: unknown[], data: Record<string, unknown>[], fileRows: number[]) =>
-      bulkCsvImportErrorsToFileRows(errors, data, { ...ctx, fileRows }),
-    formatRequestError: (error: unknown, data: Record<string, unknown>[], fileRows: number[], fallback: string) =>
-      formatBulkCsvRequestError(error, data, { ...ctx, fileRows }, fallback),
+    runImport: (csvText: string, options?: { skipServerValidate?: boolean }) =>
+      runBulkCsvImport(csvText, ctx, options).finally(() => void invalidateAfterBulkWrite(queryClient)),
+    importErrorsToFileRows: (errors: unknown[], csvText: string) =>
+      bulkCsvImportErrorsToFileRows(errors, csvText, ctx),
+    formatRequestError: (error: unknown, csvText: string, fallback: string) =>
+      formatBulkCsvRequestError(error, csvText, ctx, fallback),
   }
 }
 

@@ -1,6 +1,6 @@
+import { getBulkImportTemplateColumns } from '@sampledb/contract'
 import type { ContainerType } from './container-types'
 import { buildCsv } from './csv'
-import { getContainerColumnsForBulkImport } from './container-columns'
 
 export interface BuildBulkImportTemplateParams {
   importType: 'subjects' | 'specimens' | 'combined'
@@ -38,7 +38,7 @@ function getTemplateExampleRow(
 
 /**
  * Build CSV template content and filename for the Bulk Import flow.
- * Uses specimen type names from the caller (e.g. from API) and A01-style positions.
+ * Column definitions come from @sampledb/contract so templates and the mapper cannot drift.
  */
 export function buildBulkImportTemplateContent(params: BuildBulkImportTemplateParams): {
   csvContent: string
@@ -63,9 +63,10 @@ export function buildBulkImportTemplateContent(params: BuildBulkImportTemplatePa
     }
   }
 
-  const baseColumns = fixedStudyShortCode
-    ? ['subject_name', 'specimen_type_name', 'collection_date']
-    : ['study_short_code', 'subject_name', 'specimen_type_name', 'collection_date']
+  const columns = getBulkImportTemplateColumns({
+    containerType,
+    defaultStudyShortCode: fixedStudyShortCode,
+  })
   const filename = importType === 'specimens' ? 'specimens_template.csv' : 'combined_template.csv'
 
   if (containerType === 'none') {
@@ -78,13 +79,11 @@ export function buildBulkImportTemplateContent(params: BuildBulkImportTemplatePa
       ? ['SUBJ-001', second, '2024-01-15']
       : ['NAM15', 'SUBJ-001', second, '2024-01-15']
     return {
-      csvContent: buildCsv(baseColumns, [row1, row2]),
+      csvContent: buildCsv(columns, [row1, row2]),
       filename,
     }
   }
 
-  const containerColumnList = getContainerColumnsForBulkImport(containerType).split(',')
-  const columns = [...baseColumns, ...containerColumnList]
   const firstSpecimen = specimenTypeNames[0] ?? 'Whole Blood'
   const exampleRow = getTemplateExampleRow(containerType, firstSpecimen, Boolean(fixedStudyShortCode))
   return {

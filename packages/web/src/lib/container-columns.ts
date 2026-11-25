@@ -1,3 +1,4 @@
+import { BULK_IMPORT_CONTAINER_TEMPLATES } from '@sampledb/contract'
 import type { ContainerType } from './container-types'
 
 export type CollectionNameColumn = 'plate_name' | 'box_name' | 'bag_name'
@@ -31,18 +32,8 @@ export function getCollectionNameColumn(
 
 /**
  * Return the comma-separated container columns for the Bulk Import template (specimens/combined).
+ * Reads from the contract package's template definitions.
  */
 export function getContainerColumnsForBulkImport(containerType: ContainerType): string {
-  switch (containerType) {
-    case 'micronix_tube':
-      return 'plate_name,barcode,position,comment'
-    case 'cryovial_tube':
-      return 'box_name,barcode,position,comment'
-    case 'paper':
-      return 'box_name,bag_name,sheet_name,sublabel,comment'
-    case 'static_well':
-      return 'plate_name,position,comment'
-    default:
-      return ''
-  }
+  return BULK_IMPORT_CONTAINER_TEMPLATES[containerType].templateColumns.join(',')
 }

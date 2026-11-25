@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { bulkCombinedValidateRequestSchema, csvRowToContainerWriteInput } from '@sampledb/contract'
+import {
+  bulkCombinedValidateRequestSchema,
+  csvRowToContainerWriteInput,
+  mapBulkImportTemplateCsv,
+} from '@sampledb/contract'
 import { buildBulkImportTemplateContent } from '../bulk-import-csv'
-import { buildBulkCombinedRequestPayload } from '../bulk-import-payload'
 import {
   getBulkImportRequiredFields,
-  mapBulkImportRowsToPayload,
   parseBulkImportCSV,
 } from '../bulk-import-validation'
 import type { ContainerType } from '../container-types'
@@ -90,6 +92,71 @@ describe('buildBulkImportTemplateContent', () => {
     expect(csvContent).not.toContain('position')
   })
 
+  it('keeps the exact header columns in the exact order for every downloadable template', () => {
+    const headerOf = (csvContent: string) =>
+      csvContent.replace(/^\uFEFF/, '').split(/\r?\n/)[0]
+
+    expect(
+      headerOf(
+        buildBulkImportTemplateContent({
+          importType: 'subjects',
+          containerType: 'none',
+          specimenTypeNames: [],
+        }).csvContent,
+      ),
+    ).toBe('study_short_code,subject_name')
+
+    expect(
+      headerOf(
+        buildBulkImportTemplateContent({
+          importType: 'combined',
+          containerType: 'none',
+          specimenTypeNames: ['Whole Blood'],
+        }).csvContent,
+      ),
+    ).toBe('study_short_code,subject_name,specimen_type_name,collection_date')
+
+    expect(
+      headerOf(
+        buildBulkImportTemplateContent({
+          importType: 'combined',
+          containerType: 'micronix_tube',
+          specimenTypeNames: ['Whole Blood'],
+        }).csvContent,
+      ),
+    ).toBe('study_short_code,subject_name,specimen_type_name,collection_date,plate_name,barcode,position,comment')
+
+    expect(
+      headerOf(
+        buildBulkImportTemplateContent({
+          importType: 'combined',
+          containerType: 'cryovial_tube',
+          specimenTypeNames: ['Whole Blood'],
+        }).csvContent,
+      ),
+    ).toBe('study_short_code,subject_name,specimen_type_name,collection_date,box_name,barcode,position,comment')
+
+    expect(
+      headerOf(
+        buildBulkImportTemplateContent({
+          importType: 'combined',
+          containerType: 'paper',
+          specimenTypeNames: ['Blood Spot'],
+        }).csvContent,
+      ),
+    ).toBe('study_short_code,subject_name,specimen_type_name,collection_date,box_name,bag_name,sheet_name,sublabel,comment')
+
+    expect(
+      headerOf(
+        buildBulkImportTemplateContent({
+          importType: 'combined',
+          containerType: 'static_well',
+          specimenTypeNames: ['DNA'],
+        }).csvContent,
+      ),
+    ).toBe('study_short_code,subject_name,specimen_type_name,collection_date,plate_name,position,comment')
+  })
+
   describe('every downloaded template passes validation unchanged', () => {
     const containerTypes: ContainerType[] = ['micronix_tube', 'cryovial_tube', 'paper', 'static_well']
     const cases = containerTypes.flatMap((containerType) =>
@@ -123,11 +190,14 @@ describe('buildBulkImportTemplateContent', () => {
           ).toMatchObject({ success: true })
         }
 
-        const payload = buildBulkCombinedRequestPayload(
-          mapBulkImportRowsToPayload(rows, { importType, containerType, fixedStudyShortCode }),
-          { containerType, fixedStudyShortCode, missingCollections: [], atomicMode: 'full_file' }
-        )
-        expect(bulkCombinedValidateRequestSchema.safeParse(payload).success).toBe(true)
+        const mapped = mapBulkImportTemplateCsv(csvContent, {
+          containerType,
+          defaultStudyShortCode: fixedStudyShortCode,
+          atomicMode: 'full_file',
+        })
+        expect(mapped.ok).toBe(true)
+        if (!mapped.ok) return
+        expect(bulkCombinedValidateRequestSchema.safeParse(mapped.validateRequest).success).toBe(true)
       }
     )
 
