@@ -39,7 +39,7 @@ export default function ReferenceDataTable<T extends { id: number }>({
   const [search, setSearch] = useState('')
   /** The item whose delete the user is asked to confirm. */
   const [pendingDelete, setPendingDelete] = useState<T | null>(null)
-  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const filteredData = data.filter((item) => {
     if (!search.trim()) return true
@@ -66,14 +66,14 @@ export default function ReferenceDataTable<T extends { id: number }>({
   const handleConfirmDelete = async () => {
     if (!pendingDelete) return
 
-    setDeletingId(pendingDelete.id)
+    setDeleting(true)
     try {
       await onDelete(pendingDelete.id)
     } catch (error) {
       // The API says what still uses the item.
       showError(getQueryErrorMessage(error, 'Failed to delete item'))
     } finally {
-      setDeletingId(null)
+      setDeleting(false)
       setPendingDelete(null)
     }
   }
@@ -135,10 +135,9 @@ export default function ReferenceDataTable<T extends { id: number }>({
                       </button>
                       <button
                         onClick={() => setPendingDelete(item)}
-                        disabled={deletingId === item.id}
-                        className="text-app-trend-down hover:opacity-90 disabled:opacity-50"
+                        className="text-app-trend-down hover:opacity-90"
                       >
-                        {deletingId === item.id ? 'Deleting...' : 'Delete'}
+                        Delete
                       </button>
                     </td>
                   )}
@@ -155,14 +154,14 @@ export default function ReferenceDataTable<T extends { id: number }>({
           onClose={() => setPendingDelete(null)}
           title="Delete item"
           size="sm"
-          closeDisabled={deletingId !== null}
+          closeDisabled={deleting}
           footer={
             <>
-              <Button variant="secondary" onClick={() => setPendingDelete(null)} disabled={deletingId !== null}>
+              <Button variant="secondary" onClick={() => setPendingDelete(null)} disabled={deleting}>
                 Cancel
               </Button>
-              <Button variant="danger" onClick={() => void handleConfirmDelete()} disabled={deletingId !== null}>
-                {deletingId !== null ? 'Deleting...' : 'Delete'}
+              <Button variant="danger" onClick={() => void handleConfirmDelete()} disabled={deleting}>
+                {deleting ? 'Deleting...' : 'Delete'}
               </Button>
             </>
           }
