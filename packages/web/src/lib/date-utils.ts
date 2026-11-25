@@ -77,6 +77,7 @@ export function formatDateWithRelativeTime(dateString: string | null | undefined
   if (!dateString) return 'N/A'
   
   const date = parseDisplayDate(dateString)
+  if (Number.isNaN(date.getTime())) return dateString
   const now = new Date()
   // A timestamp slightly ahead of this clock (server clock skew) reads as "Just now", not as a
   // negative age.
@@ -113,13 +114,16 @@ const DATE_FORMATS = {
 /**
  * Format a date for display: "Jan 15, 2024" (short), "January 15, 2024" (long), or
  * "1/15/2024" (numeric). A bare YYYY-MM-DD shows that calendar day (see parseDisplayDate).
+ * A value that is not a date is shown as stored, here and in the two formatters beside this one.
  */
 export function formatDate(
   dateString: string | null | undefined,
   style: keyof typeof DATE_FORMATS = 'short',
 ): string {
   if (!dateString) return 'N/A'
-  return parseDisplayDate(dateString).toLocaleDateString('en-US', DATE_FORMATS[style])
+  const date = parseDisplayDate(dateString)
+  if (Number.isNaN(date.getTime())) return dateString
+  return date.toLocaleDateString('en-US', DATE_FORMATS[style])
 }
 
 /**
@@ -130,7 +134,9 @@ export function formatDateTime(
   options?: Intl.DateTimeFormatOptions,
 ): string {
   if (!dateString) return 'N/A'
-  return parseDisplayDate(dateString).toLocaleString(undefined, options)
+  const date = parseDisplayDate(dateString)
+  if (Number.isNaN(date.getTime())) return dateString
+  return date.toLocaleString(undefined, options)
 }
 
 /**

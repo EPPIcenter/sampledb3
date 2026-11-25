@@ -220,3 +220,15 @@ describe('calendarDaysBetween', () => {
     expect(calendarDaysBetween('2024-11-03-extra', '2024-11-04')).toBeNaN()
   })
 })
+
+describe('a stored value that is not a date', () => {
+  it('is shown as stored, not as "Invalid Date"', async () => {
+    const { formatDate, formatDateTime, formatDateWithRelativeTime } = await import('../date-utils')
+    for (const stored of ['13/45/2020', 'unknown']) {
+      expect(formatDate(stored)).toBe(stored)
+      expect(formatDate(stored, 'long')).toBe(stored)
+      expect(formatDateTime(stored)).toBe(stored)
+      expect(formatDateWithRelativeTime(stored)).toBe(stored)
+    }
+  })
+})
