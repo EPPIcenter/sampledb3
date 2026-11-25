@@ -1,10 +1,10 @@
 export type StatisticsFilters = {
   study?: string
   source_type?: string
-  specimen_type_id?: string
+  specimen_type_id?: number
   container_type?: string
   tag_ids?: number[]
-  location_id?: string
+  location_id?: number
   collection_date_from?: string
   collection_date_to?: string
   created_from?: string

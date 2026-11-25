@@ -5,20 +5,13 @@ import {
   handleRouteError,
   ExpectedNotFoundError,
   RouteError,
+  ValidationError,
 } from '../lib/error-handler'
-import {
-  specimen,
-  studySubject,
-  study,
-  specimenType,
-  storageContainer,
-  micronixTube,
-  cryovialTube,
-  paper,
-  staticWell,
-} from '../db/schema'
-import { eq, inArray } from 'drizzle-orm'
+import { specimenType } from '../db/schema'
+import { inArray } from 'drizzle-orm'
 import { z } from 'zod'
+import { selectContainerSelectionTypes } from '../lib/container-selection'
+import { resolveStudyByShortCode } from '../lib/identifier-resolution'
 import {
   formatExportTimestamp,
   parseCSVExportOptions,
@@ -48,25 +41,31 @@ function parseTagIdsFromBody(body: unknown): number[] | undefined {
   return ids.length > 0 ? ids : undefined
 }
 
+/** One per-Subject collection date: an exact date or a range with at least one end. */
 const subjectDateFilterSchema = z.union([
-  z.object({ exact: z.string().min(1) }),
+  z.strictObject({ exact: z.string().min(1) }),
   z
-    .object({ from: z.string().min(1).optional(), to: z.string().min(1).optional() })
+    .strictObject({ from: z.string().min(1).optional(), to: z.string().min(1).optional() })
     .refine((range) => range.from !== undefined || range.to !== undefined, {
       message: 'A date range needs from or to',
     }),
 ])
 
 /**
- * Per-subject collection dates, keyed by subject name. An empty list (or a listed subject
- * with no entry) exports every date for that subject.
+ * `subject_dates` of a single-study POST export: per subject name, one date filter, several
+ * (one per visit), or null for undated. An empty list also exports every date for that subject.
  */
 const subjectDatesSchema = z
-  .record(z.string(), z.union([subjectDateFilterSchema, z.array(subjectDateFilterSchema)]))
+  .record(z.string(), z.union([subjectDateFilterSchema, z.array(subjectDateFilterSchema), z.null()]))
   .nullish()
 
 function handleExportFailure(c: Context, message: string, error: unknown): Response {
-  if (error instanceof ExpectedNotFoundError || error instanceof RouteError) {
+  if (
+    error instanceof ExpectedNotFoundError ||
+    error instanceof RouteError ||
+    error instanceof ValidationError ||
+    error instanceof z.ZodError
+  ) {
     return handleRouteError(error, c)
   }
   const details = error instanceof Error ? error.message : String(error)
@@ -231,10 +230,7 @@ export function createExportRoutes(database: Database): Hono {
         return c.json({ error: 'subject_names array is required' }, 400)
       }
 
-      const subjectDates = subjectDatesSchema.safeParse(body.subject_dates)
-      if (!subjectDates.success) {
-        return handleRouteError(subjectDates.error, c)
-      }
+      const subjectDates = subjectDatesSchema.parse(body.subject_dates) ?? undefined
 
       const result = await runSingleStudyContainerExportPost(database, {
         studyCode: body.study,
@@ -245,7 +241,7 @@ export function createExportRoutes(database: Database): Hono {
         csvOptions: parseCSVExportOptions(body),
         userId: user?.id,
         countOnly: body.count_only === true,
-        subjectDates: subjectDates.data ?? undefined,
+        subjectDates,
         dateTolerance: body.date_tolerance || 0,
       })
 
@@ -263,73 +259,28 @@ export function createExportRoutes(database: Database): Hono {
     try {
       const studyCode = c.req.query('study')
       if (!studyCode) {
-        return c.json({ error: 'Study parameter is required' }, 400)
+        throw new ValidationError('Study parameter is required')
       }
 
-      const studyRecord = await database.select().from(study).where(eq(study.shortCode, studyCode)).get()
-      if (!studyRecord) {
+      const studyId = await resolveStudyByShortCode(database, studyCode)
+      if (studyId === null) {
         throw new ExpectedNotFoundError('Study not found')
       }
 
-      const subjects = await database
-        .select({ id: studySubject.id })
-        .from(studySubject)
-        .where(eq(studySubject.studyId, studyRecord.id))
-
-      const subjectIds = subjects.map((s) => s.id)
-      if (subjectIds.length === 0) {
-        return c.json({ specimen_types: [], container_types: [] })
-      }
-
-      let specimensQuery = database
-        .select({ id: specimen.id, specimenTypeId: specimen.specimenTypeId })
-        .from(specimen)
-
-      specimensQuery =
-        subjectIds.length === 1
-          ? (specimensQuery.where(eq(specimen.studySubjectId, subjectIds[0])) as typeof specimensQuery)
-          : (specimensQuery.where(inArray(specimen.studySubjectId, subjectIds)) as typeof specimensQuery)
-
-      const specimens = await specimensQuery
-      const specimenIds = specimens.map((s) => s.id)
-      if (specimenIds.length === 0) {
-        return c.json({ specimen_types: [], container_types: [] })
-      }
-
-      const specimenTypeIds = [...new Set(specimens.map((s) => s.specimenTypeId))]
-      const specimenTypes = await database
-        .select()
-        .from(specimenType)
-        .where(inArray(specimenType.id, specimenTypeIds))
-
-      const containers = await database
-        .select({ id: storageContainer.id })
-        .from(storageContainer)
-        .where(inArray(storageContainer.specimenId, specimenIds))
-
-      const containerIds = containers.map((row) => row.id)
-      if (containerIds.length === 0) {
-        return c.json({
-          specimen_types: specimenTypes.map((st) => ({ id: st.id, name: st.name })),
-          container_types: [],
-        })
-      }
-
-      const [micronixTubes, cryovialTubes, papers, staticWells] = await Promise.all([
-        database.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, containerIds)),
-        database.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, containerIds)),
-        database.select({ id: paper.id }).from(paper).where(inArray(paper.id, containerIds)),
-        database.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.id, containerIds)),
-      ])
-
-      const containerTypes: string[] = []
-      if (micronixTubes.length > 0) containerTypes.push('micronix_tube')
-      if (cryovialTubes.length > 0) containerTypes.push('cryovial_tube')
-      if (papers.length > 0) containerTypes.push('paper')
-      if (staticWells.length > 0) containerTypes.push('static_well')
+      const types = await selectContainerSelectionTypes(database, { kind: 'study', studyId })
+      // Specimen types are a small reference table, so this IN list stays bounded.
+      const specimenTypes =
+        types.specimenTypeIds.length === 0
+          ? []
+          : await database
+              .select({ id: specimenType.id, name: specimenType.name })
+              .from(specimenType)
+              .where(inArray(specimenType.id, types.specimenTypeIds))
+              .orderBy(specimenType.id)
+      const containerTypes = types.containerTypes.filter((type) => type !== 'unknown')
 
       return c.json({
-        specimen_types: specimenTypes.map((st) => ({ id: st.id, name: st.name })),
+        specimen_types: specimenTypes,
         container_types: containerTypes,
       })
     } catch (error) {

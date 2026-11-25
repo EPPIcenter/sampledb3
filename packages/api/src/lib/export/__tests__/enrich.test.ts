@@ -16,12 +16,9 @@ import {
   createTestTag,
 } from '../../../__tests__/helpers/factories'
 import type { Database } from '../../../db/client'
-import { micronixTube, cryovialTube, cryovialBox, storageContainerTag, box, sheet, paper } from '../../../db/schema'
-import { utcNow } from '../../datetime'
+import { micronixTube, storageContainerTag, box, sheet, paper } from '../../../db/schema'
 import { utcNow } from '../../datetime'
 import { enrichContainerData } from '../enrich'
-import { buildContainerQuery } from '../query'
-import type { StudyRecord } from '../types'
 
 describe('enrichContainerData', () => {
   let testDb: Database
@@ -78,21 +75,7 @@ describe('enrichContainerData', () => {
     const plate = await createTestMicronixPlate(testDb, { name: 'Plate-1', locationId: loc.id })
     const container = await createMicronixContainer(testDb, spec.id, plate, 'MT-001', 'A01')
 
-    const enriched = await enrichContainerData(
-      testDb,
-      [container],
-      [
-        {
-          id: spec.id,
-          studySubjectId: subject.id,
-          controlBatchId: null,
-          specimenTypeId: specimenType.id,
-          collectionDate: '2024-06-01',
-          created: spec.created,
-        },
-      ],
-      study as StudyRecord,
-    )
+    const enriched = await enrichContainerData(testDb, [container])
 
     expect(enriched).toHaveLength(1)
     expect(enriched[0]).toMatchObject({
@@ -125,10 +108,6 @@ describe('enrichContainerData', () => {
     const batch = await createTestControlBatch(testDb, definition.id, { name: 'Batch-June' })
     const specimenType = await createTestSpecimenType(testDb, { name: 'Control blood' })
     const spec = await createTestSpecimen(testDb, specimenType.id, { controlBatchId: batch.id })
-    const placeholderStudy = await createTestStudy(testDb, {
-      title: 'Unused',
-      shortCode: 'UNUSED',
-    })
     const unit = await createTestUnit(testDb, {
       symbol: `uL-ctrl-${Date.now()}`,
       name: 'microliter',
@@ -136,21 +115,7 @@ describe('enrichContainerData', () => {
     })
     const container = await createTestStorageContainer(testDb, { specimenId: spec.id, unitId: unit.id })
 
-    const enriched = await enrichContainerData(
-      testDb,
-      [container],
-      [
-        {
-          id: spec.id,
-          studySubjectId: null,
-          controlBatchId: batch.id,
-          specimenTypeId: specimenType.id,
-          collectionDate: null,
-          created: spec.created,
-        },
-      ],
-      placeholderStudy as StudyRecord,
-    )
+    const enriched = await enrichContainerData(testDb, [container])
 
     expect(enriched).toHaveLength(1)
     expect(enriched[0]).toMatchObject({
@@ -169,161 +134,50 @@ describe('enrichContainerData', () => {
     expect(enriched[0].strain_composition).toContain('100%')
   })
 
-  it('filters out container types not in container_types', async () => {
-    const study = await createTestStudy(testDb, {
-      title: 'Filter Study',
-      shortCode: 'FILT',
-    })
-    const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'Subj' })
-    const specimenType = await createTestSpecimenType(testDb, { name: 'Serum' })
-    const spec = await createTestSpecimen(testDb, specimenType.id, { studySubjectId: subject.id })
-    const storageType = await createTestStorageType(testDb, { name: 'Shelf' })
-    const loc = await createTestLocation(testDb, {
-      name: 'Loc',
-      storageTypeId: String(storageType.id),
-      canContainCollections: true,
-    })
-    const plate = await createTestMicronixPlate(testDb, { name: 'P-mic', locationId: loc.id })
-    const micronix = await createMicronixContainer(testDb, spec.id, plate, 'MIC-1', 'A01')
-
-    const unit = await createTestUnit(testDb, {
-      symbol: `uL-cv-${Date.now()}`,
-      name: 'microliter',
-      category: 'volume',
-    })
-    const cryoContainer = await createTestStorageContainer(testDb, { specimenId: spec.id, unitId: unit.id })
-    const now = utcNow()
-    const [box] = await testDb
-      .insert(cryovialBox)
-      .values({ name: 'CryoBox', locationId: loc.id, created: now, lastUpdated: now })
-      .returning()
-    await testDb.insert(cryovialTube).values({
-      id: cryoContainer.id,
-      collectionId: box!.id,
-      barcode: 'CRYO-1',
-      position: null,
-    })
-
-    const specimenRow = {
-      id: spec.id,
-      studySubjectId: subject.id,
-      controlBatchId: null,
-      specimenTypeId: specimenType.id,
-      collectionDate: null,
-      created: spec.created,
-    }
-
-    const enriched = await enrichContainerData(
-      testDb,
-      [micronix, cryoContainer],
-      [specimenRow],
-      study as StudyRecord,
-      ['micronix_tube'],
-    )
-
-    expect(enriched).toHaveLength(1)
-    expect(enriched[0].container_type).toBe('micronix_tube')
-    expect(enriched[0].container_id).toBe(micronix.id)
-  })
-
-  it('uses subjectToStudyMap for per-subject study fields in multi-study export', async () => {
-    const studyA = await createTestStudy(testDb, {
-      title: 'Study Alpha',
-      shortCode: 'ALPHA',
-      leadPerson: 'Alpha Lead',
-    })
-    const studyB = await createTestStudy(testDb, {
-      title: 'Study Beta',
-      shortCode: 'BETA',
-      leadPerson: 'Beta Lead',
-    })
+  it("takes each row's study fields from its Source's Study, and none for a control row", async () => {
+    const studyA = await createTestStudy(testDb, { title: 'Study Alpha', shortCode: 'ALPHA', leadPerson: 'Alpha Lead' })
+    const studyB = await createTestStudy(testDb, { title: 'Study Beta', shortCode: 'BETA', leadPerson: 'Beta Lead' })
     const subjectA = await createTestStudySubject(testDb, { studyId: studyA.id, name: 'A1' })
     const subjectB = await createTestStudySubject(testDb, { studyId: studyB.id, name: 'B1' })
+    const definition = await createTestControlDefinition(testDb, { name: 'Mix', controlType: 'blood' })
+    const batch = await createTestControlBatch(testDb, definition.id, { name: 'Batch-1' })
     const specimenType = await createTestSpecimenType(testDb, { name: 'Plasma' })
     const specA = await createTestSpecimen(testDb, specimenType.id, { studySubjectId: subjectA.id })
     const specB = await createTestSpecimen(testDb, specimenType.id, { studySubjectId: subjectB.id })
-    const unit = await createTestUnit(testDb, {
-      symbol: `uL-ms-${Date.now()}`,
-      name: 'microliter',
-      category: 'volume',
+    const specControl = await createTestSpecimen(testDb, specimenType.id, { controlBatchId: batch.id })
+    const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+    const containers = [
+      await createTestStorageContainer(testDb, { specimenId: specA.id, unitId: unit.id }),
+      await createTestStorageContainer(testDb, { specimenId: specB.id, unitId: unit.id }),
+      await createTestStorageContainer(testDb, { specimenId: specControl.id, unitId: unit.id }),
+    ]
+
+    const enriched = await enrichContainerData(testDb, containers)
+
+    const studyFields = (row: (typeof enriched)[number] | undefined) => ({
+      study_id: row?.study_id,
+      study_code: row?.study_code,
+      study_title: row?.study_title,
+      study_lead_person: row?.study_lead_person,
     })
-    const containerA = await createTestStorageContainer(testDb, { specimenId: specA.id, unitId: unit.id })
-    const containerB = await createTestStorageContainer(testDb, { specimenId: specB.id, unitId: unit.id })
-
-    const subjectToStudyMap = new Map<number, StudyRecord>([
-      [subjectA.id, studyA as StudyRecord],
-      [subjectB.id, studyB as StudyRecord],
-    ])
-
-    const enriched = await enrichContainerData(
-      testDb,
-      [containerA, containerB],
-      [
-        {
-          id: specA.id,
-          studySubjectId: subjectA.id,
-          controlBatchId: null,
-          specimenTypeId: specimenType.id,
-          collectionDate: null,
-          created: specA.created,
-        },
-        {
-          id: specB.id,
-          studySubjectId: subjectB.id,
-          controlBatchId: null,
-          specimenTypeId: specimenType.id,
-          collectionDate: null,
-          created: specB.created,
-        },
-      ],
-      studyA as StudyRecord,
-      undefined,
-      subjectToStudyMap,
-    )
-
-    expect(enriched).toHaveLength(2)
-    const rowA = enriched.find((r) => r.subject_name === 'A1')
-    const rowB = enriched.find((r) => r.subject_name === 'B1')
-    expect(rowA?.study_code).toBe('ALPHA')
-    expect(rowB?.study_code).toBe('BETA')
-  })
-
-  describe('pipeline with buildContainerQuery', () => {
-    it('enriches containers returned from buildContainerQuery', async () => {
-      const study = await createTestStudy(testDb, {
-        title: 'Pipeline Study',
-        shortCode: 'PIPE',
-        leadPerson: 'Pipe Lead',
-      })
-      const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'PipeSubj' })
-      const specimenType = await createTestSpecimenType(testDb, { name: 'Whole blood' })
-      const spec = await createTestSpecimen(testDb, specimenType.id, { studySubjectId: subject.id })
-      const storageType = await createTestStorageType(testDb, { name: 'Cold' })
-      const loc = await createTestLocation(testDb, {
-        name: 'Rack 1',
-        storageTypeId: String(storageType.id),
-        canContainCollections: true,
-      })
-      const plate = await createTestMicronixPlate(testDb, { name: 'PipePlate', locationId: loc.id })
-      await createMicronixContainer(testDb, spec.id, plate, 'PIPE-01', 'B02')
-
-      const { study: resolvedStudy, containers, specimens } = await buildContainerQuery(testDb, {
-        study: 'PIPE',
-      })
-      const enriched = await enrichContainerData(
-        testDb,
-        containers,
-        specimens!,
-        resolvedStudy,
-      )
-
-      expect(enriched).toHaveLength(1)
-      expect(enriched[0]).toMatchObject({
-        subject_name: 'PipeSubj',
-        study_code: 'PIPE',
-        specimen_type: 'Whole blood',
-        barcode: 'PIPE-01',
-      })
+    expect(enriched).toHaveLength(3)
+    expect(studyFields(enriched.find((row) => row.subject_name === 'A1'))).toEqual({
+      study_id: studyA.id,
+      study_code: 'ALPHA',
+      study_title: 'Study Alpha',
+      study_lead_person: 'Alpha Lead',
+    })
+    expect(studyFields(enriched.find((row) => row.subject_name === 'B1'))).toEqual({
+      study_id: studyB.id,
+      study_code: 'BETA',
+      study_title: 'Study Beta',
+      study_lead_person: 'Beta Lead',
+    })
+    expect(studyFields(enriched.find((row) => row.control_batch_id === batch.id))).toEqual({
+      study_id: undefined,
+      study_code: undefined,
+      study_title: undefined,
+      study_lead_person: undefined,
     })
   })
 
@@ -359,21 +213,7 @@ describe('enrichContainerData', () => {
       sublabel: 'Spot-7',
     })
 
-    const enriched = await enrichContainerData(
-      testDb,
-      [container],
-      [
-        {
-          id: spec.id,
-          studySubjectId: subject.id,
-          controlBatchId: null,
-          specimenTypeId: specimenType.id,
-          collectionDate: '2024-06-01',
-          created: spec.created,
-        },
-      ],
-      study as StudyRecord,
-    )
+    const enriched = await enrichContainerData(testDb, [container])
 
     expect(enriched).toHaveLength(1)
     expect(enriched[0]).toMatchObject({
@@ -403,21 +243,7 @@ describe('enrichContainerData', () => {
       { storageContainerId: container.id, tagId: qcTag.id },
     ])
 
-    const enriched = await enrichContainerData(
-      testDb,
-      [container],
-      [
-        {
-          id: spec.id,
-          studySubjectId: subject.id,
-          controlBatchId: null,
-          specimenTypeId: specimenType.id,
-          collectionDate: null,
-          created: spec.created,
-        },
-      ],
-      study,
-    )
+    const enriched = await enrichContainerData(testDb, [container])
 
     expect(enriched).toHaveLength(1)
     expect(enriched[0].tags).toBe('Hold, QC')

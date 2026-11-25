@@ -45,8 +45,8 @@ function buildFilterChips(f: StatisticsFilters): Array<{ key: keyof StatisticsFi
   if (f.tagIds?.length) chips.push({ key: 'tagIds', label: `Tags: ${f.tagIds.length} selected` })
   if (f.collectionDateFrom) chips.push({ key: 'collectionDateFrom', label: `Collection from: ${f.collectionDateFrom}` })
   if (f.collectionDateTo) chips.push({ key: 'collectionDateTo', label: `Collection to: ${f.collectionDateTo}` })
-  if (f.createdFrom) chips.push({ key: 'createdFrom', label: `Created from: ${f.createdFrom}` })
-  if (f.createdTo) chips.push({ key: 'createdTo', label: `Created to: ${f.createdTo}` })
+  if (f.createdFrom) chips.push({ key: 'createdFrom', label: `Specimen created from: ${f.createdFrom}` })
+  if (f.createdTo) chips.push({ key: 'createdTo', label: `Specimen created to: ${f.createdTo}` })
   if (f.locationId || (f.locationSelections?.length ?? 0) > 0) {
     const name = f.locationSelections?.[0]?.name ?? `Location ${f.locationId ?? ''}`
     chips.push({ key: 'locationId', label: `Location: ${name}` })

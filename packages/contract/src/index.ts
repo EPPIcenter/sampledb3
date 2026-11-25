@@ -24,6 +24,7 @@ export {
   type ExportColumnKind,
 } from './export-columns'
 export {
+  addSubjectDates,
   parseBarcodeExportFilterCsv,
   parseMultiStudyExportFilterCsv,
   parseSingleStudyExportFilterCsv,

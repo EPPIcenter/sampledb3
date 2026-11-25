@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Database } from '../db/client'
 import { storageContainer, micronixTube, cryovialTube, paper, staticWell, tag, storageContainerTag } from '../db/schema'
-import { eq, and, sql, inArray } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
@@ -12,6 +12,7 @@ import { enrichContainerForApi, enrichContainersForApi, toEnrichedContainerApi }
 import { loadContainerReadViews } from '../lib/container-read-view'
 import { mapEnrichedContainerToWire, mapEnrichedContainersToWire } from '../lib/container-wire-mapper'
 import { handleRouteError, RouteError, containersFetchFailedBody } from '../lib/error-handler'
+import { containerHasAllTags } from '../lib/container-selection'
 
 /**
  * Create containers routes with database injection
@@ -44,30 +45,9 @@ containers.get('/', authMiddleware, async (c) => {
       }
     }
     
-    // Filter by tags if provided
-    if (tagIds && tagIds.length > 0) {
-      const containerIdsWithTags = await database
-        .select({ containerId: storageContainerTag.storageContainerId })
-        .from(storageContainerTag)
-        .where(inArray(storageContainerTag.tagId, tagIds))
-      
-      const ids = [...new Set(containerIdsWithTags.map(r => r.containerId))]
-      if (ids.length > 0) {
-        conditions.push(inArray(storageContainer.id, ids))
-      } else {
-        // No containers match the tags, return empty result
-        return c.json({
-          containers: [],
-          pagination: {
-            page,
-            limit,
-            total: 0,
-            totalPages: 0,
-          },
-        })
-      }
-    }
-    
+    const tags = containerHasAllTags(tagIds ?? [])
+    if (tags) conditions.push(tags)
+
     if (conditions.length > 0) {
       const whereClause = and(...conditions) as any
       query = query.where(whereClause) as any

@@ -22,12 +22,6 @@ export interface MultiStudyExportEntry {
   date_to?: string
 }
 
-export interface MultiStudyExportResult {
-  containers: import('@sampledb/contract').ContainerExportData[]
-  studies: Map<number, StudyRecord>
-  summary: MultiStudyExportSummary
-}
-
 export interface MultiStudyExportSummary {
   total_containers: number
   studies: Array<{

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import {
+  addSubjectDates,
   parseBarcodeExportFilterCsv,
   parseMultiStudyExportFilterCsv,
   parseSingleStudyExportFilterCsv,
@@ -59,6 +60,32 @@ describe('parseBarcodeExportFilterCsv', () => {
 
   it('throws when barcode column is missing', () => {
     expect(() => parseBarcodeExportFilterCsv('position\nA01')).toThrow(/barcode/)
+  })
+})
+
+describe('addSubjectDates', () => {
+  it('reads a single date filter, a list, or no dates', () => {
+    expect(addSubjectDates(undefined, { exact: '2024-01-01' })).toEqual({ kind: 'dates', filters: [{ exact: '2024-01-01' }] })
+    expect(addSubjectDates(undefined, [{ exact: '2024-01-01' }, { from: '2024-02-01' }])).toEqual({
+      kind: 'dates',
+      filters: [{ exact: '2024-01-01' }, { from: '2024-02-01' }],
+    })
+    expect(addSubjectDates(undefined, null)).toEqual({ kind: 'all' })
+    expect(addSubjectDates(undefined, undefined)).toEqual({ kind: 'all' })
+    expect(addSubjectDates(undefined, [])).toEqual({ kind: 'all' })
+  })
+
+  it('keeps the dates of every dated listing as alternatives', () => {
+    const first = addSubjectDates(undefined, { exact: '2024-01-01' })
+    expect(addSubjectDates(first, [{ exact: '2024-03-01' }])).toEqual({
+      kind: 'dates',
+      filters: [{ exact: '2024-01-01' }, { exact: '2024-03-01' }],
+    })
+  })
+
+  it('lets an undated listing win, in either order', () => {
+    expect(addSubjectDates(addSubjectDates(undefined, { exact: '2024-01-01' }), null)).toEqual({ kind: 'all' })
+    expect(addSubjectDates(addSubjectDates(undefined, null), { exact: '2024-01-01' })).toEqual({ kind: 'all' })
   })
 })
 

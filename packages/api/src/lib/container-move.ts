@@ -14,6 +14,7 @@ import { eq, and, isNull } from 'drizzle-orm'
 import { resolveCollection, resolveSheetsByName, type CollectionType } from './collections/collection-resolve'
 import { checkGridPositionOccupancy } from './container-occupancy'
 import { normalizePosition } from './normalize-position'
+import type { ContainerSubtype } from './container-placement'
 
 /** Staging prefix for position updates so swaps on one plate do not violate UNIQUE(collection_id, position) mid-transaction. */
 const MOVE_STAGING_PREFIX = '__mv_'
@@ -22,7 +23,8 @@ function stagingPositionForContainer(containerId: number): string {
   return `${MOVE_STAGING_PREFIX}${containerId}`
 }
 
-export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'static_well' | 'paper'
+/** A Container subtype a write can name; `unknown` is only read back. */
+export type ContainerType = Exclude<ContainerSubtype, 'unknown'>
 
 export interface ContainerInfo {
   containerId: number

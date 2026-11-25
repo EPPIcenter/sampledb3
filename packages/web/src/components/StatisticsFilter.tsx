@@ -480,10 +480,10 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
               />
             </div>
 
-            {/* Created From */}
+            {/* Specimen Created From */}
             <div>
               <label htmlFor="filter-created-from" className="block text-sm font-medium mb-2 text-app-text">
-                Created From
+                Specimen Created From
               </label>
               <input
                 id="filter-created-from"
@@ -494,10 +494,10 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
               />
             </div>
 
-            {/* Created To */}
+            {/* Specimen Created To */}
             <div>
               <label htmlFor="filter-created-to" className="block text-sm font-medium mb-2 text-app-text">
-                Created To
+                Specimen Created To
               </label>
               <input
                 id="filter-created-to"

@@ -13,7 +13,10 @@ import {
 } from '../db/schema'
 import { eq, inArray } from 'drizzle-orm'
 
-export type ContainerSubtype = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well' | 'unknown'
+/** Every Container type, in display order. `'unknown'` is a Container with no subtype row. */
+export const CONTAINER_SUBTYPES = ['micronix_tube', 'cryovial_tube', 'paper', 'static_well', 'unknown'] as const
+
+export type ContainerSubtype = (typeof CONTAINER_SUBTYPES)[number]
 
 export type CollectionType = 'micronix_plate' | 'cryovial_box' | 'sheet'
 
